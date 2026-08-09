@@ -105,7 +105,7 @@ maintained as a living document alongside this policy (`docs/risk-register.md`).
 | Secrets from environment only | Plaid/Anthropic credentials are read from env, never committed; `.env` is git-ignored | Implemented | `plaid/config.ts`, `.env.example` |
 | No secret leakage in logs/errors | config validation maps issues by path without echoing the offending value, so a bad secret cannot land in a log line | Implemented | `plaid/config.ts` |
 | Encryption of Plaid tokens at rest | Plaid access tokens are encrypted at rest with AES-256-GCM (key from `BREADCRUMBS_ENCRYPTION_KEY`, bound to the connection id), decrypted only in memory at call time; the key lives in the environment, never in the datastore. Enabled by providing a key. | Implemented | `crypto/field-cipher.ts`, `plaid/token-store.ts` |
-| Encryption of persisted transaction data at rest | Account/transaction data synced from Plaid is persisted in the per-user store, which is not yet field-encrypted; it relies on operator disk/host controls today. Extending the same field cipher to this store is the next step. | Planned / Operator | `local/store.ts` |
+| Encryption of persisted transaction data at rest | The per-user statement/transaction store encrypts its entire persisted state (accounts, transactions, import batches) at rest with the same AES-256-GCM field cipher (key from `BREADCRUMBS_ENCRYPTION_KEY`, domain-separated by a state AAD), decrypted only in memory. Legacy plaintext files are read transparently and re-sealed on the next write; an encrypted file with no key fails loudly rather than silently returning empty. Enabled by providing a key. | Implemented | `crypto/field-cipher.ts`, `local/store.ts` |
 
 ### 4.3 Data protection
 
@@ -234,10 +234,11 @@ For self-hosted deployments, the operator MUST:
 
 Tracked openly so this document stays honest:
 
-1. ~~Application-level encryption of stored Plaid tokens.~~ **Done** — AES-256-GCM
-   at rest (`crypto/field-cipher.ts`). Remaining: extend the same cipher to the
-   persisted **transaction store** (`local/store.ts`) so all Plaid-sourced data
-   at rest is encrypted, not just the token.
+1. ~~Application-level encryption of stored Plaid tokens and of the persisted
+   transaction store.~~ **Done** — AES-256-GCM at rest for both the Plaid access
+   tokens and the per-user transaction store (`crypto/field-cipher.ts`,
+   `plaid/token-store.ts`, `local/store.ts`). Remaining: move the encryption key
+   from a plain env var into a secrets manager / KMS.
 2. **MFA** enforcement (data model exists; enforcement not yet built).
 3. **Dependency vulnerability scanning** wired into CI.
 4. Documented **log-review / alerting** procedure and **incident-response**

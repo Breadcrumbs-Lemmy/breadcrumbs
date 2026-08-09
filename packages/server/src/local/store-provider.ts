@@ -14,6 +14,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import type { FieldCipher } from "../crypto/field-cipher";
 import { FileStatementImportStore, InMemoryStatementImportStore } from "./store";
 import type { StatementImportStore } from "./store";
 
@@ -44,15 +45,19 @@ export class InMemoryStatementImportStoreProvider implements StatementImportStor
   }
 }
 
-/** One JSON file per user under `<dataDir>/users/<userId>/`. */
+/** One JSON file per user under `<dataDir>/users/<userId>/`. When a cipher is
+ *  supplied, every user's store encrypts its state at rest with it. */
 export class FileStatementImportStoreProvider implements StatementImportStoreProvider {
   private readonly cache = new Map<string, FileStatementImportStore>();
-  constructor(private readonly dataDir: string = defaultLocalDataDir()) {}
+  constructor(
+    private readonly dataDir: string = defaultLocalDataDir(),
+    private readonly cipher?: FieldCipher,
+  ) {}
   forUser(userId: string): StatementImportStore {
     const key = safeUserDir(userId);
     let store = this.cache.get(key);
     if (!store) {
-      store = new FileStatementImportStore(join(this.dataDir, "users", key, "statement-imports.json"));
+      store = new FileStatementImportStore(join(this.dataDir, "users", key, "statement-imports.json"), this.cipher);
       this.cache.set(key, store);
     }
     return store;

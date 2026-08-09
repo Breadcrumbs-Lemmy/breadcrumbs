@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createPlaidClient } from "../plaid/client";
 import type { PlaidConfig } from "../plaid/config";
 import { loadFieldCipher } from "../crypto/field-cipher";
+import type { FieldCipher } from "../crypto/field-cipher";
 import { FilePlaidTokenStore, InMemoryPlaidTokenStore } from "../plaid/token-store";
 import type { PlaidClientLike } from "../plaid/adapter";
 import type { PlaidTokenStore } from "../plaid/token-store";
@@ -122,7 +123,20 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // impossible by construction rather than by remembering a `WHERE user_id = ?`.
   // The spending endpoints still read exactly what the import endpoints wrote for
   // the same user, so the screens and the importer can never disagree.
-  const stores = resolveStoreProvider(options);
+  // One encryption key, loaded once, protects everything at rest: the per-user
+  // transaction store and the Plaid access tokens. On a real (persistent) server
+  // with no key, financial data is stored behind file permissions only — warn
+  // loudly, once, since a production box should set one.
+  const fieldCipher = loadFieldCipher(process.env);
+  if (!ephemeral && !fieldCipher) {
+    console.warn(
+      "[security] WARNING: BREADCRUMBS_ENCRYPTION_KEY is not set — imported financial " +
+        "data and Plaid access tokens are stored WITHOUT application-level encryption " +
+        "(file permissions only). Set a 32-byte key (openssl rand -base64 32) to encrypt at rest.",
+    );
+  }
+
+  const stores = resolveStoreProvider(options, fieldCipher);
   // The assistant's memory follows the same isolation seam as the stores, and
   // the same ephemeral/persistent choice: an injected store means a test-shaped
   // server whose memory stays in RAM; a bare `createServer()` persists memory to
@@ -139,17 +153,7 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
     // Persist bank connections to disk for a real server so a restart does not
     // un-link every user's bank; an ephemeral (test-shaped) server keeps them in
     // RAM, matching how its identity and imports stay off the real data dir.
-    // Encrypt Plaid access tokens at rest when a key is configured. Missing key
-    // on a real (persistent) server = tokens stored plaintext behind file perms:
-    // warn loudly, since a production box handling real banks should set one.
-    const fieldCipher = loadFieldCipher(process.env);
-    if (!ephemeral && !fieldCipher) {
-      console.warn(
-        "[plaid] WARNING: BREADCRUMBS_ENCRYPTION_KEY is not set — Plaid access tokens " +
-          "are stored WITHOUT application-level encryption (file permissions only). " +
-          "Set a 32-byte key (openssl rand -base64 32) to encrypt them at rest.",
-      );
-    }
+    // Reuses the same at-rest key loaded above (see the [security] warning).
     const plaidTokenStore =
       options.plaidTokenStore ??
       (ephemeral
@@ -166,10 +170,13 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   return app;
 }
 
-function resolveStoreProvider(options: CreateServerOptions): StatementImportStoreProvider {
+function resolveStoreProvider(
+  options: CreateServerOptions,
+  cipher?: FieldCipher,
+): StatementImportStoreProvider {
   if (options.stores) return options.stores;
   if (options.statementImportStore) return new SingleStatementImportStoreProvider(options.statementImportStore);
-  return new FileStatementImportStoreProvider();
+  return new FileStatementImportStoreProvider(defaultLocalDataDir(), cipher);
 }
 
 function normalizeCreateServerOptions(configOrOptions: PlaidConfig | CreateServerOptions): CreateServerOptions {

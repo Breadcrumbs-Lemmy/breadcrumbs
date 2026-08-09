@@ -2,7 +2,17 @@ import type { Account, Transaction } from "@ai-fin-os/core";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { FieldCipher } from "../crypto/field-cipher";
 import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-file";
+
+/** On disk, an encrypted state file is `{ "$enc": "bcenc1:…" }` — the whole
+ *  serialized state sealed as one blob. A legacy file is the bare state object
+ *  (no `$enc`), so the two are told apart by this key's presence. */
+type EncryptedStateEnvelope = { $enc: string };
+
+/** Domain-separation label bound as GCM additional data, so a state blob can
+ *  never be decrypted as if it were some other kind of encrypted field. */
+const STATE_AAD = "statement-import-state";
 
 export type StatementImportBatch = {
   id: string;
@@ -74,22 +84,39 @@ export class FileStatementImportStore implements StatementImportStore {
    *  transactions. Same guard the auth/Plaid `FileKeyValueStore` uses. */
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly filePath = defaultStatementImportStorePath()) {}
+  constructor(
+    private readonly filePath = defaultStatementImportStorePath(),
+    /** When set, the whole state blob (accounts, transactions, batches) is
+     *  encrypted at rest. Absent = prior plaintext behaviour. */
+    private readonly cipher?: FieldCipher,
+  ) {}
 
   async load(): Promise<StatementImportState> {
     // A missing file reads as `{}`, which `normalizeState` turns into a fresh
     // empty state — no shared reference to a module-level constant to mutate.
-    return normalizeState(await readJsonFile<Partial<StatementImportState>>(this.filePath, {}));
+    const raw = await readJsonFile<Partial<StatementImportState> & Partial<EncryptedStateEnvelope>>(this.filePath, {});
+    if (raw && typeof raw === "object" && typeof (raw as EncryptedStateEnvelope).$enc === "string") {
+      // The file is encrypted. Without a key we cannot — and must not silently
+      // pretend to — read it; fail loudly rather than returning empty state and
+      // letting the next import overwrite the user's real history.
+      if (!this.cipher) {
+        throw new Error(
+          "Statement store is encrypted but no encryption key is configured (BREADCRUMBS_ENCRYPTION_KEY).",
+        );
+      }
+      const plaintext = this.cipher.decrypt((raw as EncryptedStateEnvelope).$enc, STATE_AAD);
+      return normalizeState(JSON.parse(plaintext) as Partial<StatementImportState>);
+    }
+    // No `$enc` key: a legacy plaintext state file (or empty). Readable whether
+    // or not a cipher is configured; a cipher re-seals it on the next write.
+    return normalizeState(raw as Partial<StatementImportState>);
   }
 
   saveImport(input: SaveStatementImportInput): Promise<SaveStatementImportResult> {
     const next = this.queue.then(async () => {
       const current = await this.load();
       const result = saveToState(current, input);
-      // Crash-safe (temp-write-then-rename) and mode 0600: this is the user's
-      // real accounts and transactions. It must survive a mid-write crash intact
-      // and never be world-readable. See persistence/atomic-file.
-      await writeJsonFileAtomic(this.filePath, result.state);
+      await this.persist(result.state);
       return result;
     });
     // Keep the chain alive even if one write throws, so a single failure does
@@ -97,10 +124,24 @@ export class FileStatementImportStore implements StatementImportStore {
     this.queue = next.catch(() => undefined);
     return next;
   }
+
+  /** Write the state, encrypting the whole blob when a cipher is configured.
+   *  Crash-safe (temp-write-then-rename) and mode 0600 either way: this is the
+   *  user's real accounts and transactions, so it must survive a mid-write crash
+   *  intact and never be world-readable. See persistence/atomic-file. */
+  private async persist(state: StatementImportState): Promise<void> {
+    const payload: StatementImportState | EncryptedStateEnvelope = this.cipher
+      ? { $enc: this.cipher.encrypt(JSON.stringify(state), STATE_AAD) }
+      : state;
+    await writeJsonFileAtomic(this.filePath, payload);
+  }
 }
 
-export function createDefaultStatementImportStore(env: NodeJS.ProcessEnv = process.env): StatementImportStore {
-  return new FileStatementImportStore(defaultStatementImportStorePath(env));
+export function createDefaultStatementImportStore(
+  env: NodeJS.ProcessEnv = process.env,
+  cipher?: FieldCipher,
+): StatementImportStore {
+  return new FileStatementImportStore(defaultStatementImportStorePath(env), cipher);
 }
 
 export function defaultStatementImportStorePath(env: NodeJS.ProcessEnv = process.env): string {

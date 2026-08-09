@@ -6,13 +6,15 @@
  * lose one. This pins the three fixes — atomic + 0600 + serialized — through the
  * real HTTP commit path a user actually hits.
  */
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createServer } from "../src";
+import { FieldCipher } from "../src/crypto/field-cipher";
 import { FileStatementImportStore } from "../src/local/store";
 
 let dir: string;
@@ -98,5 +100,76 @@ describe("FileStatementImportStore durability", () => {
     const reloaded = await new FileStatementImportStore(filePath).load();
     expect(reloaded.transactions).toHaveLength(2);
     expect(reloaded.accounts.map((a) => a.id).sort()).toEqual(["acct_a", "acct_b"]);
+  });
+});
+
+describe("FileStatementImportStore encryption at rest", () => {
+  // Same field cipher that protects Plaid tokens, applied to the whole state
+  // blob: without a key the file is plaintext behind 0600; with one, accounts
+  // and transactions never touch the disk in the clear.
+  const cipher = new FieldCipher(randomBytes(32));
+
+  it("writes ciphertext to disk but the store still reads back the real data", async () => {
+    const store = new FileStatementImportStore(filePath, cipher);
+    const app = await createServer({ statementImportStore: store });
+    // "Coffee" is a description that lands verbatim in the plaintext state.
+    await commit(app, commitPayload({ requestId: "r1", accountId: "acct_secret", txnId: "ts-1", amount: "-4.50" }));
+    await app.close();
+
+    const onDisk = await readFile(filePath, "utf8");
+    expect(onDisk).toContain("bcenc1:");
+    // None of the real financial content should be legible on disk.
+    expect(onDisk).not.toContain("acct_secret");
+    expect(onDisk).not.toContain("Coffee");
+
+    // A fresh instance with the same key reads it back intact.
+    const reloaded = await new FileStatementImportStore(filePath, cipher).load();
+    expect(reloaded.transactions).toHaveLength(1);
+    expect(reloaded.accounts.map((a) => a.id)).toContain("acct_secret");
+  });
+
+  it("cannot read a state file written under a different key", async () => {
+    const app = await createServer({ statementImportStore: new FileStatementImportStore(filePath, cipher) });
+    await commit(app, commitPayload({ requestId: "r1", accountId: "acct_a", txnId: "ta-1", amount: "-4.50" }));
+    await app.close();
+
+    const wrongKey = new FileStatementImportStore(filePath, new FieldCipher(randomBytes(32)));
+    await expect(wrongKey.load()).rejects.toThrow();
+  });
+
+  it("refuses to read an encrypted file with no key rather than silently returning empty", async () => {
+    const app = await createServer({ statementImportStore: new FileStatementImportStore(filePath, cipher) });
+    await commit(app, commitPayload({ requestId: "r1", accountId: "acct_a", txnId: "ta-1", amount: "-4.50" }));
+    await app.close();
+
+    // No cipher: reading must fail loudly, not return empty state that the next
+    // import would then overwrite the user's real (encrypted) history with.
+    const noKey = new FileStatementImportStore(filePath);
+    await expect(noKey.load()).rejects.toThrow(/encrypted/i);
+  });
+
+  it("reads a legacy plaintext state and migrates it to ciphertext on next write", async () => {
+    // A file written before encryption was enabled: bare state, no `$enc`.
+    const legacyApp = await createServer({ statementImportStore: new FileStatementImportStore(filePath) });
+    await commit(legacyApp, commitPayload({ requestId: "r1", accountId: "acct_legacy", txnId: "tl-1", amount: "-4.50" }));
+    await legacyApp.close();
+    expect(await readFile(filePath, "utf8")).toContain("acct_legacy");
+
+    // Turning encryption on: the old plaintext is still readable (passthrough)...
+    const store = new FileStatementImportStore(filePath, cipher);
+    const app = await createServer({ statementImportStore: store });
+    expect((await store.load()).accounts.map((a) => a.id)).toContain("acct_legacy");
+
+    // ...and the next import re-seals the whole file, including the old data.
+    await commit(app, commitPayload({ requestId: "r2", accountId: "acct_new", txnId: "tn-1", amount: "-9.00" }));
+    await app.close();
+
+    const onDisk = await readFile(filePath, "utf8");
+    expect(onDisk).toContain("bcenc1:");
+    expect(onDisk).not.toContain("acct_legacy");
+    expect(onDisk).not.toContain("acct_new");
+
+    const reloaded = await new FileStatementImportStore(filePath, cipher).load();
+    expect(reloaded.accounts.map((a) => a.id).sort()).toEqual(["acct_legacy", "acct_new"]);
   });
 });
