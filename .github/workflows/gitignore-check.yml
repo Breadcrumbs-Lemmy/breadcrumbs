@@ -1,0 +1,21 @@
+name: gitignore-check
+
+# Fails the build if .gitignore stops protecting the repo — a tracked secret,
+# a weakened ignore rule, or a broken template exception. Pure git, no
+# toolchain, so it runs in seconds on every push and PR.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gitignore:
+    name: .gitignore hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify .gitignore protects secrets and build artifacts
+        run: bash scripts/check-gitignore.sh
