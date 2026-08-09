@@ -23,6 +23,9 @@ export interface PlaidTokenStore {
   listForUser(userId: string): Promise<StoredPlaidConnection[]>;
   markSynced(connectionId: string, at: string): Promise<void>;
   delete(connectionId: string): Promise<void>;
+  /** Remove every connection (and its stored access token) belonging to a user.
+   *  Used when an account is deleted, so no orphaned bank credential survives. */
+  deleteAllForUser(userId: string): Promise<void>;
 }
 
 export class InMemoryPlaidTokenStore implements PlaidTokenStore {
@@ -62,6 +65,12 @@ export class InMemoryPlaidTokenStore implements PlaidTokenStore {
 
   async delete(connectionId: string): Promise<void> {
     this.connections.delete(connectionId);
+  }
+
+  async deleteAllForUser(userId: string): Promise<void> {
+    for (const [id, c] of this.connections) {
+      if (c.userId === userId) this.connections.delete(id);
+    }
   }
 }
 
@@ -134,6 +143,11 @@ export class FilePlaidTokenStore implements PlaidTokenStore {
 
   async delete(connectionId: string): Promise<void> {
     await this.store.delete(connectionId);
+  }
+
+  async deleteAllForUser(userId: string): Promise<void> {
+    const mine = (await this.store.all()).filter((c) => c.userId === userId);
+    await Promise.all(mine.map((c) => this.store.delete(c.connectionId)));
   }
 
   /** Encrypt the token for storage, binding it to its connectionId. No-op when

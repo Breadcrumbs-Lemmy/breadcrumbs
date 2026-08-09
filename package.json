@@ -17,6 +17,7 @@
     "build:web": "pnpm --filter @ai-fin-os/web build",
     "test": "pnpm --filter @ai-fin-os/core test && pnpm --filter @ai-fin-os/server test",
     "test:api": "pnpm --filter @ai-fin-os/core test && pnpm --filter @ai-fin-os/server test",
+    "audit": "pnpm audit --audit-level high",
     "backup": "pnpm --filter @ai-fin-os/server backup",
     "backup:list": "pnpm --filter @ai-fin-os/server backup list",
     "backup:restore": "pnpm --filter @ai-fin-os/server backup restore"

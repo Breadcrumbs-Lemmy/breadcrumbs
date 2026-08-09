@@ -123,23 +123,31 @@ maintained as a living document alongside this policy (`docs/risk-register.md`).
   concentrated in one auditable service so identity rules are easy to review.
 - Automated tests cover security-relevant behavior (auth, per-user isolation,
   Plaid config secret-scrubbing, persistence durability). **Status: Implemented.**
-- Dependency vulnerability scanning (e.g. `pnpm audit` / automated alerts) is run
-  on a regular cadence and before release. **Status: Planned** — to be wired into
-  CI and the review checklist.
+- Dependency vulnerability scanning (`pnpm audit`, failing on high/critical
+  advisories) runs in CI on every push and pull request, and again on a weekly
+  schedule so an advisory disclosed after merge still turns the build red.
+  **Status: Implemented** — `.github/workflows/dependency-audit.yml`, root `audit`
+  script.
 
 ---
 
 ## 5. Monitoring and logging (Monitor)
 
-- **Application logging** — the server logs request and error activity;
-  logs are written such that secrets are not included (§4.2).
+- **Application logging** — the app emits boot-time security warnings and
+  `[fatal]` error lines to the process log, with **secrets excluded by design**
+  (§4.2). It does **not** emit a per-request audit log today (Fastify runs with
+  `logger: false`); native request logging with redaction is a committed gap
+  (§12, [logging-and-monitoring.md](logging-and-monitoring.md) §5).
 - **Rate-limit and auth-failure signals** — repeated authentication failures and
-  rate-limit trips are observable in logs and are the primary indicator of
-  credential-stuffing or brute-force attempts. **Status: Implemented** (signals
-  exist); **Planned** — a documented procedure for periodic log review and
-  alerting thresholds.
-- **Dependency monitoring** — ongoing monitoring for newly disclosed
-  vulnerabilities in dependencies. **Status: Planned.**
+  rate-limit trips surface as **HTTP `401`/`429`** responses, visible in the
+  operator's reverse-proxy/access log, and are the primary indicator of
+  credential-stuffing or brute-force attempts. A documented review procedure and
+  alerting thresholds for these signals now exist. **Status: Implemented**
+  (signals + documented procedure — [logging-and-monitoring.md](logging-and-monitoring.md));
+  **Operator** (capturing access logs and wiring automated alerts).
+- **Dependency monitoring** — `pnpm audit` runs in CI on every push/PR and weekly
+  on a schedule, failing on high/critical advisories (§4.4). **Status:
+  Implemented** — `.github/workflows/dependency-audit.yml`.
 - **Access review** — periodic review of user accounts and admin roles.
   **Status: Planned** (cadence in §7).
 
@@ -202,15 +210,23 @@ Each provider is covered by its own agreement and security posture. Users are
 informed of these data flows. Adding or changing a subprocessor is a material
 decision recorded in [`decisions.md`](decisions.md). A locally-hosted model
 option is part of the architecture direction to reduce third-party data sharing.
+The formal, maintained inventory — data shared, purpose, and review cadence per
+provider — is [subprocessors.md](subprocessors.md).
 
 ---
 
 ## 10. Data retention and disposal
 
-- User data is retained while the account is active and deleted on account
-  deletion or on operator request.
-- Third-party secrets are rotated on suspected compromise and on personnel
-  change. **Status: Planned** — formal retention schedule to be documented.
+- User data is retained while the account is active and erased on account
+  deletion. Deletion is **self-serve** (`DELETE /api/v1/auth/me`, re-authenticated
+  with the current password) or **admin-initiated** (`DELETE /api/v1/admin/users/:id`);
+  both remove the user's identity **and** erase everything the user id owns —
+  Plaid tokens, the per-user transaction store, and assistant memory
+  (`auth/service.ts`, `http/server.ts`). **Status: Implemented.**
+- Third-party secrets are rotated on suspected compromise and on personnel change.
+- The formal, per-data-class retention and disposal schedule is
+  [data-retention-schedule.md](data-retention-schedule.md). **Status:
+  Implemented (documented).**
 
 ---
 
@@ -243,10 +259,19 @@ Tracked openly so this document stays honest:
    step-up in front of Plaid Link for multi-user sessions (`auth/totp.ts`,
    `http/plaid-routes.ts`). Remaining/optional: recovery/backup codes, and
    extending the step-up gate to other sensitive actions beyond bank-linking.
-3. **Dependency vulnerability scanning** wired into CI.
-4. Documented **log-review / alerting** procedure and **incident-response**
-   runbook.
-5. Living **risk register** and formal **data-retention** schedule.
+3. ~~**Dependency vulnerability scanning** wired into CI.~~ **Done** — `pnpm audit`
+   (high/critical) on every push/PR and weekly (`.github/workflows/dependency-audit.yml`).
+4. ~~Documented **log-review / alerting** procedure~~ **Done** —
+   [logging-and-monitoring.md](logging-and-monitoring.md). Remaining: native
+   app-level request logging with redaction (currently `logger: false`), and an
+   **incident-response** runbook with named contacts.
+5. ~~Living **risk register** and formal **data-retention** schedule.~~ **Done** —
+   [risk-register.md](risk-register.md) and
+   [data-retention-schedule.md](data-retention-schedule.md); a formal
+   [subprocessor list](subprocessors.md) now exists too. Self-serve
+   account-deletion (`DELETE /api/v1/auth/me`) closes the full-erasure gap.
+6. **Secrets manager / KMS** for the at-rest encryption key (currently a plain env
+   var), and a **third-party penetration test** (not yet performed).
 
 ---
 

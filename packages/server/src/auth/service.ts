@@ -205,6 +205,23 @@ export class AuthService {
     return this.users.getById(id);
   }
 
+  /**
+   * Self-serve account deletion: the user proves they are present by re-entering
+   * their current password, then the account and its identity are erased. A
+   * freshly provisioned account with no password set skips the proof (there is
+   * nothing to prove). Erasure of the user's *data* (bank tokens, imports,
+   * assistant memory) is orchestrated by the caller — this method owns only the
+   * identity records, so the auth service never reaches into other stores.
+   */
+  async deleteOwnAccount(userId: string, currentPassword: string): Promise<void> {
+    const user = await this.users.getById(userId);
+    if (!user) throw authErrors.notFound();
+    if (user.passwordHash && !(await verifyPassword(currentPassword, user.passwordHash))) {
+      throw authErrors.invalidCredentials();
+    }
+    await this.deleteAccount(userId);
+  }
+
   async changePassword(userId: string, current: string, next: string): Promise<void> {
     const user = await this.users.getById(userId);
     if (!user) throw authErrors.notFound();
@@ -327,6 +344,26 @@ export class AuthService {
     }
     if (status === "disabled") await this.sessions.revokeAllForUser(userId);
     return (await this.users.update(userId, { status }))!;
+  }
+
+  /**
+   * Remove a user's identity: the account record and every session it holds.
+   * The last active admin cannot be deleted, so a deployment can never be left
+   * with no one who can administer it (same guard as demote/disable). This is
+   * the shared core behind both self-serve deletion and an admin removing
+   * another user; it deletes identity only, and the route layer erases the
+   * user's data stores around it.
+   */
+  async deleteAccount(userId: string): Promise<void> {
+    const user = await this.users.getById(userId);
+    if (!user) throw authErrors.notFound();
+    if (user.role === "admin" && user.status === "active" && (await this.adminCount()) <= 1) {
+      throw authErrors.cannotDemoteLastAdmin();
+    }
+    // Kill sessions before the record so a token can't briefly resolve against a
+    // half-deleted account.
+    await this.sessions.revokeAllForUser(userId);
+    await this.users.delete(userId);
   }
 
   async adminResetPassword(userId: string, next: string): Promise<void> {

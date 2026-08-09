@@ -11,6 +11,7 @@
  * When a database replaces the JSON files, this is the seam: a `PgStoreProvider`
  * returns a store bound to a userId, and nothing above it changes.
  */
+import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -20,6 +21,10 @@ import type { StatementImportStore } from "./store";
 
 export interface StatementImportStoreProvider {
   forUser(userId: string): StatementImportStore | Promise<StatementImportStore>;
+  /** Permanently remove a user's imported financial data. Optional so a bare
+   *  provider (e.g. a shared single-user store) can decline; account deletion
+   *  calls it best-effort. */
+  eraseForUser?(userId: string): Promise<void>;
 }
 
 /** Every user shares one store. Correct only in single-user mode or tests that
@@ -43,6 +48,9 @@ export class InMemoryStatementImportStoreProvider implements StatementImportStor
     }
     return store;
   }
+  async eraseForUser(userId: string): Promise<void> {
+    this.stores.delete(userId);
+  }
 }
 
 /** One JSON file per user under `<dataDir>/users/<userId>/`. When a cipher is
@@ -61,6 +69,15 @@ export class FileStatementImportStoreProvider implements StatementImportStorePro
       this.cache.set(key, store);
     }
     return store;
+  }
+  /** Delete the user's entire per-user directory — this clears the statement
+   *  store and anything else nested under `users/<key>/` (the assistant memory
+   *  lives there too) in one atomic removal. Best-effort: a missing directory is
+   *  fine (`force`), so a user who never imported anything deletes cleanly. */
+  async eraseForUser(userId: string): Promise<void> {
+    const key = safeUserDir(userId);
+    this.cache.delete(key);
+    await rm(join(this.dataDir, "users", key), { recursive: true, force: true });
   }
 }
 

@@ -5,6 +5,51 @@ Last updated: 2026-08-09
 
 Use this log for material product, architecture, data, and compliance decisions. Add new entries at the top unless a project convention later says otherwise.
 
+## D-017: Self-Serve Account Deletion, CI Dependency Scanning, And The Remaining Security Docs
+
+Date: 2026-08-09
+Status: Accepted
+Relates to: `D-014` (auth, isolation), `D-015` (InfoSec policy), `D-016` (MFA)
+
+Decision: Close three named gaps from the security questionnaire so its answers
+are truthfully "Implemented" rather than "Planned":
+
+1. **Self-serve + admin account deletion.** `DELETE /api/v1/auth/me`
+   (re-authenticated with the current password) and `DELETE /api/v1/admin/users/:id`
+   remove the user's identity (record + all sessions) **and** erase everything the
+   user id owns — Plaid tokens, the per-user transaction store, and assistant
+   memory. The auth service owns identity removal; the route layer orchestrates
+   data erasure via an `eraseUserData` composer built in `http/server.ts` from
+   whatever stores exist. Guards: the **last active admin** and the **single-user
+   owner** cannot be deleted.
+2. **Dependency scanning in CI.** `pnpm audit` (failing on high/critical) runs on
+   every push and pull request and on a weekly schedule
+   (`.github/workflows/dependency-audit.yml`, root `audit` script).
+3. **The remaining "Planned" security docs** — a formal
+   [data-retention schedule](data-retention-schedule.md), a
+   [subprocessor list](subprocessors.md), and a
+   [log-review + alerting procedure](logging-and-monitoring.md).
+
+Rationale: An honesty audit of the Plaid questionnaire found that the retention
+answer implied a delete-my-account capability that did not exist, and that three
+attestations pointed at documents that had not been written. Rather than soften
+the answers, we built the missing capability and wrote the missing docs. Writing
+the logging procedure surfaced a second overclaim — the app runs Fastify with
+`logger: false` and emits no per-request audit log — which is now stated honestly
+in policy §5, the questionnaire §G, and the new logging doc (the brute-force
+signal lives in HTTP `401`/`429` codes captured by the operator's proxy).
+
+Consequences:
+
+- New store capability: `deleteAllForUser` / `eraseForUser` on the Plaid token
+  store, statement-store provider, and agent-memory provider (best-effort,
+  idempotent). Memory is erased before the statement store because the latter
+  removes the shared `users/<id>/` directory. Covered by
+  `tests/account-deletion.test.ts`.
+- Policy §4.4/§5/§9/§10/§12, the risk register (R-04, R-05), and the questionnaire
+  are updated to match; remaining honest gaps: native request logging with
+  redaction, secrets-manager/KMS for the at-rest key, and a third-party pen test.
+
 ## D-016: TOTP Multi-Factor, Enforced As Step-Up Before Plaid Link
 
 Date: 2026-08-09

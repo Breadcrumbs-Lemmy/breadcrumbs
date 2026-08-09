@@ -1,0 +1,33 @@
+name: dependency-audit
+
+# Fails the build when a dependency (ours or a transitive one) carries a known
+# high or critical advisory, so a vulnerable package can't land silently. Runs
+# on every push and PR against the committed lockfile, and again on a weekly
+# schedule so an advisory published *after* a dependency was merged still turns
+# the badge red without anyone touching the tree.
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Mondays 07:00 UTC — catches advisories disclosed over the weekend.
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: pnpm audit (high+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      # No install needed: `pnpm audit` resolves advisories from the committed
+      # lockfile, so the scan is fast and can't be skewed by a fresh resolution.
+      - name: Audit dependencies for known vulnerabilities
+        run: pnpm audit --audit-level high

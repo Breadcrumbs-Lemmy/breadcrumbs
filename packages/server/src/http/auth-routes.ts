@@ -10,6 +10,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 
 import { loadAgentConfig } from "../agent/config";
+import { authErrors } from "../auth/errors";
 import { bearerToken, principalOf, requireAdmin } from "../auth/middleware";
 import type { AuthService } from "../auth/service";
 import { toPublicUser } from "../auth/types";
@@ -38,11 +39,20 @@ const RoleSchema = z.object({ role: z.enum(["user", "admin"]) });
 const StatusSchema = z.object({ status: z.enum(["active", "disabled"]) });
 const ResetPasswordSchema = z.object({ newPassword: z.string().min(1).max(1024) });
 const UserIdParams = z.object({ id: z.string().min(1) });
+/** Self-serve delete re-authenticates with the current password. Defaulted to
+ *  empty so a freshly provisioned (passwordless) account can still delete. */
+const DeleteAccountSchema = z.object({ currentPassword: z.string().max(1024).default("") });
 
-export type RegisterAuthRoutesOptions = { service: AuthService };
+export type RegisterAuthRoutesOptions = {
+  service: AuthService;
+  /** Erase everything a deleted user owns outside identity — bank tokens,
+   *  imports, assistant memory. Composed by the server from whatever stores
+   *  exist; omitted in bare tests, where deletion removes identity only. */
+  eraseUserData?: (userId: string) => Promise<void>;
+};
 
 export async function registerAuthRoutes(app: FastifyInstance, options: RegisterAuthRoutesOptions): Promise<void> {
-  const { service } = options;
+  const { service, eraseUserData } = options;
   registerSafeErrorHandler(app);
 
   /** Public: what the sign-in screen needs to decide what to render. */
@@ -81,6 +91,20 @@ export async function registerAuthRoutes(app: FastifyInstance, options: Register
     const principal = principalOf(request);
     const body = ChangePasswordSchema.parse(request.body);
     await service.changePassword(principal.userId, body.currentPassword, body.newPassword);
+    return { ok: true };
+  });
+
+  /** Self-serve account deletion (the "right to delete"). Re-authenticates with
+   *  the current password, erases the user's identity *and* all their data, and
+   *  clears the session cookie. The single-user owner is refused — deleting the
+   *  one account the whole app runs as would brick the deployment. */
+  app.delete("/api/v1/auth/me", async (request, reply) => {
+    const principal = principalOf(request);
+    if (principal.owner) throw authErrors.cannotDeleteOwner();
+    const body = DeleteAccountSchema.parse(request.body ?? {});
+    await service.deleteOwnAccount(principal.userId, body.currentPassword);
+    await eraseUserData?.(principal.userId);
+    reply.header("set-cookie", clearedCookie());
     return { ok: true };
   });
 
@@ -160,6 +184,17 @@ export async function registerAuthRoutes(app: FastifyInstance, options: Register
     const { id } = UserIdParams.parse(request.params);
     const { newPassword } = ResetPasswordSchema.parse(request.body);
     await service.adminResetPassword(id, newPassword);
+    return { ok: true };
+  });
+
+  /** Admin-initiated deletion of another user (operator offboarding / erasure
+   *  request). Same last-admin guard and same full data erasure as self-serve;
+   *  no password proof, since an admin is already privileged. */
+  app.delete("/api/v1/admin/users/:id", async (request) => {
+    requireAdmin(request);
+    const { id } = UserIdParams.parse(request.params);
+    await service.deleteAccount(id);
+    await eraseUserData?.(id);
     return { ok: true };
   });
 

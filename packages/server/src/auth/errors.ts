@@ -33,6 +33,10 @@ export const authErrors = {
   notFound: () => new AuthError("USER_NOT_FOUND", 404, "No such user."),
   cannotDemoteLastAdmin: () =>
     new AuthError("LAST_ADMIN", 400, "There must be at least one admin. Promote another user first."),
+  /** The single-user owner account is the whole deployment; deleting it would
+   *  brick the app, so it is refused rather than silently orphaning the data. */
+  cannotDeleteOwner: () =>
+    new AuthError("CANNOT_DELETE_OWNER", 400, "The single-user owner account can't be deleted."),
   // ---- Multi-factor (TOTP) ------------------------------------------------
   /** The account has no enabled second factor, but the action requires one
    *  (e.g. connecting a bank). The client should route the user to enrollment. */

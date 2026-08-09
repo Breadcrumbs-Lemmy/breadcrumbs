@@ -144,22 +144,36 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // disk under the user's data directory, next to their imported statements.
   const agentMemory = options.agentMemory ?? (ephemeral ? new InMemoryAgentMemoryProvider() : new FileAgentMemoryProvider());
 
-  await registerAuthRoutes(app, { service: authService });
+  // Bank connections persist to disk for a real server (so a restart doesn't
+  // un-link every user's bank) and stay in RAM for an ephemeral/test server.
+  // Built here, above the auth routes, so account deletion can erase a user's
+  // stored bank tokens too. Only exists when Plaid is configured. Reuses the
+  // same at-rest key loaded above (see the [security] warning).
+  const plaidTokenStore = options.plaidConfig
+    ? options.plaidTokenStore ??
+      (ephemeral
+        ? new InMemoryPlaidTokenStore()
+        : new FilePlaidTokenStore(join(defaultLocalDataDir(), "plaid", "connections.json"), fieldCipher))
+    : undefined;
+
+  // Full per-user erasure for account deletion: the auth service removes the
+  // identity (user record + sessions); this wipes everything a user's id owns in
+  // the data stores. Best-effort and idempotent — each store's eraser tolerates
+  // "nothing there". Memory is erased before the statement store because the
+  // latter removes the whole `users/<id>/` directory the memory lives under.
+  const eraseUserData = async (userId: string): Promise<void> => {
+    await agentMemory.eraseForUser?.(userId);
+    await stores.eraseForUser?.(userId);
+    await plaidTokenStore?.deleteAllForUser(userId);
+  };
+
+  await registerAuthRoutes(app, { service: authService, eraseUserData });
   await registerAffordabilityRoutes(app, { stores });
   await registerLocalRoutes(app, { stores });
   await registerSpendingRoutes(app, { stores });
   await registerAgentRoutes(app, { stores, memory: agentMemory });
 
-  if (options.plaidConfig) {
-    // Persist bank connections to disk for a real server so a restart does not
-    // un-link every user's bank; an ephemeral (test-shaped) server keeps them in
-    // RAM, matching how its identity and imports stay off the real data dir.
-    // Reuses the same at-rest key loaded above (see the [security] warning).
-    const plaidTokenStore =
-      options.plaidTokenStore ??
-      (ephemeral
-        ? new InMemoryPlaidTokenStore()
-        : new FilePlaidTokenStore(join(defaultLocalDataDir(), "plaid", "connections.json"), fieldCipher));
+  if (options.plaidConfig && plaidTokenStore) {
     await registerPlaidRoutes(app, {
       client: options.plaidClient ?? createPlaidClient(options.plaidConfig),
       config: options.plaidConfig,

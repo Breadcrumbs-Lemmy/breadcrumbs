@@ -65,18 +65,23 @@ level that remains *after* the listed mitigations are applied.
 - **Mitigations (in place):** read-only Plaid scope (no money movement);
   documented data flows (policy §9); local-model option for the assistant to
   avoid sending financial data off-box (loopback-enforced local provider).
-- **Gaps / planned:** formal subprocessor list and per-provider agreement review
-  on the §7 cadence.
-- **Residual:** Medium
+- **Mitigations (added):** a **formal, maintained subprocessor list**
+  ([subprocessors.md](subprocessors.md)) with data shared, purpose, and review
+  cadence per provider; adding/changing one is a recorded material decision.
+- **Gaps / planned:** per-provider **agreement** review (operating-entity
+  dependent) on the §7 cadence.
+- **Residual:** Low–Medium
 - **Owner:** Security owner · **Review:** On subprocessor change
 
 ### R-05 — Dependency / supply-chain vulnerability
 - **Likelihood:** Medium · **Impact:** Medium · **Inherent:** Medium
 - **Mitigations (in place):** code review before merge; minimal, pinned
-  dependencies.
-- **Gaps / planned:** `pnpm audit` / automated advisory scanning wired into CI
-  and the release checklist (policy §12.3).
-- **Residual:** Medium
+  dependencies; **`pnpm audit` (high/critical) wired into CI** — every push and
+  pull request, plus a weekly scheduled run so an advisory disclosed after merge
+  still fails the build (`.github/workflows/dependency-audit.yml`, policy §4.4).
+- **Gaps / planned:** move the at-rest key handling to a secrets manager is
+  tracked under R-02; no third-party pen test yet.
+- **Residual:** Low–Medium
 - **Owner:** Engineering · **Review:** Per release
 
 ### R-06 — Data loss or corruption of the JSON-file datastore
@@ -104,3 +109,8 @@ level that remains *after* the listed mitigations are applied.
 - 2026-08-09 — R-03: TOTP MFA now enforced as a step-up before Plaid Link;
   residual lowered to Low. R-02: transaction store + TOTP secrets added to the
   at-rest encryption mitigations.
+- 2026-08-09 — R-05: `pnpm audit` (high/critical) wired into CI on every push/PR
+  and weekly; residual lowered to Low–Medium. R-04: formal subprocessor list added
+  (`subprocessors.md`); residual lowered to Low–Medium. (Related: self-serve +
+  admin account deletion with full per-user erasure now closes the retention gap —
+  see `data-retention-schedule.md` and policy §10.)

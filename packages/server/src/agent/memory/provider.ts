@@ -4,6 +4,7 @@
  * can reach no other user's facts, conversations, or uploaded files. Swap in a
  * database later by implementing this one interface.
  */
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { defaultLocalDataDir } from "../../local/store-provider";
@@ -12,6 +13,9 @@ import type { AgentMemoryStore } from "./store";
 
 export interface AgentMemoryProvider {
   forUser(userId: string): AgentMemoryStore | Promise<AgentMemoryStore>;
+  /** Permanently remove a user's assistant memory (conversations, facts, files).
+   *  Optional; account deletion calls it best-effort. */
+  eraseForUser?(userId: string): Promise<void>;
 }
 
 /** One in-memory memory per user. Tests and ephemeral runs. */
@@ -24,6 +28,9 @@ export class InMemoryAgentMemoryProvider implements AgentMemoryProvider {
       this.stores.set(userId, store);
     }
     return store;
+  }
+  async eraseForUser(userId: string): Promise<void> {
+    this.stores.delete(userId);
   }
 }
 
@@ -39,6 +46,13 @@ export class FileAgentMemoryProvider implements AgentMemoryProvider {
       this.cache.set(key, store);
     }
     return store;
+  }
+  /** Remove the user's assistant-memory directory and drop the cached handle so
+   *  a later `forUser` rebuilds against a clean slate. Best-effort. */
+  async eraseForUser(userId: string): Promise<void> {
+    const key = safeUserDir(userId);
+    this.cache.delete(key);
+    await rm(join(this.dataDir, "users", key, "agent-memory"), { recursive: true, force: true });
   }
 }
 

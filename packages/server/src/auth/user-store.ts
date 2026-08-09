@@ -13,6 +13,9 @@ export interface UserStore {
   getByEmail(email: string): Promise<User | undefined>;
   list(): Promise<User[]>;
   update(id: string, patch: Partial<Omit<User, "id">>): Promise<User | undefined>;
+  /** Permanently remove a user record. Idempotent — deleting an unknown id is a
+   *  no-op, so a double call can't fail. */
+  delete(id: string): Promise<void>;
   count(): Promise<number>;
 }
 
@@ -50,6 +53,10 @@ export class KeyValueUserStore implements UserStore {
     const next: User = { ...current, ...patch, id: current.id, updatedAt: new Date().toISOString() };
     await this.kv.put(id, next);
     return next;
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.kv.delete(id);
   }
 
   async count(): Promise<number> {

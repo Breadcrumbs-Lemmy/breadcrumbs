@@ -43,16 +43,27 @@ Implemented.** Source: `crypto/field-cipher.ts`, `plaid/token-store.ts`,
 **Operator** control (policy §11).
 
 **Q. What is your data retention and deletion policy?**
-Data is retained while the account is active and deleted on account deletion or
-operator request; a Plaid connection can be removed, which deletes its stored
-token. **Status: Implemented** (deletion paths exist) / **Planned** (a formal
-written retention schedule — policy §10).
+Data is retained while the account is active and erased on account deletion.
+Three deletion paths exist in-app: a user can **remove a single Plaid connection**
+(`DELETE /api/plaid/connections/:id`, deletes its stored access token); a user can
+**delete their whole account** (`DELETE /api/v1/auth/me`, re-authenticated with
+the current password); and an admin can **delete any account**
+(`DELETE /api/v1/admin/users/:id`) or **disable** one (revokes all sessions,
+reversible). Account deletion removes the user's identity **and** erases
+everything the user id owns — Plaid tokens, the per-user transaction store, and
+assistant memory — with last-admin and single-user-owner guards so a deployment
+can't be bricked. The formal per-data-class schedule is
+[data-retention-schedule.md](data-retention-schedule.md). **Status: Implemented.**
+Source: `auth/service.ts`, `http/auth-routes.ts`, `http/server.ts`,
+`http/plaid-routes.ts`; tests `tests/account-deletion.test.ts`.
 
 **Q. Do you share Plaid data with any third parties / subprocessors?**
 Only the AI assistant provider (Anthropic) may receive user financial data that
 is within the scope of a question the user asks the assistant, to answer it. A
 **local (on-box) model option** exists to avoid sending data off the machine at
-all. No other subprocessors. **Status: Implemented.** Source: policy §9.
+all. No other subprocessors (no analytics, error-tracking, ad, or email vendors).
+The full inventory is maintained in [subprocessors.md](subprocessors.md).
+**Status: Implemented.** Source: policy §9; [subprocessors.md](subprocessors.md).
 
 ---
 
@@ -165,9 +176,11 @@ encryption, persistence durability). **Status: Implemented.** Source: policy §4
 `packages/server/tests/`.
 
 **Q. Do you run dependency vulnerability scanning?**
-**Planned** — `pnpm audit` / automated advisory scanning is to be wired into CI
-and the release checklist; not yet automated. **Status: Planned.** Source: policy
-§4.4, §12.3, risk R-05.
+Yes — `pnpm audit` (failing on **high/critical** advisories) runs in CI on every
+push and pull request, and again on a **weekly schedule** so an advisory disclosed
+after a dependency merged still turns the build red. **Status: Implemented.**
+Source: `.github/workflows/dependency-audit.yml`, root `audit` script; policy
+§4.4, §5; risk R-05.
 
 **Q. Do you perform penetration testing / vulnerability assessments?**
 **Planned** — no third-party pen test has been performed yet. Answer truthfully;
@@ -178,10 +191,17 @@ do not claim one. **Status: Planned.**
 ## G. Logging, monitoring & incident response
 
 **Q. What logging and monitoring do you have?**
-The server logs request/error activity with secrets excluded; repeated auth
-failures and rate-limit trips are observable as the primary brute-force/
-credential-stuffing signal. **Status: Implemented (signals exist) / Planned**
-(documented periodic log-review + alerting thresholds). Source: policy §5.
+The app emits boot-time security warnings and `[fatal]` error lines with secrets
+excluded by design; the primary brute-force/credential-stuffing signal is
+repeated **HTTP `401`/`429`** responses (auth failure and rate-limit/lockout),
+visible in the operator's reverse-proxy/access log. A documented **log-review
+procedure with alerting thresholds** now covers these signals
+([logging-and-monitoring.md](logging-and-monitoring.md)). We are candid that the
+app does **not** yet emit a per-request audit log (Fastify `logger: false`) — that
+is a committed gap, and capturing access logs / wiring automated alerts is an
+**Operator** responsibility. **Status: Implemented (signals + documented
+procedure) / Operator (log capture + alerting) / Planned (native request
+logging).** Source: policy §5; [logging-and-monitoring.md](logging-and-monitoring.md).
 
 **Q. Do you have an incident response plan, and does it include notifying Plaid?**
 Yes — a documented runbook: detect → triage/severity → contain (revoke sessions,
@@ -220,11 +240,13 @@ Access review cadence is defined (policy §7, quarterly). Formal HR-side control
 **Status: Planned / Operator.**
 
 **Q. Vendor / subprocessor management?**
-Subprocessors (Plaid, Anthropic) are documented with the data shared and purpose;
-adding/changing one is a recorded material decision. A formal subprocessor list
-and per-provider agreement review are on the review cadence. **Status:
-Implemented (documented) / Planned (formal list + reviews).** Source: policy §9,
-§7; risk R-04.
+Subprocessors (Plaid, Anthropic) are documented with the data shared and purpose
+in a formal, maintained list ([subprocessors.md](subprocessors.md)); adding or
+changing one is a recorded material decision and must be reflected there before it
+goes live. Per-provider **agreement** review is on the review cadence and depends
+on the operating entity. **Status: Implemented (formal list + governance) /
+Operator (per-provider agreement review).** Source:
+[subprocessors.md](subprocessors.md); policy §9, §7; risk R-04.
 
 ---
 
@@ -233,19 +255,24 @@ Implemented (documented) / Planned (formal list + reviews).** Source: policy §9
 These are the honest **"no / in progress"** answers — surface them rather than
 overclaim; each is already tracked in the policy §12 and the risk register:
 
-1. **Dependency vulnerability scanning in CI** — planned. *(risk R-05)*
-2. **Third-party penetration test** — not yet performed.
-3. **Documented log-review / alerting thresholds** — planned. *(policy §5)*
-4. **Formal data-retention schedule & subprocessor list** — planned.
-   *(policy §10, §9)*
-5. **Secrets manager / KMS** for the at-rest key (currently an env var).
+1. **Third-party penetration test** — not yet performed.
+2. **Native per-request audit logging** — the app emits no request log today
+   (`logger: false`); the brute-force signal lives in HTTP `401`/`429` status
+   codes captured by the operator's reverse proxy. A documented review procedure
+   and thresholds exist; native app-level logging with redaction is planned.
+   *(policy §5, [logging-and-monitoring.md](logging-and-monitoring.md))*
+3. **Secrets manager / KMS** for the at-rest key (currently an env var).
    *(risk R-02)*
-6. **Operator-dependent controls** — TLS, host disk encryption, firewall,
-   tested backups, HR/background checks — true for self-hosted deployments; the
-   Company owns them for any hosted instance. *(policy §11)*
+4. **Operator-dependent controls** — TLS, host disk encryption, firewall,
+   tested backups, log capture + automated alerting, HR/background checks — true
+   for self-hosted deployments; the Company owns them for any hosted instance.
+   *(policy §11)*
 
-*Resolved since the last revision: MFA enforcement (item 4) — TOTP is now
-enforced as a step-up in front of Plaid Link.*
+*Resolved since the last revision:* MFA enforcement (TOTP step-up before Plaid
+Link); **self-serve + admin account deletion** with full per-user data erasure
+(`DELETE /api/v1/auth/me`); **dependency scanning in CI** (`pnpm audit`,
+high/critical, per-push + weekly); and the formal **data-retention schedule**,
+**subprocessor list**, and **log-review procedure** docs.
 
 ---
 
