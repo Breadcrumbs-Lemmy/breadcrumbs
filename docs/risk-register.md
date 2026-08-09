@@ -8,7 +8,7 @@ Companion to: [Information Security Policy](information-security-policy.md) §3
 This is the living risk assessment referenced by the InfoSec policy. It is the
 "Identify" half of identify → mitigate → monitor: each risk is rated, mapped to
 the controls that address it, and given a residual rating and an owner. Review
-quarterly, and whenever a feature, data flow, or third party changes.
+annually (solo maintainer), and whenever a feature, data flow, or third party changes.
 
 ## Scoring
 
@@ -31,7 +31,7 @@ level that remains *after* the listed mitigations are applied.
   404 as missing data (no existence leak); regression-tested
   (`tests/plaid-isolation.test.ts`).
 - **Residual:** Low
-- **Owner:** Engineering · **Review:** Quarterly
+- **Owner:** Engineering · **Review:** Annually
 
 ### R-02 — Compromise of third-party secrets (Plaid access tokens, API keys)
 - **Likelihood:** Medium · **Impact:** Critical · **Inherent:** High
@@ -45,7 +45,7 @@ level that remains *after* the listed mitigations are applied.
 - **Gaps / planned:** move the encryption key into a secrets manager / KMS rather
   than a plain env var.
 - **Residual:** Low–Medium
-- **Owner:** Engineering + Operator · **Review:** Quarterly
+- **Owner:** Engineering + Operator · **Review:** Annually
 
 ### R-03 — Credential stuffing / brute-force against user accounts
 - **Likelihood:** Medium · **Impact:** High · **Inherent:** High
@@ -58,7 +58,7 @@ level that remains *after* the listed mitigations are applied.
 - **Gaps / planned:** recovery/backup codes; optionally extend the MFA step-up to
   more sensitive actions beyond bank-linking.
 - **Residual:** Low
-- **Owner:** Engineering · **Review:** Quarterly
+- **Owner:** Engineering · **Review:** Annually
 
 ### R-04 — Subprocessor data exposure (Plaid, Anthropic)
 - **Likelihood:** Low · **Impact:** High · **Inherent:** Medium
@@ -75,14 +75,15 @@ level that remains *after* the listed mitigations are applied.
 
 ### R-05 — Dependency / supply-chain vulnerability
 - **Likelihood:** Medium · **Impact:** Medium · **Inherent:** Medium
-- **Mitigations (in place):** code review before merge; minimal, pinned
+- **Mitigations (in place):** pull-request self-review + automated checks before
+  merge (solo project — no second human reviewer); minimal, pinned
   dependencies; **`pnpm audit` (high/critical) wired into CI** — every push and
   pull request, plus a weekly scheduled run so an advisory disclosed after merge
   still fails the build (`.github/workflows/dependency-audit.yml`, policy §4.4).
 - **Gaps / planned:** move the at-rest key handling to a secrets manager is
   tracked under R-02; no third-party pen test yet.
 - **Residual:** Low–Medium
-- **Owner:** Engineering · **Review:** Per release
+- **Owner:** Engineering · **Review:** Continuous (automated in CI)
 
 ### R-06 — Data loss or corruption of the JSON-file datastore
 - **Likelihood:** Low · **Impact:** High · **Inherent:** Medium
@@ -93,7 +94,7 @@ level that remains *after* the listed mitigations are applied.
 - **Gaps / planned:** operator-owned regular, tested backups (policy §11); no
   application-managed backup exists.
 - **Residual:** Medium
-- **Owner:** Operator · **Review:** Quarterly
+- **Owner:** Operator · **Review:** Annually
 
 ### R-07 — Insecure self-hosted deployment (plaintext exposure, open network)
 - **Likelihood:** Medium · **Impact:** High · **Inherent:** High
@@ -103,7 +104,7 @@ level that remains *after* the listed mitigations are applied.
 - **Gaps / planned:** operator hardening (TLS, disk encryption, firewall) is
   outside application control and depends on the deployer following §11.
 - **Residual:** Medium (operator-dependent)
-- **Owner:** Operator · **Review:** Quarterly
+- **Owner:** Operator · **Review:** Annually
 
 ## Change log
 - 2026-08-09 — Initial register created alongside the InfoSec policy (R-01…R-07).
@@ -115,3 +116,7 @@ level that remains *after* the listed mitigations are applied.
   (`subprocessors.md`); residual lowered to Low–Medium. (Related: self-serve +
   admin account deletion with full per-user erasure now closes the retention gap —
   see `data-retention-schedule.md` and policy §10.)
+- 2026-08-09 — Owner sign-off (D-018): review cadence relaxed from quarterly to
+  annually for a solo maintainer (dependency review stays continuous via CI);
+  "code review before merge" reworded to PR self-review + automated checks (no
+  second human reviewer). No risk ratings changed.

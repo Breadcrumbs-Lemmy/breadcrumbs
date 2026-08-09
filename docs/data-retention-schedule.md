@@ -105,5 +105,5 @@ manager/KMS is **Planned** (risk R-02).
 
 ## 6. Review
 
-Reviewed on the §7 policy cadence (quarterly with the risk register), and
+Reviewed on the §7 policy cadence (annually with the risk register), and
 whenever a new data class, store, or subprocessor is introduced.

@@ -169,11 +169,12 @@ Implemented (app) / Operator (host).** Source: `persistence/atomic-file.ts`.
 ## F. Secure development & vulnerability management
 
 **Q. Do you follow a secure SDLC / review code before merge?**
-Yes — changes are code-reviewed before merge; the auth surface is deliberately
-concentrated in one auditable service; automated tests cover security-relevant
-behavior (auth, per-user isolation, Plaid config secret-scrubbing, at-rest
-encryption, persistence durability). **Status: Implemented.** Source: policy §4.4;
-`packages/server/tests/`.
+Yes — changes land via pull request with self-review and automated checks (tests,
+CI, dependency scan) before merge; as a solo project there is no second human
+reviewer. The auth surface is deliberately concentrated in one auditable service;
+automated tests cover security-relevant behavior (auth, per-user isolation, Plaid
+config secret-scrubbing, at-rest encryption, persistence durability). **Status:
+Implemented.** Source: policy §4.4; `packages/server/tests/`.
 
 **Q. Do you run dependency vulnerability scanning?**
 Yes — `pnpm audit` (failing on **high/critical** advisories) runs in CI on every
@@ -230,13 +231,15 @@ are an **Operator** responsibility; there is no application-managed backup.
 
 **Q. Do you have a documented information security policy?**
 Yes — a documented policy operationalized to identify → mitigate → monitor risks,
-with a companion living risk register and incident-response runbook. **Status:
-Implemented (documented; pending owner sign-off).** Source:
+with a companion living risk register and incident-response runbook; reviewed and
+signed off by the accountable owner on 2026-08-09 (policy v1.0). **Status:
+Implemented.** Source:
 [information-security-policy.md](information-security-policy.md),
 [risk-register.md](risk-register.md).
 
 **Q. Employee security (background checks, access reviews, security training)?**
-Access review cadence is defined (policy §7, quarterly). Formal HR-side controls
+Access review cadence is defined (policy §7, annually for a solo maintainer).
+Formal HR-side controls
 (background checks, security training) depend on the operating entity and are
 **Operator / Planned** — answer per your actual organization; do not overstate.
 **Status: Planned / Operator.**

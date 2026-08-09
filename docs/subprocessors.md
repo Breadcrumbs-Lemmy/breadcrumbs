@@ -49,7 +49,7 @@ material decision recorded in [`decisions.md`](decisions.md) and added here
   [`decisions.md`](decisions.md), reflected here, and disclosed to users whose
   data flows change.
 - **Review cadence** — this list and each provider's agreement/security posture
-  are reviewed on the policy §7 cadence (quarterly with the risk register) and on
+  are reviewed on the policy §7 cadence (annually with the risk register) and on
   any subprocessor change. *Review of the formal per-provider agreements is
   **Planned / Operator** — it depends on the operating entity.*
 - **User transparency** — users are informed of these data flows; the local-model

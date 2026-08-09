@@ -5,6 +5,40 @@ Last updated: 2026-08-09
 
 Use this log for material product, architecture, data, and compliance decisions. Add new entries at the top unless a project convention later says otherwise.
 
+## D-018: Owner Sign-Off Of The Security Docs, With Solo-Operator Honesty Adjustments
+
+Date: 2026-08-09
+Status: Accepted
+Relates to: `D-015` (InfoSec policy), `D-017` (remaining security docs)
+
+Decision: The accountable owner (Lemuel Mutah — sole developer, no incorporated
+entity) reviewed and **signed off** the security document set. The InfoSec policy
+moves to **v1.0 / Approved** (from 0.1 draft), closing the D-015 gate that these
+docs were "drafts until an accountable owner signs off." As part of the sign-off:
+
+1. **Owner, organization, and incident contacts filled in.** All seven security
+   docs now name the owner; the organization is stated honestly as "Lemuel Mutah
+   (sole operator — no incorporated entity)"; incident-response contacts are
+   `lemuelmutah@gmail.com` (email-only by choice; phone/Signal dropped).
+2. **Questionnaire re-validated against code** (four-agent sweep). Corrected three
+   real discrepancies: connection-delete route param (`:id` → `:connectionId`),
+   the item-id "encrypted" overclaim (only the access token is encrypted), and the
+   staged-restore source attribution (`persistence/backup.ts`, not `atomic-file.ts`).
+3. **Solo-operator honesty adjustments.** "Code-reviewed before merge" reworded to
+   PR self-review + automated checks with no second human reviewer; §7 review
+   cadences relaxed from quarterly/6-monthly to annually (dependency scan stays
+   continuous via CI; IR tabletop best-effort), matching what a solo maintainer
+   will realistically sustain rather than attesting to a cadence that wouldn't hold.
+
+Rationale: A sign-off is only meaningful if the owner stands behind every claim.
+Writing the docs in "company" voice had introduced two would-be overclaims for a
+one-person project (peer review; quarterly formal reviews); the sign-off pass
+resolved them in the honest direction rather than leaving them to look better on
+paper. Remaining committed gaps are unchanged: secrets-manager/KMS for the at-rest
+key, native per-request audit logging, and a third-party penetration test.
+
+This does not change application behavior; it is a governance/compliance decision.
+
 ## D-017: Self-Serve Account Deletion, CI Dependency Scanning, And The Remaining Security Docs
 
 Date: 2026-08-09

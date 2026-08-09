@@ -4,10 +4,10 @@
 | --- | --- |
 | **Document owner** | `Lemuel Mutah — Owner & Maintainer (sole developer)` |
 | **Organization** | `Lemuel Mutah (sole operator — no incorporated entity)` ("the Company"), operator of Breadcrumbs |
-| **Version** | 0.1 (draft) |
+| **Version** | 1.0 |
 | **Effective date** | 2026-08-09 |
-| **Next review** | 2027-02-09 (reviewed at least every 6 months and after any material change) |
-| **Status** | Draft — pending review and sign-off by an accountable owner before use as a formal attestation. |
+| **Next review** | 2027-08-09 (reviewed at least annually and after any material change) |
+| **Status** | Approved — reviewed and signed off by the accountable owner (Lemuel Mutah) on 2026-08-09. |
 
 > **How to read this document.** Every control below carries an explicit status:
 > **Implemented** (in place and verifiable in the codebase, with a source
@@ -78,8 +78,8 @@ The Company maintains a lightweight, living risk assessment covering at minimum:
 
 Each risk is rated (likelihood × impact), mapped to the mitigations in §4, and
 reviewed on the cadence in §7. New risks are added when features, data flows, or
-third parties change. **Status: Planned** — the risk register is to be
-maintained as a living document alongside this policy (`docs/risk-register.md`).
+third parties change. **Status: Implemented** — the risk register is maintained
+as a living document alongside this policy ([risk-register.md](risk-register.md)).
 
 ---
 
@@ -119,8 +119,10 @@ maintained as a living document alongside this policy (`docs/risk-register.md`).
 
 ### 4.4 Secure development
 
-- Changes are code-reviewed before merge; the auth surface is deliberately
-  concentrated in one auditable service so identity rules are easy to review.
+- Changes are merged via pull request with self-review and automated checks
+  (tests, CI, dependency scan) before merge; as a solo project there is no second
+  human reviewer. The auth surface is deliberately concentrated in one auditable
+  service so identity rules are easy to review.
 - Automated tests cover security-relevant behavior (auth, per-user isolation,
   Plaid config secret-scrubbing, persistence durability). **Status: Implemented.**
 - Dependency vulnerability scanning (`pnpm audit`, failing on high/critical
@@ -177,11 +179,11 @@ Plaid's agreement-specific reporting window/channel remains an operator action.
 
 | Activity | Cadence |
 | --- | --- |
-| Policy review & re-approval | Every 6 months, and after any material change |
-| Risk register review | Quarterly |
-| Dependency vulnerability scan | Per release, and monitored continuously |
-| Access / admin-role review | Quarterly |
-| Incident-response tabletop | Annually |
+| Policy review & re-approval | Annually, and after any material change |
+| Risk register review | Annually |
+| Dependency vulnerability scan | Continuous (automated in CI on every push/PR + weekly) |
+| Access / admin-role review | Annually |
+| Incident-response tabletop | Best-effort / as capacity allows (solo maintainer) |
 
 Material security and compliance decisions are recorded in
 [`decisions.md`](decisions.md) per the docs maintenance rules.
@@ -277,7 +279,7 @@ Tracked openly so this document stays honest:
 
 ---
 
-*This is a starter policy tailored to the Breadcrumbs codebase as of the
-effective date. It must be reviewed and approved by an accountable owner in the
-Company before it is submitted as a formal security attestation. It is not legal
-or compliance advice.*
+*This policy is tailored to the Breadcrumbs codebase as of the effective date and
+has been reviewed and approved by the accountable owner (see header). Re-review on
+the §7 cadence and after any material change before relying on it for a fresh
+attestation. It is not legal or compliance advice.*

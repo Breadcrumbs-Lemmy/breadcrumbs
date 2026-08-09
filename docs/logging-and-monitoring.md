@@ -51,7 +51,7 @@ pipeline can leak a token or password. **Status: Implemented.**
 | **Weekly** | Security owner (or delegate) | Reverse-proxy access log: counts of `401` and `429` by source IP and by target account/route | Spikes vs. baseline; a single IP or a spread hitting `/api/v1/auth/login` |
 | **Weekly** | Engineering | Process stderr / container logs for `[fatal]` and `[security]` lines | Any fatal since last review; any deployment still running without an encryption key |
 | **Per release** | Engineering | `pnpm audit` result (also enforced in CI — see [dependency-audit workflow](../.github/workflows/dependency-audit.yml)) | New high/critical advisories |
-| **Quarterly** | Security owner | User & admin account list; MFA-enrollment coverage | Stale accounts, unexpected admins |
+| **Annually** | Security owner | User & admin account list; MFA-enrollment coverage | Stale accounts, unexpected admins |
 
 The weekly reviews are lightweight (minutes) and exist so an attack in progress
 is noticed in days, not after an incident. Findings that cross a threshold below
@@ -103,5 +103,5 @@ system of record and must never be mined to reconstruct financial data.
 
 ## 6. Review
 
-Reviewed on the policy §7 cadence (quarterly), and whenever logging behavior,
+Reviewed on the policy §7 cadence (annually), and whenever logging behavior,
 the auth flow, or the thresholds change.
