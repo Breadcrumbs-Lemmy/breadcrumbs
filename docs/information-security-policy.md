@@ -96,7 +96,7 @@ maintained as a living document alongside this policy (`docs/risk-register.md`).
 | Per-user data isolation | each user's data lives in an isolated store keyed by user id; enforced and regression-tested | Implemented | `plaid/token-store.ts`, `tests/plaid-isolation.test.ts` |
 | Session lifecycle | bearer/cookie sessions with TTL; **all** sessions revoked on password change or account disable | Implemented | `auth/service.ts` |
 | Least-privilege admin | role separation (admin/user); the last active admin cannot be demoted or disabled (lockout-proof) | Implemented | `auth/service.ts` |
-| Multi-factor authentication | data model scaffolded (`mfa` on user) but not yet enforced | Planned | `auth/types.ts` |
+| Multi-factor authentication | TOTP (RFC 6238, authenticator app) — no SMS/subprocessor. Two-step enrollment (secret issued, then activated on a first verified code, so setup can never lock the owner out). TOTP secrets encrypted at rest with the same AES-256-GCM field cipher, bound per-user by AAD. **Enforced as step-up in front of Plaid Link**: `link-token` and `exchange-public-token` refuse a multi-user session that has not cleared MFA within a 15-minute window (single-user mode has no login and is exempt). | Implemented | `auth/totp.ts`, `auth/service.ts`, `http/plaid-routes.ts`, `tests/totp.test.ts`, `tests/mfa-plaid-gate.test.ts` |
 
 ### 4.2 Secret and credential handling
 
@@ -239,7 +239,10 @@ Tracked openly so this document stays honest:
    tokens and the per-user transaction store (`crypto/field-cipher.ts`,
    `plaid/token-store.ts`, `local/store.ts`). Remaining: move the encryption key
    from a plain env var into a secrets manager / KMS.
-2. **MFA** enforcement (data model exists; enforcement not yet built).
+2. ~~**MFA** enforcement.~~ **Done** — TOTP (authenticator app) enforced as a
+   step-up in front of Plaid Link for multi-user sessions (`auth/totp.ts`,
+   `http/plaid-routes.ts`). Remaining/optional: recovery/backup codes, and
+   extending the step-up gate to other sensitive actions beyond bank-linking.
 3. **Dependency vulnerability scanning** wired into CI.
 4. Documented **log-review / alerting** procedure and **incident-response**
    runbook.

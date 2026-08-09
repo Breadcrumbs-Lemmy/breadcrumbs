@@ -30,10 +30,18 @@ import type { PlaidClientLike } from "../plaid/adapter";
 import type { PlaidConfig } from "../plaid/config";
 import type { PlaidTokenStore, StoredPlaidConnection } from "../plaid/token-store";
 import { OWNER_USER_ID } from "../auth/types";
+import { authErrors } from "../auth/errors";
 import type { StatementImportStore } from "../local/store";
 import type { StatementImportStoreProvider } from "../local/store-provider";
 import { principalOf } from "../auth/middleware";
 import { registerSafeErrorHandler } from "./errors";
+
+/**
+ * How long a session's cleared TOTP challenge is honoured before Plaid Link
+ * demands a fresh code. Long enough to enroll-then-connect in one sitting,
+ * short enough that a walked-away-from session cannot reach Link indefinitely.
+ */
+const MFA_STEPUP_WINDOW_MS = 15 * 60 * 1000;
 
 const LinkTokenBodySchema = z.object({
   clientUserId: z.string().min(1).max(128).optional(),
@@ -93,6 +101,22 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
   const callerId = (request: Parameters<typeof principalOf>[0]): string =>
     request.principal?.userId ?? OWNER_USER_ID;
 
+  /**
+   * Gate Plaid Link on a recently-cleared second factor. Enforced only for a
+   * real multi-user session: single-user mode's owner principal (`owner: true`)
+   * and route-only tests with no principal skip it, since there is no login to
+   * add a factor to. A logged-in user with no enabled factor is told to enroll;
+   * one whose step-up has gone stale is told to re-challenge. Both are 403s the
+   * web client branches on to show the right prompt before Link ever opens.
+   */
+  function requireMfaForPlaid(request: Parameters<typeof principalOf>[0]): void {
+    const principal = request.principal;
+    if (!principal || principal.owner) return;
+    if (!principal.mfaEnabled) throw authErrors.mfaEnrollmentRequired();
+    const verifiedAt = principal.mfaVerifiedAt ?? 0;
+    if (Date.now() - verifiedAt > MFA_STEPUP_WINDOW_MS) throw authErrors.mfaRequired();
+  }
+
   /** Load the caller's connection, or reply 404 — the same 404 whether it does
    *  not exist or belongs to someone else, so the routes never confirm the
    *  existence of another user's connection. */
@@ -110,6 +134,10 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
   }
 
   app.post("/api/plaid/link-token", async (request) => {
+    // MFA gate: refuse to even mint a Link token until the session has cleared a
+    // second factor. Failing here keeps Plaid's own UI from ever opening for an
+    // unverified caller.
+    requireMfaForPlaid(request);
     const body = LinkTokenBodySchema.parse(request.body ?? {});
     // Default the Plaid client_user_id to the caller so Plaid's own records line
     // up with ours; an explicit clientUserId still wins.
@@ -119,6 +147,10 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
   });
 
   app.post("/api/plaid/exchange-public-token", async (request) => {
+    // Gate the exchange too, not just the token mint: a client that skipped the
+    // link-token call (or replayed an old public token) still cannot attach a
+    // bank without a fresh second factor.
+    requireMfaForPlaid(request);
     const body = ExchangeBodySchema.parse(request.body);
     return exchangePublicToken(options.client, options.tokenStore, body.publicToken, callerId(request));
   });

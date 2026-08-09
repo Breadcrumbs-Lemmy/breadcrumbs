@@ -12,11 +12,22 @@ import type { AuthConfig } from "./config";
 import { authErrors } from "./errors";
 import { hashPassword, verifyPassword } from "./password";
 import type { SessionStore } from "./session-store";
+import { buildOtpauthUri, generateTotpSecret, verifyTotp } from "./totp";
 import { OWNER_USER_ID, normalizeEmail } from "./types";
-import type { Principal, Role, User } from "./types";
+import type { MfaState, Principal, Role, User } from "./types";
 import type { UserStore } from "./user-store";
+import type { FieldCipher } from "../crypto/field-cipher";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Shown by the authenticator app so the user can tell this factor apart. */
+const MFA_ISSUER = "Breadcrumbs";
+/** AAD prefix binding a stored TOTP secret to its owning user, so a swapped
+ *  ciphertext from another record fails to decrypt. */
+const MFA_AAD_PREFIX = "mfa-totp:";
+
+/** A never-enrolled MFA state — the default for every new account. */
+const EMPTY_MFA: MfaState = { enabled: false, method: null, totpSecret: null, enrolledAt: null };
 
 // Per-account brute-force throttle. After LOCKOUT_THRESHOLD failed sign-ins for
 // the same email inside LOCKOUT_WINDOW_MS, that email is locked for
@@ -33,6 +44,9 @@ export type AuthServiceDeps = {
   users: UserStore;
   sessions: SessionStore;
   config: AuthConfig;
+  /** When present, TOTP secrets are encrypted at rest with it (same key that
+   *  protects Plaid tokens). Absent = plaintext, matching the zero-config path. */
+  cipher?: FieldCipher;
 };
 
 export type Credentials = { email: string; password: string; displayName?: string; userAgent?: string };
@@ -41,6 +55,7 @@ export class AuthService {
   readonly config: AuthConfig;
   private readonly users: UserStore;
   private readonly sessions: SessionStore;
+  private readonly cipher?: FieldCipher;
   /** In-memory failed-login tally keyed by normalized email. Intentionally not
    *  persisted: a lockout is a short-lived defense, and losing it on restart is
    *  acceptable where persisting per-email attacker input is not. */
@@ -50,6 +65,7 @@ export class AuthService {
     this.users = deps.users;
     this.sessions = deps.sessions;
     this.config = deps.config;
+    this.cipher = deps.cipher;
   }
 
   // ---- Boot ---------------------------------------------------------------
@@ -74,7 +90,7 @@ export class AuthService {
       status: "active",
       createdAt: now,
       updatedAt: now,
-      mfa: { enabled: false, method: null, phoneE164: null, phoneVerified: false },
+      mfa: { ...EMPTY_MFA },
     };
     return this.users.create(owner);
   }
@@ -111,7 +127,7 @@ export class AuthService {
       status: "active",
       createdAt: now,
       updatedAt: now,
-      mfa: { enabled: false, method: null, phoneE164: null, phoneVerified: false },
+      mfa: { ...EMPTY_MFA },
     });
     const { token } = await this.sessions.create({ userId: user.id, ttlMs: this.config.sessionTtlMs, userAgent: input.userAgent });
     return { user, token };
@@ -174,7 +190,13 @@ export class AuthService {
     if (!session) return undefined;
     const user = await this.users.getById(session.userId);
     if (!user || user.status === "disabled") return undefined;
-    return { userId: user.id, role: user.role, sessionToken: token };
+    return {
+      userId: user.id,
+      role: user.role,
+      sessionToken: token,
+      mfaEnabled: user.mfa.enabled,
+      mfaVerifiedAt: session.mfaVerifiedAt ? Date.parse(session.mfaVerifiedAt) : undefined,
+    };
   }
 
   // ---- Self-service -------------------------------------------------------
@@ -195,6 +217,82 @@ export class AuthService {
     await this.users.update(userId, { passwordHash: await hashPassword(next) });
     // Every other session for this user is invalidated on a password change.
     await this.sessions.revokeAllForUser(userId);
+  }
+
+  // ---- Multi-factor (TOTP) ------------------------------------------------
+
+  /**
+   * Begin TOTP enrollment: mint a fresh secret, persist it (encrypted at rest),
+   * and hand back the provisioning material the client renders as a QR code.
+   * The factor stays inactive until `verifyMfaEnrollment` confirms a first code,
+   * so merely starting setup can never lock anyone out.
+   */
+  async beginMfaEnrollment(userId: string): Promise<{ secret: string; otpauthUri: string }> {
+    const user = await this.users.getById(userId);
+    if (!user) throw authErrors.notFound();
+    if (user.mfa.enabled) throw authErrors.mfaAlreadyEnabled();
+    const secret = generateTotpSecret();
+    await this.users.update(userId, {
+      mfa: { enabled: false, method: "totp", totpSecret: this.sealSecret(secret, userId), enrolledAt: null },
+    });
+    return { secret, otpauthUri: buildOtpauthUri({ secret, accountName: user.email, issuer: MFA_ISSUER }) };
+  }
+
+  /**
+   * Confirm enrollment with the first authenticator code. On success the factor
+   * goes live; if a session token is supplied, that session is marked as having
+   * cleared the challenge so the user isn't immediately re-prompted for step-up.
+   */
+  async verifyMfaEnrollment(userId: string, code: string, sessionToken?: string): Promise<User> {
+    const user = await this.users.getById(userId);
+    if (!user) throw authErrors.notFound();
+    if (user.mfa.enabled) throw authErrors.mfaAlreadyEnabled();
+    const secret = user.mfa.totpSecret ? this.openSecret(user.mfa.totpSecret, userId) : null;
+    if (!secret) throw authErrors.mfaNotEnrolled();
+    if (!verifyTotp(secret, code)) throw authErrors.mfaInvalidCode();
+    const updated = await this.users.update(userId, {
+      mfa: { enabled: true, method: "totp", totpSecret: user.mfa.totpSecret, enrolledAt: new Date().toISOString() },
+    });
+    if (sessionToken) await this.sessions.markMfaVerified(sessionToken);
+    return updated!;
+  }
+
+  /**
+   * Step-up for an already-enrolled user: verify a current code and stamp the
+   * session as fresh. This is what a sensitive action (connecting a bank) calls
+   * to clear its MFA gate without a full re-login.
+   */
+  async verifyMfaChallenge(userId: string, code: string, sessionToken: string): Promise<void> {
+    const user = await this.users.getById(userId);
+    if (!user) throw authErrors.notFound();
+    const secret = user.mfa.enabled && user.mfa.totpSecret ? this.openSecret(user.mfa.totpSecret, userId) : null;
+    if (!secret) throw authErrors.mfaNotEnrolled();
+    if (!verifyTotp(secret, code)) throw authErrors.mfaInvalidCode();
+    await this.sessions.markMfaVerified(sessionToken);
+  }
+
+  /**
+   * Turn MFA off. Requires a current code so a walk-up attacker on an already
+   * unlocked session cannot silently strip the second factor.
+   */
+  async disableMfa(userId: string, code: string): Promise<User> {
+    const user = await this.users.getById(userId);
+    if (!user) throw authErrors.notFound();
+    const secret = user.mfa.enabled && user.mfa.totpSecret ? this.openSecret(user.mfa.totpSecret, userId) : null;
+    if (!secret) throw authErrors.mfaNotEnrolled();
+    if (!verifyTotp(secret, code)) throw authErrors.mfaInvalidCode();
+    return (await this.users.update(userId, { mfa: { ...EMPTY_MFA } }))!;
+  }
+
+  /** Seal a TOTP secret for storage, binding it to its user via AAD. Plaintext
+   *  passthrough when no cipher is configured (the zero-config path). */
+  private sealSecret(secret: string, userId: string): string {
+    return this.cipher ? this.cipher.encrypt(secret, `${MFA_AAD_PREFIX}${userId}`) : secret;
+  }
+
+  /** Inverse of {@link sealSecret}; returns legacy plaintext unchanged. */
+  private openSecret(stored: string, userId: string): string {
+    return this.cipher ? this.cipher.decrypt(stored, `${MFA_AAD_PREFIX}${userId}`) : stored;
   }
 
   // ---- Admin --------------------------------------------------------------

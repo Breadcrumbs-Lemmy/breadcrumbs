@@ -17,6 +17,9 @@ export interface SessionStore {
   /** Returns the session for a live token and refreshes `lastSeenAt`; returns
    *  undefined for an unknown or expired token (expired tokens are deleted). */
   verify(token: string): Promise<Session | undefined>;
+  /** Stamp this session as having just cleared the TOTP challenge. Drives the
+   *  time-boxed step-up gate. No-op for an unknown/expired token. */
+  markMfaVerified(token: string): Promise<void>;
   revoke(token: string): Promise<void>;
   revokeAllForUser(userId: string): Promise<void>;
 }
@@ -55,6 +58,14 @@ export class KeyValueSessionStore implements SessionStore {
     session.lastSeenAt = new Date().toISOString();
     await this.kv.put(tokenHash, session);
     return session;
+  }
+
+  async markMfaVerified(token: string): Promise<void> {
+    const tokenHash = hashToken(token);
+    const session = await this.kv.get(tokenHash);
+    if (!session) return;
+    session.mfaVerifiedAt = new Date().toISOString();
+    await this.kv.put(tokenHash, session);
   }
 
   async revoke(token: string): Promise<void> {

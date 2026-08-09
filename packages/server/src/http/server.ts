@@ -85,10 +85,23 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // into the real `~/.breadcrumbs`. A bare `createServer()` (as `main.ts` calls
   // it) persists identity to disk so accounts survive a restart.
   const ephemeral = Boolean(options.statementImportStore) || Boolean(options.stores);
+  // One encryption key, loaded once, protects everything at rest: the per-user
+  // transaction store, the Plaid access tokens, and TOTP secrets. On a real
+  // (persistent) server with no key, financial data is stored behind file
+  // permissions only — warn loudly, once, since a production box should set one.
+  const fieldCipher = loadFieldCipher(process.env);
+  if (!ephemeral && !fieldCipher) {
+    console.warn(
+      "[security] WARNING: BREADCRUMBS_ENCRYPTION_KEY is not set — imported financial " +
+        "data and Plaid access tokens are stored WITHOUT application-level encryption " +
+        "(file permissions only). Set a 32-byte key (openssl rand -base64 32) to encrypt at rest.",
+    );
+  }
   const authService =
     options.authService ??
     buildAuthService(options.authConfig ?? loadAuthConfig(), {
       persistence: options.authPersistence ?? (ephemeral ? "memory" : "file"),
+      cipher: fieldCipher,
     });
   // Guarantee the owner account exists in single-user mode, where it is the one
   // account the whole app runs as. Idempotent, so a pre-seeded injected service
@@ -122,20 +135,8 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // ever reach the store for its authenticated principal — cross-user reads are
   // impossible by construction rather than by remembering a `WHERE user_id = ?`.
   // The spending endpoints still read exactly what the import endpoints wrote for
-  // the same user, so the screens and the importer can never disagree.
-  // One encryption key, loaded once, protects everything at rest: the per-user
-  // transaction store and the Plaid access tokens. On a real (persistent) server
-  // with no key, financial data is stored behind file permissions only — warn
-  // loudly, once, since a production box should set one.
-  const fieldCipher = loadFieldCipher(process.env);
-  if (!ephemeral && !fieldCipher) {
-    console.warn(
-      "[security] WARNING: BREADCRUMBS_ENCRYPTION_KEY is not set — imported financial " +
-        "data and Plaid access tokens are stored WITHOUT application-level encryption " +
-        "(file permissions only). Set a 32-byte key (openssl rand -base64 32) to encrypt at rest.",
-    );
-  }
-
+  // the same user, so the screens and the importer can never disagree. The same
+  // `fieldCipher` loaded above encrypts the transaction store and Plaid tokens.
   const stores = resolveStoreProvider(options, fieldCipher);
   // The assistant's memory follows the same isolation seam as the stores, and
   // the same ephemeral/persistent choice: an injected store means a test-shaped

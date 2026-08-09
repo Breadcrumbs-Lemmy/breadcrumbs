@@ -7,9 +7,13 @@
  * manages accounts and no user can read another's data — the difference is
  * which `AuthConfig.mode` the server boots in, not two identity models.
  *
- * MFA fields are present but not yet enforced. SMS step-up (`H-MFA`) writes to
- * `mfa.*`; nothing reads it as a gate yet, so a half-built MFA flow can never
- * lock the owner out of their own data before it is finished.
+ * MFA is TOTP-based (authenticator app; see `auth/totp.ts`) and gates Plaid Link
+ * for multi-user sessions. Enrollment is two-step: a secret is generated and
+ * stored (`totpSecret` set, `enabled: false`) but only becomes a real factor
+ * once the user proves possession with a first valid code (`enabled: true`).
+ * Until then nothing reads it as a gate, so a half-built MFA flow can never lock
+ * the owner out of their own data before it is finished. The secret is the only
+ * sensitive field and is encrypted at rest by the auth service.
  */
 
 export type Role = "user" | "admin";
@@ -19,10 +23,13 @@ export const OWNER_USER_ID = "usr_owner";
 
 export type MfaState = {
   enabled: boolean;
-  method: "sms" | null;
-  /** E.164, e.g. +14155550123. Stored only once verified for a real send. */
-  phoneE164: string | null;
-  phoneVerified: boolean;
+  method: "totp" | null;
+  /** base32 TOTP shared secret. Encrypted at rest by the auth service, held in
+   *  plaintext only in memory. Present once enrollment starts; a user is only
+   *  challenged once `enabled` flips true after the first verified code. */
+  totpSecret: string | null;
+  /** ISO timestamp the second factor was confirmed working (first valid code). */
+  enrolledAt: string | null;
 };
 
 export type User = {
@@ -50,7 +57,8 @@ export type PublicUser = {
   status: "active" | "disabled";
   createdAt: string;
   lastLoginAt?: string;
-  mfa: { enabled: boolean; method: "sms" | null; phoneVerified: boolean };
+  /** `pending` = enrollment started (secret issued) but no code verified yet. */
+  mfa: { enabled: boolean; method: "totp" | null; pending: boolean };
 };
 
 export type Session = {
@@ -62,6 +70,10 @@ export type Session = {
   expiresAt: string;
   lastSeenAt: string;
   userAgent?: string;
+  /** ISO timestamp this session last cleared the TOTP challenge. Absent until
+   *  the user completes step-up; drives the time-boxed Plaid Link gate so a
+   *  stolen session token alone cannot reach Link without a fresh code. */
+  mfaVerifiedAt?: string;
 };
 
 /**
@@ -74,6 +86,11 @@ export type Principal = {
   role: Role;
   sessionToken?: string;
   owner?: boolean;
+  /** Whether this user has an enabled TOTP factor. */
+  mfaEnabled?: boolean;
+  /** ms-epoch this session last cleared the TOTP challenge, if ever. The Plaid
+   *  gate reads this to decide whether step-up is still fresh. */
+  mfaVerifiedAt?: number;
 };
 
 export function toPublicUser(user: User): PublicUser {
@@ -85,7 +102,11 @@ export function toPublicUser(user: User): PublicUser {
     status: user.status,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
-    mfa: { enabled: user.mfa.enabled, method: user.mfa.method, phoneVerified: user.mfa.phoneVerified },
+    mfa: {
+      enabled: user.mfa.enabled,
+      method: user.mfa.method,
+      pending: !user.mfa.enabled && user.mfa.totpSecret !== null,
+    },
   };
 }
 

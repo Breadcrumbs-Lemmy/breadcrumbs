@@ -30,6 +30,10 @@ const AdminCreateSchema = CredentialsSchema.extend({
   role: z.enum(["user", "admin"]).default("user"),
 });
 
+/** A 6-digit authenticator code. Kept loose (whitespace tolerated) — the TOTP
+ *  verifier normalizes and rejects anything malformed as a plain wrong code. */
+const MfaCodeSchema = z.object({ code: z.string().min(1).max(16) });
+
 const RoleSchema = z.object({ role: z.enum(["user", "admin"]) });
 const StatusSchema = z.object({ status: z.enum(["active", "disabled"]) });
 const ResetPasswordSchema = z.object({ newPassword: z.string().min(1).max(1024) });
@@ -78,6 +82,48 @@ export async function registerAuthRoutes(app: FastifyInstance, options: Register
     const body = ChangePasswordSchema.parse(request.body);
     await service.changePassword(principal.userId, body.currentPassword, body.newPassword);
     return { ok: true };
+  });
+
+  // ---- Multi-factor (TOTP) -------------------------------------------------
+  // Step-up model: enrolling and clearing a challenge stamp the *session*, and
+  // the Plaid Link routes refuse to mint a link token until the session has
+  // cleared MFA recently. Enrollment can never lock the owner out — the factor
+  // is inert until a first code is verified.
+
+  /** Begin enrollment: returns the secret + otpauth URI for the QR code. The
+   *  secret is shown once, here, so the user can add it to their app. */
+  app.post("/api/v1/auth/mfa/enroll", async (request) => {
+    const principal = principalOf(request);
+    const { secret, otpauthUri } = await service.beginMfaEnrollment(principal.userId);
+    return { secret, otpauthUri };
+  });
+
+  /** Confirm enrollment with the first code; turns the factor on. */
+  app.post("/api/v1/auth/mfa/enroll/verify", async (request) => {
+    const principal = principalOf(request);
+    const { code } = MfaCodeSchema.parse(request.body);
+    const user = await service.verifyMfaEnrollment(principal.userId, code, principal.sessionToken);
+    return { user: toPublicUser(user) };
+  });
+
+  /** Step-up: clear the challenge for an already-enrolled session (e.g. before
+   *  Plaid Link) without a full re-login. */
+  app.post("/api/v1/auth/mfa/challenge", async (request) => {
+    const principal = principalOf(request);
+    const { code } = MfaCodeSchema.parse(request.body);
+    // In single-user mode there is no session to stamp; the owner principal
+    // bypasses the Plaid gate anyway, so treat a challenge as a no-op success.
+    if (!principal.sessionToken) return { ok: true };
+    await service.verifyMfaChallenge(principal.userId, code, principal.sessionToken);
+    return { ok: true };
+  });
+
+  /** Turn MFA off (requires a current code). */
+  app.post("/api/v1/auth/mfa/disable", async (request) => {
+    const principal = principalOf(request);
+    const { code } = MfaCodeSchema.parse(request.body);
+    const user = await service.disableMfa(principal.userId, code);
+    return { user: toPublicUser(user) };
   });
 
   // ---- Admin ---------------------------------------------------------------

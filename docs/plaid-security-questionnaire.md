@@ -104,10 +104,18 @@ Bearer/cookie sessions with a TTL; session tokens are stored **sha256-hashed**
 change or account disable. **Status: Implemented.** Source: `auth/service.ts`.
 
 **Q. Do you provide MFA for consumers before Plaid Link is surfaced? (Item 4)**
-The data model is scaffolded (`mfa` on the user) but enforcement is **not yet
-built**, so today the honest answer is **no / in progress**. Do not claim MFA is
-enforced until it is. **Status: Planned.** Source: `auth/types.ts`; policy §12.2,
-risk R-03.
+Yes. Multi-factor is **TOTP** (RFC 6238, authenticator app — no SMS, so no new
+subprocessor and no SIM-swap exposure) and is **enforced as a step-up in front of
+Plaid Link**: the server refuses to mint a Link token or exchange a public token
+for a multi-user session that has not cleared a current TOTP code within a
+15-minute window, so bank-linking cannot even be surfaced first. Enrollment is
+two-step (a secret is issued, then the factor is only activated after a first
+verified code) so setup can never lock a user out, and TOTP secrets are encrypted
+at rest with the same AES-256-GCM cipher, bound per-user by AAD. Single-user
+(self-hosted, no-login) mode has no second identity to challenge and is exempt.
+**Status: Implemented.** Source: `auth/totp.ts`, `auth/service.ts`,
+`http/plaid-routes.ts`, `http/auth-routes.ts`; tests `tests/totp.test.ts`,
+`tests/mfa-plaid-gate.test.ts`; policy §4.1, risk R-03.
 
 **Q. How do you protect against brute-force / credential stuffing?**
 Per-account lockout (10 failures / 15 min → 15-min lock) layered beneath a per-IP
@@ -225,17 +233,19 @@ Implemented (documented) / Planned (formal list + reviews).** Source: policy §9
 These are the honest **"no / in progress"** answers — surface them rather than
 overclaim; each is already tracked in the policy §12 and the risk register:
 
-1. **MFA enforcement** — scaffolded, not enforced (item 4). *(risk R-03)*
-2. **Dependency vulnerability scanning in CI** — planned. *(risk R-05)*
-3. **Third-party penetration test** — not yet performed.
-4. **Documented log-review / alerting thresholds** — planned. *(policy §5)*
-5. **Formal data-retention schedule & subprocessor list** — planned.
+1. **Dependency vulnerability scanning in CI** — planned. *(risk R-05)*
+2. **Third-party penetration test** — not yet performed.
+3. **Documented log-review / alerting thresholds** — planned. *(policy §5)*
+4. **Formal data-retention schedule & subprocessor list** — planned.
    *(policy §10, §9)*
-6. **Secrets manager / KMS** for the at-rest key (currently an env var).
+5. **Secrets manager / KMS** for the at-rest key (currently an env var).
    *(risk R-02)*
-7. **Operator-dependent controls** — TLS, host disk encryption, firewall,
+6. **Operator-dependent controls** — TLS, host disk encryption, firewall,
    tested backups, HR/background checks — true for self-hosted deployments; the
    Company owns them for any hosted instance. *(policy §11)*
+
+*Resolved since the last revision: MFA enforcement (item 4) — TOTP is now
+enforced as a step-up in front of Plaid Link.*
 
 ---
 

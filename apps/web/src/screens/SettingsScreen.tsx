@@ -20,6 +20,7 @@ import {
 } from "../mascot-prefs";
 import { Card, SectionLabel, Segmented, TrailDivider } from "../components/ui";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { MfaSetupCard } from "../components/Mfa";
 import { fetchAgentStatus, type AgentStatus } from "../services/agent";
 
 const PRESETS: { key: MascotPreset; label: string; blurb: string }[] = [
@@ -80,6 +81,9 @@ export function SettingsScreen() {
             control={<ThemeToggle />}
           />
         </Card>
+
+        {/* ---- Security (multi-user only; renders nothing otherwise) ---- */}
+        <MfaSetupCard />
 
         {/* ---- Privacy & data ---- */}
         <PrivacyCard />

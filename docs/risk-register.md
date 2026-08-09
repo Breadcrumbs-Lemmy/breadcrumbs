@@ -35,10 +35,11 @@ level that remains *after* the listed mitigations are applied.
 
 ### R-02 — Compromise of third-party secrets (Plaid access tokens, API keys)
 - **Likelihood:** Medium · **Impact:** Critical · **Inherent:** High
-- **Mitigations (in place):** Plaid access tokens **and** the per-user
-  transaction store encrypted at rest with AES-256-GCM, key from environment,
-  decrypted only in memory (`crypto/field-cipher.ts`, `plaid/token-store.ts`,
-  `local/store.ts`); secrets loaded from environment only, never committed
+- **Mitigations (in place):** Plaid access tokens, the per-user transaction
+  store, **and** TOTP MFA secrets encrypted at rest with AES-256-GCM, key from
+  environment, decrypted only in memory (`crypto/field-cipher.ts`,
+  `plaid/token-store.ts`, `local/store.ts`, `auth/service.ts`); secrets loaded
+  from environment only, never committed
   (`.env` git-ignored); config validation never echoes secret values into
   logs/errors (`plaid/config.ts`).
 - **Gaps / planned:** move the encryption key into a secrets manager / KMS rather
@@ -51,9 +52,12 @@ level that remains *after* the listed mitigations are applied.
 - **Mitigations (in place):** scrypt memory-hard hashing with per-hash salt
   (`auth/password.ts`); per-account lockout (10 fails / 15 min → 15 min) beneath
   a per-IP rate limit (default 300/min); timing-flat login for unknown emails;
-  all sessions revoked on password change/disable.
-- **Gaps / planned:** MFA enforcement (scaffolded, not enforced — policy §12.2).
-- **Residual:** Low–Medium
+  all sessions revoked on password change/disable; **TOTP MFA enforced as a
+  step-up in front of Plaid Link** (`auth/totp.ts`, `http/plaid-routes.ts`), so a
+  stolen password alone cannot reach bank-linking.
+- **Gaps / planned:** recovery/backup codes; optionally extend the MFA step-up to
+  more sensitive actions beyond bank-linking.
+- **Residual:** Low
 - **Owner:** Engineering · **Review:** Quarterly
 
 ### R-04 — Subprocessor data exposure (Plaid, Anthropic)
@@ -97,3 +101,6 @@ level that remains *after* the listed mitigations are applied.
 
 ## Change log
 - 2026-08-09 — Initial register created alongside the InfoSec policy (R-01…R-07).
+- 2026-08-09 — R-03: TOTP MFA now enforced as a step-up before Plaid Link;
+  residual lowered to Low. R-02: transaction store + TOTP secrets added to the
+  at-rest encryption mitigations.

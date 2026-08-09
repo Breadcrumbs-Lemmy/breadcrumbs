@@ -5,6 +5,40 @@ Last updated: 2026-08-09
 
 Use this log for material product, architecture, data, and compliance decisions. Add new entries at the top unless a project convention later says otherwise.
 
+## D-016: TOTP Multi-Factor, Enforced As Step-Up Before Plaid Link
+
+Date: 2026-08-09
+Status: Accepted
+Relates to: `D-012` (Plaid), `D-014` (auth, isolation), `D-015` (InfoSec policy)
+
+Decision: Multi-factor authentication is **TOTP** (RFC 6238, authenticator app),
+not SMS. It is enforced as a **step-up in front of Plaid Link**: the server
+refuses to mint a Link token or exchange a public token for a multi-user session
+that has not verified a current TOTP code within a 15-minute window. Enrollment is
+two-step — a secret is issued, and the factor is only activated once a first code
+verifies — and TOTP secrets are encrypted at rest with the existing AES-256-GCM
+field cipher, bound per-user by AAD. Single-user (no-login) mode is exempt: there
+is no second identity to challenge.
+
+Rationale: Plaid's production questionnaire (item 4) expects MFA before Link is
+surfaced. TOTP fits the product's privacy-first, self-hostable ethos better than
+SMS — it needs no third-party sender (no new subprocessor), works offline, and is
+immune to SIM-swap. Gating at Link time rather than at login keeps everyday
+sign-in frictionless while putting the second factor exactly where the sensitive
+action is. It is implementable with `node:crypto` alone, adding no dependency.
+Two-step enrollment guarantees a half-finished setup can never lock the owner out.
+
+Consequences:
+
+- The `mfa` model generalizes from the SMS scaffold to `{ enabled, method:
+  "totp", totpSecret, enrolledAt }`; the per-session step-up is stamped on the
+  session (`mfaVerifiedAt`) and surfaced on the principal.
+- New endpoints: enroll, enroll/verify, challenge, disable. Web UI: a Settings
+  setup card and a connect-a-bank gate dialog that walks enrollment or a
+  challenge and then retries the connect.
+- Follow-ups: recovery/backup codes, and optionally extending the step-up to
+  other sensitive actions. Tracked in policy §12 item 2 and risk R-03.
+
 ## D-015: Documented Information Security Policy And Supporting Procedures
 
 Date: 2026-08-09
