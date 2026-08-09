@@ -11,14 +11,20 @@
  * When a database replaces the JSON files, this is the seam: a `PgStoreProvider`
  * returns a store bound to a userId, and nothing above it changes.
  */
+import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import type { FieldCipher } from "../crypto/field-cipher";
 import { FileStatementImportStore, InMemoryStatementImportStore } from "./store";
 import type { StatementImportStore } from "./store";
 
 export interface StatementImportStoreProvider {
   forUser(userId: string): StatementImportStore | Promise<StatementImportStore>;
+  /** Permanently remove a user's imported financial data. Optional so a bare
+   *  provider (e.g. a shared single-user store) can decline; account deletion
+   *  calls it best-effort. */
+  eraseForUser?(userId: string): Promise<void>;
 }
 
 /** Every user shares one store. Correct only in single-user mode or tests that
@@ -42,20 +48,36 @@ export class InMemoryStatementImportStoreProvider implements StatementImportStor
     }
     return store;
   }
+  async eraseForUser(userId: string): Promise<void> {
+    this.stores.delete(userId);
+  }
 }
 
-/** One JSON file per user under `<dataDir>/users/<userId>/`. */
+/** One JSON file per user under `<dataDir>/users/<userId>/`. When a cipher is
+ *  supplied, every user's store encrypts its state at rest with it. */
 export class FileStatementImportStoreProvider implements StatementImportStoreProvider {
   private readonly cache = new Map<string, FileStatementImportStore>();
-  constructor(private readonly dataDir: string = defaultLocalDataDir()) {}
+  constructor(
+    private readonly dataDir: string = defaultLocalDataDir(),
+    private readonly cipher?: FieldCipher,
+  ) {}
   forUser(userId: string): StatementImportStore {
     const key = safeUserDir(userId);
     let store = this.cache.get(key);
     if (!store) {
-      store = new FileStatementImportStore(join(this.dataDir, "users", key, "statement-imports.json"));
+      store = new FileStatementImportStore(join(this.dataDir, "users", key, "statement-imports.json"), this.cipher);
       this.cache.set(key, store);
     }
     return store;
+  }
+  /** Delete the user's entire per-user directory — this clears the statement
+   *  store and anything else nested under `users/<key>/` (the assistant memory
+   *  lives there too) in one atomic removal. Best-effort: a missing directory is
+   *  fine (`force`), so a user who never imported anything deletes cleanly. */
+  async eraseForUser(userId: string): Promise<void> {
+    const key = safeUserDir(userId);
+    this.cache.delete(key);
+    await rm(join(this.dataDir, "users", key), { recursive: true, force: true });
   }
 }
 

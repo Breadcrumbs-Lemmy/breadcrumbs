@@ -6,6 +6,8 @@ import { join } from "node:path";
 
 import { createPlaidClient } from "../plaid/client";
 import type { PlaidConfig } from "../plaid/config";
+import { loadFieldCipher } from "../crypto/field-cipher";
+import type { FieldCipher } from "../crypto/field-cipher";
 import { FilePlaidTokenStore, InMemoryPlaidTokenStore } from "../plaid/token-store";
 import type { PlaidClientLike } from "../plaid/adapter";
 import type { PlaidTokenStore } from "../plaid/token-store";
@@ -83,10 +85,23 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // into the real `~/.breadcrumbs`. A bare `createServer()` (as `main.ts` calls
   // it) persists identity to disk so accounts survive a restart.
   const ephemeral = Boolean(options.statementImportStore) || Boolean(options.stores);
+  // One encryption key, loaded once, protects everything at rest: the per-user
+  // transaction store, the Plaid access tokens, and TOTP secrets. On a real
+  // (persistent) server with no key, financial data is stored behind file
+  // permissions only — warn loudly, once, since a production box should set one.
+  const fieldCipher = loadFieldCipher(process.env);
+  if (!ephemeral && !fieldCipher) {
+    console.warn(
+      "[security] WARNING: BREADCRUMBS_ENCRYPTION_KEY is not set — imported financial " +
+        "data and Plaid access tokens are stored WITHOUT application-level encryption " +
+        "(file permissions only). Set a 32-byte key (openssl rand -base64 32) to encrypt at rest.",
+    );
+  }
   const authService =
     options.authService ??
     buildAuthService(options.authConfig ?? loadAuthConfig(), {
       persistence: options.authPersistence ?? (ephemeral ? "memory" : "file"),
+      cipher: fieldCipher,
     });
   // Guarantee the owner account exists in single-user mode, where it is the one
   // account the whole app runs as. Idempotent, so a pre-seeded injected service
@@ -120,29 +135,45 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // ever reach the store for its authenticated principal — cross-user reads are
   // impossible by construction rather than by remembering a `WHERE user_id = ?`.
   // The spending endpoints still read exactly what the import endpoints wrote for
-  // the same user, so the screens and the importer can never disagree.
-  const stores = resolveStoreProvider(options);
+  // the same user, so the screens and the importer can never disagree. The same
+  // `fieldCipher` loaded above encrypts the transaction store and Plaid tokens.
+  const stores = resolveStoreProvider(options, fieldCipher);
   // The assistant's memory follows the same isolation seam as the stores, and
   // the same ephemeral/persistent choice: an injected store means a test-shaped
   // server whose memory stays in RAM; a bare `createServer()` persists memory to
   // disk under the user's data directory, next to their imported statements.
   const agentMemory = options.agentMemory ?? (ephemeral ? new InMemoryAgentMemoryProvider() : new FileAgentMemoryProvider());
 
-  await registerAuthRoutes(app, { service: authService });
+  // Bank connections persist to disk for a real server (so a restart doesn't
+  // un-link every user's bank) and stay in RAM for an ephemeral/test server.
+  // Built here, above the auth routes, so account deletion can erase a user's
+  // stored bank tokens too. Only exists when Plaid is configured. Reuses the
+  // same at-rest key loaded above (see the [security] warning).
+  const plaidTokenStore = options.plaidConfig
+    ? options.plaidTokenStore ??
+      (ephemeral
+        ? new InMemoryPlaidTokenStore()
+        : new FilePlaidTokenStore(join(defaultLocalDataDir(), "plaid", "connections.json"), fieldCipher))
+    : undefined;
+
+  // Full per-user erasure for account deletion: the auth service removes the
+  // identity (user record + sessions); this wipes everything a user's id owns in
+  // the data stores. Best-effort and idempotent — each store's eraser tolerates
+  // "nothing there". Memory is erased before the statement store because the
+  // latter removes the whole `users/<id>/` directory the memory lives under.
+  const eraseUserData = async (userId: string): Promise<void> => {
+    await agentMemory.eraseForUser?.(userId);
+    await stores.eraseForUser?.(userId);
+    await plaidTokenStore?.deleteAllForUser(userId);
+  };
+
+  await registerAuthRoutes(app, { service: authService, eraseUserData });
   await registerAffordabilityRoutes(app, { stores });
   await registerLocalRoutes(app, { stores });
   await registerSpendingRoutes(app, { stores });
   await registerAgentRoutes(app, { stores, memory: agentMemory });
 
-  if (options.plaidConfig) {
-    // Persist bank connections to disk for a real server so a restart does not
-    // un-link every user's bank; an ephemeral (test-shaped) server keeps them in
-    // RAM, matching how its identity and imports stay off the real data dir.
-    const plaidTokenStore =
-      options.plaidTokenStore ??
-      (ephemeral
-        ? new InMemoryPlaidTokenStore()
-        : new FilePlaidTokenStore(join(defaultLocalDataDir(), "plaid", "connections.json")));
+  if (options.plaidConfig && plaidTokenStore) {
     await registerPlaidRoutes(app, {
       client: options.plaidClient ?? createPlaidClient(options.plaidConfig),
       config: options.plaidConfig,
@@ -154,10 +185,13 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   return app;
 }
 
-function resolveStoreProvider(options: CreateServerOptions): StatementImportStoreProvider {
+function resolveStoreProvider(
+  options: CreateServerOptions,
+  cipher?: FieldCipher,
+): StatementImportStoreProvider {
   if (options.stores) return options.stores;
   if (options.statementImportStore) return new SingleStatementImportStoreProvider(options.statementImportStore);
-  return new FileStatementImportStoreProvider();
+  return new FileStatementImportStoreProvider(defaultLocalDataDir(), cipher);
 }
 
 function normalizeCreateServerOptions(configOrOptions: PlaidConfig | CreateServerOptions): CreateServerOptions {

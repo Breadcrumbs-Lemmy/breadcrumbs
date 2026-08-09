@@ -14,13 +14,14 @@ import { KeyValueSessionStore } from "./session-store";
 import { AuthService } from "./service";
 import type { Session, User } from "./types";
 import { KeyValueUserStore } from "./user-store";
+import type { FieldCipher } from "../crypto/field-cipher";
 import { defaultLocalDataDir } from "../local/store-provider";
 
 export type AuthPersistence = "memory" | "file";
 
 export function buildAuthService(
   config: AuthConfig,
-  opts: { persistence?: AuthPersistence; dataDir?: string } = {},
+  opts: { persistence?: AuthPersistence; dataDir?: string; cipher?: FieldCipher } = {},
 ): AuthService {
   const persistence = opts.persistence ?? "file";
   if (persistence === "memory") {
@@ -28,6 +29,7 @@ export function buildAuthService(
       users: new KeyValueUserStore(new InMemoryKeyValueStore<User>()),
       sessions: new KeyValueSessionStore(new InMemoryKeyValueStore<Session>()),
       config,
+      cipher: opts.cipher,
     });
   }
 
@@ -36,5 +38,6 @@ export function buildAuthService(
     users: new KeyValueUserStore(new FileKeyValueStore<User>(join(dir, "users.json"))),
     sessions: new KeyValueSessionStore(new FileKeyValueStore<Session>(join(dir, "sessions.json"))),
     config,
+    cipher: opts.cipher,
   });
 }

@@ -33,4 +33,23 @@ export const authErrors = {
   notFound: () => new AuthError("USER_NOT_FOUND", 404, "No such user."),
   cannotDemoteLastAdmin: () =>
     new AuthError("LAST_ADMIN", 400, "There must be at least one admin. Promote another user first."),
+  /** The single-user owner account is the whole deployment; deleting it would
+   *  brick the app, so it is refused rather than silently orphaning the data. */
+  cannotDeleteOwner: () =>
+    new AuthError("CANNOT_DELETE_OWNER", 400, "The single-user owner account can't be deleted."),
+  // ---- Multi-factor (TOTP) ------------------------------------------------
+  /** The account has no enabled second factor, but the action requires one
+   *  (e.g. connecting a bank). The client should route the user to enrollment. */
+  mfaEnrollmentRequired: () =>
+    new AuthError("MFA_ENROLLMENT_REQUIRED", 403, "Set up two-factor authentication before connecting a bank."),
+  /** A second factor exists but this session has not cleared it recently. The
+   *  client should prompt for a current authenticator code (step-up). */
+  mfaRequired: () =>
+    new AuthError("MFA_REQUIRED", 403, "Enter your authenticator code to continue."),
+  /** The presented TOTP code did not verify. */
+  mfaInvalidCode: () => new AuthError("MFA_INVALID_CODE", 400, "That authenticator code isn't right. Try again."),
+  /** Verify/disable was called with no enrollment in progress. */
+  mfaNotEnrolled: () => new AuthError("MFA_NOT_ENROLLED", 400, "No authenticator setup is in progress."),
+  /** Enrollment was started for an account that already has an enabled factor. */
+  mfaAlreadyEnabled: () => new AuthError("MFA_ALREADY_ENABLED", 409, "Two-factor authentication is already on."),
 } as const;

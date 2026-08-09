@@ -53,6 +53,8 @@ import {
 import { formatMoney } from "../format/money";
 import { formatDate } from "../format/dates";
 import { Card, Segmented, SectionLabel } from "../components/ui";
+import { MfaGateDialog } from "../components/Mfa";
+import { useSession } from "../services/session";
 import { BankCard, issuerLabel } from "../components/BankCard";
 import { TransactionList } from "../components/TransactionList";
 import { accountColor } from "../model/account-color";
@@ -105,7 +107,12 @@ export function AccountsScreen({ onConnect }: { onConnect?: () => void }) {
   const [connectingPlaid, setConnectingPlaid] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  /** When set, Plaid Link is blocked pending a second factor: "enroll" (no factor
+   *  yet) or "challenge" (enrolled but this session's step-up has lapsed). The
+   *  gate dialog clears it and retries the connect. */
+  const [mfaGate, setMfaGate] = useState<"enroll" | "challenge" | null>(null);
   const plaidHandlerRef = useRef<PlaidLinkHandler | null>(null);
+  const { refresh: refreshSession } = useSession();
 
   const loadAccounts = useCallback(async () => {
     const next = await fetchAccounts();
@@ -183,6 +190,17 @@ export function AccountsScreen({ onConnect }: { onConnect?: () => void }) {
     const tokenResult = await createPlaidLinkToken();
     if (tokenResult.kind !== "ok") {
       setConnectingPlaid(false);
+      // The server gates Plaid Link on a second factor. Rather than a dead-end
+      // error, raise the right prompt: enroll a factor, or clear a lapsed
+      // step-up. The dialog retries this connect once the session is verified.
+      if (tokenResult.kind === "error" && tokenResult.code === "MFA_ENROLLMENT_REQUIRED") {
+        setMfaGate("enroll");
+        return;
+      }
+      if (tokenResult.kind === "error" && tokenResult.code === "MFA_REQUIRED") {
+        setMfaGate("challenge");
+        return;
+      }
       setSyncMessage("Couldn't start Plaid Link — check that PLAID_* keys are configured.");
       return;
     }
@@ -319,6 +337,19 @@ export function AccountsScreen({ onConnect }: { onConnect?: () => void }) {
   // ---- Overview / Activity ---------------------------------------------------
   return (
     <div className="mx-auto w-full max-w-[760px]">
+      {mfaGate && (
+        <MfaGateDialog
+          reason={mfaGate}
+          onCleared={() => {
+            setMfaGate(null);
+            // Enrollment flips the user's MFA state — keep the session (and the
+            // Settings card) in sync — then resume the connect the user started.
+            void refreshSession();
+            void handlePlaidConnect();
+          }}
+          onCancel={() => setMfaGate(null)}
+        />
+      )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-label text-ink-tertiary">

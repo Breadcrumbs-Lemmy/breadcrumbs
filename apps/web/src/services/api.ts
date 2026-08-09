@@ -49,7 +49,10 @@ export type ApiOutcome<T> =
    *  screen needs to show — collapsing it into "error" would throw away the
    *  row-level diagnostics that make the failure fixable. */
   | { kind: "rejected"; data: T }
-  | { kind: "error"; message: string }
+  /** A transport or domain error. `code` carries the server's stable machine
+   *  code when it sent one (e.g. `MFA_REQUIRED`), so a caller can branch on the
+   *  reason without parsing the human message. */
+  | { kind: "error"; message: string; code?: string }
   /** A 401: the caller is not (or is no longer) authenticated. Only surfaces
    *  in multi_user mode — single_user mode has no auth layer. */
   | { kind: "unauthenticated" };
@@ -124,11 +127,12 @@ async function request<T>(
       }
     }
     if (response.status === 422 && body) return { kind: "rejected", data: body as T };
-    // A 502 from the agent endpoints carries a readable reason; surfacing it
-    // beats "Request failed (HTTP 502)".
+    // A 502 from the agent endpoints, or a 403 from the MFA gate, carries a
+    // readable reason and a machine `code`; surface both so callers can branch
+    // on the code and still show the message.
     if (body && typeof body === "object" && "error" in body) {
-      const message = (body as { error?: { message?: string } }).error?.message;
-      if (message) return { kind: "error", message };
+      const error = (body as { error?: { message?: string; code?: string } }).error;
+      if (error?.message) return { kind: "error", message: error.message, code: error.code };
     }
     return { kind: "error", message: `Request failed (HTTP ${response.status})` };
   } catch (error) {
@@ -227,8 +231,34 @@ export type PublicUser = {
   status: "active" | "disabled";
   createdAt: string;
   lastLoginAt?: string;
-  mfa: { enabled: boolean; method: string | null; phoneVerified: boolean };
+  /** `pending` = enrollment started but no code verified yet. */
+  mfa: { enabled: boolean; method: "totp" | null; pending: boolean };
 };
+
+// ---- Multi-factor (TOTP) ---------------------------------------------------
+
+/** `POST /api/v1/auth/mfa/enroll` — mint a secret + otpauth URI for the QR code.
+ *  The secret is returned once, here, so it can be shown for manual entry. */
+export function beginMfaEnrollment(): Promise<ApiOutcome<{ secret: string; otpauthUri: string }>> {
+  return post("/api/v1/auth/mfa/enroll", {});
+}
+
+/** `POST /api/v1/auth/mfa/enroll/verify` — confirm the first code; turns MFA on
+ *  and clears the challenge for the current session. */
+export function verifyMfaEnrollment(code: string): Promise<ApiOutcome<{ user: PublicUser }>> {
+  return post("/api/v1/auth/mfa/enroll/verify", { code });
+}
+
+/** `POST /api/v1/auth/mfa/challenge` — step-up: clear MFA for this session
+ *  (e.g. right before connecting a bank) without a full re-login. */
+export function verifyMfaChallenge(code: string): Promise<ApiOutcome<{ ok: boolean }>> {
+  return post("/api/v1/auth/mfa/challenge", { code });
+}
+
+/** `POST /api/v1/auth/mfa/disable` — turn MFA off (requires a current code). */
+export function disableMfa(code: string): Promise<ApiOutcome<{ user: PublicUser }>> {
+  return post("/api/v1/auth/mfa/disable", { code });
+}
 
 // ---- Admin -----------------------------------------------------------------
 

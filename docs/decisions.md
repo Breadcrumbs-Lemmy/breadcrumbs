@@ -1,9 +1,161 @@
 # Decision Log
 
 Status: Living  
-Last updated: 2026-08-06
+Last updated: 2026-08-09
 
 Use this log for material product, architecture, data, and compliance decisions. Add new entries at the top unless a project convention later says otherwise.
+
+## D-018: Owner Sign-Off Of The Security Docs, With Solo-Operator Honesty Adjustments
+
+Date: 2026-08-09
+Status: Accepted
+Relates to: `D-015` (InfoSec policy), `D-017` (remaining security docs)
+
+Decision: The accountable owner (Lemuel Mutah — sole developer, no incorporated
+entity) reviewed and **signed off** the security document set. The InfoSec policy
+moves to **v1.0 / Approved** (from 0.1 draft), closing the D-015 gate that these
+docs were "drafts until an accountable owner signs off." As part of the sign-off:
+
+1. **Owner, organization, and incident contacts filled in.** All seven security
+   docs now name the owner; the organization is stated honestly as "Lemuel Mutah
+   (sole operator — no incorporated entity)"; incident-response contacts are
+   `lemuelmutah@gmail.com` (email-only by choice; phone/Signal dropped).
+2. **Questionnaire re-validated against code** (four-agent sweep). Corrected three
+   real discrepancies: connection-delete route param (`:id` → `:connectionId`),
+   the item-id "encrypted" overclaim (only the access token is encrypted), and the
+   staged-restore source attribution (`persistence/backup.ts`, not `atomic-file.ts`).
+3. **Solo-operator honesty adjustments.** "Code-reviewed before merge" reworded to
+   PR self-review + automated checks with no second human reviewer; §7 review
+   cadences relaxed from quarterly/6-monthly to annually (dependency scan stays
+   continuous via CI; IR tabletop best-effort), matching what a solo maintainer
+   will realistically sustain rather than attesting to a cadence that wouldn't hold.
+
+Rationale: A sign-off is only meaningful if the owner stands behind every claim.
+Writing the docs in "company" voice had introduced two would-be overclaims for a
+one-person project (peer review; quarterly formal reviews); the sign-off pass
+resolved them in the honest direction rather than leaving them to look better on
+paper. Remaining committed gaps are unchanged: secrets-manager/KMS for the at-rest
+key, native per-request audit logging, and a third-party penetration test.
+
+This does not change application behavior; it is a governance/compliance decision.
+
+## D-017: Self-Serve Account Deletion, CI Dependency Scanning, And The Remaining Security Docs
+
+Date: 2026-08-09
+Status: Accepted
+Relates to: `D-014` (auth, isolation), `D-015` (InfoSec policy), `D-016` (MFA)
+
+Decision: Close three named gaps from the security questionnaire so its answers
+are truthfully "Implemented" rather than "Planned":
+
+1. **Self-serve + admin account deletion.** `DELETE /api/v1/auth/me`
+   (re-authenticated with the current password) and `DELETE /api/v1/admin/users/:id`
+   remove the user's identity (record + all sessions) **and** erase everything the
+   user id owns — Plaid tokens, the per-user transaction store, and assistant
+   memory. The auth service owns identity removal; the route layer orchestrates
+   data erasure via an `eraseUserData` composer built in `http/server.ts` from
+   whatever stores exist. Guards: the **last active admin** and the **single-user
+   owner** cannot be deleted.
+2. **Dependency scanning in CI.** `pnpm audit` (failing on high/critical) runs on
+   every push and pull request and on a weekly schedule
+   (`.github/workflows/dependency-audit.yml`, root `audit` script).
+3. **The remaining "Planned" security docs** — a formal
+   [data-retention schedule](data-retention-schedule.md), a
+   [subprocessor list](subprocessors.md), and a
+   [log-review + alerting procedure](logging-and-monitoring.md).
+
+Rationale: An honesty audit of the Plaid questionnaire found that the retention
+answer implied a delete-my-account capability that did not exist, and that three
+attestations pointed at documents that had not been written. Rather than soften
+the answers, we built the missing capability and wrote the missing docs. Writing
+the logging procedure surfaced a second overclaim — the app runs Fastify with
+`logger: false` and emits no per-request audit log — which is now stated honestly
+in policy §5, the questionnaire §G, and the new logging doc (the brute-force
+signal lives in HTTP `401`/`429` codes captured by the operator's proxy).
+
+Consequences:
+
+- New store capability: `deleteAllForUser` / `eraseForUser` on the Plaid token
+  store, statement-store provider, and agent-memory provider (best-effort,
+  idempotent). Memory is erased before the statement store because the latter
+  removes the shared `users/<id>/` directory. Covered by
+  `tests/account-deletion.test.ts`.
+- Policy §4.4/§5/§9/§10/§12, the risk register (R-04, R-05), and the questionnaire
+  are updated to match; remaining honest gaps: native request logging with
+  redaction, secrets-manager/KMS for the at-rest key, and a third-party pen test.
+
+## D-016: TOTP Multi-Factor, Enforced As Step-Up Before Plaid Link
+
+Date: 2026-08-09
+Status: Accepted
+Relates to: `D-012` (Plaid), `D-014` (auth, isolation), `D-015` (InfoSec policy)
+
+Decision: Multi-factor authentication is **TOTP** (RFC 6238, authenticator app),
+not SMS. It is enforced as a **step-up in front of Plaid Link**: the server
+refuses to mint a Link token or exchange a public token for a multi-user session
+that has not verified a current TOTP code within a 15-minute window. Enrollment is
+two-step — a secret is issued, and the factor is only activated once a first code
+verifies — and TOTP secrets are encrypted at rest with the existing AES-256-GCM
+field cipher, bound per-user by AAD. Single-user (no-login) mode is exempt: there
+is no second identity to challenge.
+
+Rationale: Plaid's production questionnaire (item 4) expects MFA before Link is
+surfaced. TOTP fits the product's privacy-first, self-hostable ethos better than
+SMS — it needs no third-party sender (no new subprocessor), works offline, and is
+immune to SIM-swap. Gating at Link time rather than at login keeps everyday
+sign-in frictionless while putting the second factor exactly where the sensitive
+action is. It is implementable with `node:crypto` alone, adding no dependency.
+Two-step enrollment guarantees a half-finished setup can never lock the owner out.
+
+Consequences:
+
+- The `mfa` model generalizes from the SMS scaffold to `{ enabled, method:
+  "totp", totpSecret, enrolledAt }`; the per-session step-up is stamped on the
+  session (`mfaVerifiedAt`) and surfaced on the principal.
+- New endpoints: enroll, enroll/verify, challenge, disable. Web UI: a Settings
+  setup card and a connect-a-bank gate dialog that walks enrollment or a
+  challenge and then retries the connect.
+- Follow-ups: recovery/backup codes, and optionally extending the step-up to
+  other sensitive actions. Tracked in policy §12 item 2 and risk R-03.
+
+## D-015: Documented Information Security Policy And Supporting Procedures
+
+Date: 2026-08-09
+Status: Accepted
+Relates to: `D-012` (Plaid), `D-014` (auth, isolation, offline assistant)
+
+Decision: The project adopts a documented Information Security Policy
+([`information-security-policy.md`](information-security-policy.md)) plus two
+supporting procedures — a living [Risk Register](risk-register.md) and an
+[Incident Response Runbook](incident-response.md). Together they operationalize
+identify → mitigate → monitor for the information security risks relevant to the
+business, so the organization can truthfully answer vendor/partner security
+questionnaires (Plaid production access being the immediate driver).
+
+Rationale: Moving toward Plaid production means attesting, in writing, to a real
+security program. The technical controls already exist in code (scrypt hashing,
+deny-by-default authorization, per-user isolation, brute-force lockout,
+secret-scrubbing config, atomic persistence); what was missing was the governance
+wrapper that names them, identifies the risks, and states how they are monitored.
+The policy maps every control to its source file and marks each as Implemented,
+Operator, or Planned so the attestation is honest rather than aspirational.
+
+Consequences:
+
+- Each control is explicitly typed. **Operator** controls (TLS, disk encryption,
+  backups, network exposure) are the deployer's responsibility for self-hosted
+  installs, documented in the policy §11 — security is a shared responsibility.
+- Five gaps are tracked openly (policy §12): app-level encryption of stored Plaid
+  tokens, MFA enforcement, dependency scanning in CI, the log-review/alerting
+  procedure, and formal data-retention. Closing any of them updates the policy
+  and, where material, gets its own decision entry.
+- Review cadence is committed (policy §7): policy every 6 months, risk register
+  and access review quarterly, dependency scan per release, IR drill annually.
+- The documents are drafts until an accountable owner signs off; they must not be
+  submitted as a formal attestation before that review. Placeholders (`{ORG}`,
+  `{SECURITY OWNER}`, contacts) must be filled first.
+- This does not change application behavior; it is a governance/compliance
+  decision. It complements `D-012`/`D-014` rather than superseding them.
 
 ## D-014: Production Backbone — Auth Modes, Isolation By Construction, An Offline Local Assistant, And Per-User Memory
 

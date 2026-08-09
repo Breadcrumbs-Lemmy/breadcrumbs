@@ -19,6 +19,7 @@ import type { PlaidClientLike } from "../src/plaid/adapter";
 import type { PlaidConfig } from "../src/plaid/config";
 import { InMemoryPlaidTokenStore } from "../src/plaid/token-store";
 import { InMemoryStatementImportStoreProvider } from "../src/local/store-provider";
+import { totpCode } from "../src/auth/totp";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -71,11 +72,33 @@ function auth(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
+/** Enroll a TOTP factor for the session and clear its first challenge, so the
+ *  session may pass the Plaid Link MFA gate. Mirrors what the web setup flow
+ *  does: enroll → scan → enter first code. */
+async function enrollMfa(app: Awaited<ReturnType<typeof createServer>>, token: string) {
+  const enroll = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/mfa/enroll",
+    headers: auth(token),
+  });
+  const { secret } = JSON.parse(enroll.body) as { secret: string };
+  const verify = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/mfa/enroll/verify",
+    headers: auth(token),
+    payload: { code: totpCode(secret) },
+  });
+  expect(verify.statusCode).toBe(200);
+}
+
 describe("Plaid connection isolation (multi_user)", () => {
   it("keeps one user's bank connection unreachable to another, by the same 404", async () => {
     const app = await server();
     const aliceToken = await register(app, "alice@example.com");
     const bobToken = await register(app, "bob@example.com");
+
+    // Alice must clear MFA before Plaid Link will exchange her public token.
+    await enrollMfa(app, aliceToken);
 
     const exchange = await app.inject({
       method: "POST",

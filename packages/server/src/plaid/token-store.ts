@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { OWNER_USER_ID } from "../auth/types";
 import { FileKeyValueStore, type KeyValueStore } from "../auth/json-store";
+import { FieldCipher } from "../crypto/field-cipher";
 
 export type StoredPlaidConnection = {
   connectionId: string;
@@ -22,6 +23,9 @@ export interface PlaidTokenStore {
   listForUser(userId: string): Promise<StoredPlaidConnection[]>;
   markSynced(connectionId: string, at: string): Promise<void>;
   delete(connectionId: string): Promise<void>;
+  /** Remove every connection (and its stored access token) belonging to a user.
+   *  Used when an account is deleted, so no orphaned bank credential survives. */
+  deleteAllForUser(userId: string): Promise<void>;
 }
 
 export class InMemoryPlaidTokenStore implements PlaidTokenStore {
@@ -62,6 +66,12 @@ export class InMemoryPlaidTokenStore implements PlaidTokenStore {
   async delete(connectionId: string): Promise<void> {
     this.connections.delete(connectionId);
   }
+
+  async deleteAllForUser(userId: string): Promise<void> {
+    for (const [id, c] of this.connections) {
+      if (c.userId === userId) this.connections.delete(id);
+    }
+  }
 }
 
 /**
@@ -73,14 +83,23 @@ export class InMemoryPlaidTokenStore implements PlaidTokenStore {
  * auth stores use (crash-safe temp-write-then-rename, file mode 0600), so the
  * access tokens — bearer credentials to a real bank — are not world-readable.
  *
- * The access token is stored as-is because Plaid requires the plaintext value on
- * every call; the file's own permissions and the enclosing data directory are
- * the protection, exactly as a database column would be.
+ * Plaid requires the plaintext token on every call, so it cannot be one-way
+ * hashed like a session token. Instead, when a `FieldCipher` is supplied the
+ * token is encrypted at rest (AES-256-GCM, bound to its connectionId) and only
+ * decrypted in memory when a caller needs it; the key lives in the environment,
+ * never in this file. Without a cipher the token is stored as-is, protected by
+ * the file's own 0600 permissions and disk encryption — the prior behaviour, so
+ * the zero-config path is unchanged. Records written before a cipher was
+ * configured stay readable: `FieldCipher.decrypt` passes plaintext through, and
+ * each is re-encrypted the next time it is written (e.g. on `markSynced`).
  */
 export class FilePlaidTokenStore implements PlaidTokenStore {
   private readonly store: KeyValueStore<StoredPlaidConnection>;
 
-  constructor(filePath: string) {
+  constructor(
+    filePath: string,
+    private readonly cipher?: FieldCipher,
+  ) {
     this.store = new FileKeyValueStore<StoredPlaidConnection>(filePath);
   }
 
@@ -98,26 +117,50 @@ export class FilePlaidTokenStore implements PlaidTokenStore {
       institutionName: input.institutionName,
       createdAt: new Date().toISOString(),
     };
-    await this.store.put(connection.connectionId, connection);
+    await this.store.put(connection.connectionId, this.encode(connection));
+    // Callers always get the plaintext token back, never the on-disk ciphertext.
     return { ...connection };
   }
 
   async get(connectionId: string): Promise<StoredPlaidConnection | undefined> {
-    return this.store.get(connectionId);
+    const found = await this.store.get(connectionId);
+    return found ? this.decode(found) : undefined;
   }
 
   async listForUser(userId: string): Promise<StoredPlaidConnection[]> {
-    return (await this.store.all()).filter((c) => c.userId === userId);
+    return (await this.store.all()).filter((c) => c.userId === userId).map((c) => this.decode(c));
   }
 
   async markSynced(connectionId: string, at: string): Promise<void> {
     const found = await this.store.get(connectionId);
     if (!found) return;
-    found.lastSyncedAt = at;
-    await this.store.put(connectionId, found);
+    // Round-trip through decode/encode so a legacy plaintext record is migrated
+    // to ciphertext on this write, and the token is never left in plaintext.
+    const connection = this.decode(found);
+    connection.lastSyncedAt = at;
+    await this.store.put(connectionId, this.encode(connection));
   }
 
   async delete(connectionId: string): Promise<void> {
     await this.store.delete(connectionId);
+  }
+
+  async deleteAllForUser(userId: string): Promise<void> {
+    const mine = (await this.store.all()).filter((c) => c.userId === userId);
+    await Promise.all(mine.map((c) => this.store.delete(c.connectionId)));
+  }
+
+  /** Encrypt the token for storage, binding it to its connectionId. No-op when
+   *  no cipher is configured. */
+  private encode(connection: StoredPlaidConnection): StoredPlaidConnection {
+    if (!this.cipher) return connection;
+    return { ...connection, accessToken: this.cipher.encrypt(connection.accessToken, connection.connectionId) };
+  }
+
+  /** Decrypt the token coming off disk. Legacy plaintext passes through
+   *  unchanged (see `FieldCipher.decrypt`). No-op when no cipher is configured. */
+  private decode(connection: StoredPlaidConnection): StoredPlaidConnection {
+    if (!this.cipher) return connection;
+    return { ...connection, accessToken: this.cipher.decrypt(connection.accessToken, connection.connectionId) };
   }
 }
