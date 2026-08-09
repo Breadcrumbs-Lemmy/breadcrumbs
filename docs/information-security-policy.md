@@ -112,7 +112,7 @@ maintained as a living document alongside this policy (`docs/risk-register.md`).
 | Control | Detail | Status | Source |
 | --- | --- | --- | --- |
 | Encryption in transit | HTTPS/TLS terminated in front of the API; browser origins restricted by a CORS allowlist | Operator (TLS) / Implemented (CORS) | `docs/running-breadcrumbs.md`, `http/server.ts` |
-| Durable persistence | atomic file writes; write-data-before-references ordering; staged restore — designed to survive crashes without corrupting the datastore | Implemented | `persistence/atomic-file.ts` |
+| Durable persistence | atomic file writes; write-data-before-references ordering; staged restore — designed to survive crashes without corrupting the datastore | Implemented | `persistence/atomic-file.ts` (atomic writes/ordering), `persistence/backup.ts` (staged restore) |
 | Data residency & consent | per-user Private-vs-Synced consent model; no third-party cloud storage of user data exists today (E2EE synced tier deferred) | Implemented (Private) / Planned (Synced) | `docs/data-quality-and-safety.md` |
 | Encryption at rest | the datastore is protected by the host's disk/volume encryption | Operator | §11 |
 | Backups | operator responsibility; see §11 | Operator | §11 |

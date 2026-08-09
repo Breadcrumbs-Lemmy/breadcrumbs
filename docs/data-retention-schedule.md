@@ -35,7 +35,7 @@ those are an **Operator** responsibility layered on top of this schedule.
 
 | Data class | Store | Retention | Deletion trigger | Disposal mechanism | Status |
 | --- | --- | --- | --- | --- | --- |
-| Plaid access token + item id | `plaid/token-store.ts` (encrypted) | While the connection is linked | Connection removed, **or** account deleted | Token record deleted from the store (`DELETE /api/plaid/connections/:id`; full wipe via account deletion) | Implemented |
+| Plaid access token + item id | `plaid/token-store.ts` (access token encrypted; item id is a non-secret identifier) | While the connection is linked | Connection removed, **or** account deleted | Token record deleted from the store (`DELETE /api/plaid/connections/:connectionId`; full wipe via account deletion) | Implemented |
 | Account & transaction data | per-user `local/store.ts` (encrypted) | While the account is active | Account deleted | Per-user data directory removed | Implemented |
 | Assistant memory (conversations, facts, uploads) | `agent/memory/*` (per-user dir) | While the account is active | Account deleted | Per-user `agent-memory/` directory removed | Implemented |
 | User identity (email, display name, password hash) | auth user store | While the account exists | Account deleted | User record deleted | Implemented |
@@ -53,7 +53,7 @@ extends the life of a token or password.
 
 Three mechanisms, from narrowest to broadest:
 
-1. **Unlink one connection** — `DELETE /api/plaid/connections/:id` deletes that
+1. **Unlink one connection** — `DELETE /api/plaid/connections/:connectionId` deletes that
    connection's stored Plaid access token. The rest of the account is untouched.
    *Implemented.*
 2. **Disable an account** (admin) — `PATCH /api/v1/admin/users/:id/status` →

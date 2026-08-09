@@ -45,7 +45,7 @@ Implemented.** Source: `crypto/field-cipher.ts`, `plaid/token-store.ts`,
 **Q. What is your data retention and deletion policy?**
 Data is retained while the account is active and erased on account deletion.
 Three deletion paths exist in-app: a user can **remove a single Plaid connection**
-(`DELETE /api/plaid/connections/:id`, deletes its stored access token); a user can
+(`DELETE /api/plaid/connections/:connectionId`, deletes its stored access token); a user can
 **delete their whole account** (`DELETE /api/v1/auth/me`, re-authenticated with
 the current password); and an admin can **delete any account**
 (`DELETE /api/v1/admin/users/:id`) or **disable** one (revokes all sessions,
@@ -220,7 +220,8 @@ The datastore uses atomic writes, write-data-before-references ordering, and
 staged restore to survive crashes without corruption. Regular, **tested backups**
 are an **Operator** responsibility; there is no application-managed backup.
 **Status: Implemented (crash-durability) / Operator (backups).** Source:
-`persistence/atomic-file.ts`; policy §11; risk R-06.
+`persistence/atomic-file.ts` (atomic writes, ordering), `persistence/backup.ts`
+(staged restore); policy §11; risk R-06.
 
 ---
 

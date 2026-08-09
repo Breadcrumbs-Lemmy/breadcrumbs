@@ -88,7 +88,8 @@ level that remains *after* the listed mitigations are applied.
 - **Likelihood:** Low · **Impact:** High · **Inherent:** Medium
 - **Mitigations (in place):** atomic writes, write-data-before-references
   ordering, staged restore — designed to survive crashes without corruption
-  (`persistence/atomic-file.ts`).
+  (`persistence/atomic-file.ts` for atomic writes/ordering, `persistence/backup.ts`
+  for staged restore).
 - **Gaps / planned:** operator-owned regular, tested backups (policy §11); no
   application-managed backup exists.
 - **Residual:** Medium
