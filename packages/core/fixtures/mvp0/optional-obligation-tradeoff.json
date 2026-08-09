@@ -1,0 +1,189 @@
+{
+  "id": "optional_obligation_tradeoff",
+  "description": "Required bills remain covered, but an optional streaming bundle makes the all-events path fall below the read-only cash buffer after the planned purchase.",
+  "input": {
+    "requestId": "fixture_optional_obligation_tradeoff",
+    "plannedPurchaseId": "purchase_noise_canceling_headphones",
+    "snapshot": {
+      "asOfDate": "2026-08-03",
+      "timezone": "America/Chicago",
+      "currency": "USD",
+      "config": {
+        "horizonDays": 30,
+        "minimumCashBufferCents": 25000,
+        "staleBalanceHours": 72,
+        "staleManualBalanceDays": 7,
+        "reliableIncomeConfidence": 0.8
+      },
+      "coverage": {
+        "balancesDeclaredComplete": true,
+        "incomeDeclaredCompleteThroughDate": "2026-09-02",
+        "obligationsDeclaredCompleteThroughDate": "2026-09-02",
+        "transactionsCompleteFromDate": "2026-08-01",
+        "userConfirmedNoOtherRequiredObligations": true
+      },
+      "accounts": [
+        {
+          "id": "account_checking",
+          "displayName": "Everyday checking",
+          "type": "checking",
+          "role": "spendable_cash",
+          "currency": "USD",
+          "currentBalanceCents": 95000,
+          "availableBalanceCents": 95000,
+          "includeInForecast": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "source": "fixture"
+        }
+      ],
+      "transactions": [],
+      "incomeSources": [
+        {
+          "id": "income_salary",
+          "label": "Salaried paycheck",
+          "expectedAmountCents": 80000,
+          "minimumExpectedAmountCents": 80000,
+          "cadence": {
+            "kind": "once"
+          },
+          "nextExpectedDate": "2026-08-12",
+          "variability": "fixed",
+          "reliability": "confirmed",
+          "category": "paycheck",
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "recurringObligations": [
+        {
+          "id": "obligation_utilities",
+          "label": "Utilities",
+          "amountCents": 30000,
+          "cadence": {
+            "kind": "monthly",
+            "dayOfMonth": 5
+          },
+          "nextDueDate": "2026-08-05",
+          "category": "utilities",
+          "required": true,
+          "importance": "required",
+          "autopay": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        },
+        {
+          "id": "obligation_streaming_bundle",
+          "label": "Streaming bundle",
+          "amountCents": 10000,
+          "cadence": {
+            "kind": "monthly",
+            "dayOfMonth": 6
+          },
+          "nextDueDate": "2026-08-06",
+          "category": "subscriptions",
+          "required": false,
+          "importance": "optional",
+          "autopay": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "goals": [],
+      "plannedPurchases": [
+        {
+          "id": "purchase_noise_canceling_headphones",
+          "label": "Noise-canceling headphones",
+          "amountCents": 40000,
+          "purchaseDate": "2026-08-03",
+          "category": "electronics",
+          "necessity": "discretionary",
+          "deferrable": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "level": "TIGHT",
+    "reasonCodes": [
+      "OPTIONAL_OBLIGATION_TRADEOFF",
+      "BUFFER_BELOW_MINIMUM"
+    ],
+    "targetReasonCode": "OPTIONAL_OBLIGATION_TRADEOFF",
+    "targetReasonParameters": {
+      "allEventsMinimumBalanceCents": 15000,
+      "allEventsMinimumBalanceDate": "2026-08-06",
+      "allEventsBufferMarginCents": -10000,
+      "minimumCashBufferCents": 25000
+    },
+    "targetRelatedEntityIds": [
+      "obligation_streaming_bundle"
+    ],
+    "requiredPathMinimumBalanceCents": 25000,
+    "requiredPathMinimumBalanceDate": "2026-08-05",
+    "protectedPathMinimumBalanceCents": 25000,
+    "protectedPathMinimumBalanceDate": "2026-08-05",
+    "allEventsPathMinimumBalanceCents": 15000,
+    "allEventsPathMinimumBalanceDate": "2026-08-06",
+    "postPurchaseCashCents": 55000,
+    "timingReserveCents": 30000,
+    "timingReserveMarginCents": 0,
+    "purchaseImpactOnMinimumCents": 40000,
+    "boundaries": [
+      "READ_ONLY_DECISION_SUPPORT",
+      "NOT_PERSONALIZED_FINANCIAL_ADVICE",
+      "NO_ACCOUNT_WRITES",
+      "DETERMINISTIC_CALCULATION"
+    ]
+  }
+}

@@ -1,0 +1,59 @@
+# GPU acceleration for the on-box model — Linux host + NVIDIA GPU only.
+#
+# Layer this on TOP of the local-agent overlay so ollama runs the model on the
+# GPU instead of the CPU:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.local-agent.yml \
+#     -f docker-compose.gpu.yml \
+#     up -d --build api ollama
+#
+#   (or just: ./scripts/run-local-agent-docker.sh --gpu)
+#
+# ── HOST PREREQUISITES (once per box) ────────────────────────────────────────
+#   1. NVIDIA driver present            → `nvidia-smi` works on the host.
+#   2. NVIDIA Container Toolkit wired in → `nvidia-ctk runtime configure
+#      --runtime=docker && sudo systemctl restart docker`.
+#   The AWS "Deep Learning Base GPU AMI" ships both; verify container access with
+#     docker run --rm --gpus all ubuntu nvidia-smi
+#
+# ── WHY A SEPARATE FILE ──────────────────────────────────────────────────────
+#   GPU passthrough only works on a Linux host with an NVIDIA card. On Docker
+#   Desktop for Mac/Windows the GPU is not exposed to the container VM, so this
+#   file would make `up` FAIL there. Keeping it separate means the CPU path
+#   (base + local-agent) still runs everywhere and GPU stays strictly opt-in.
+#
+# ── MODEL TIER vs GPU (and cost) ─────────────────────────────────────────────
+#   The local-agent overlay defaults to llama3.3:70b (~40GB+ VRAM), which will
+#   NOT fit a single 16-24GB card and would fail to load. This file lowers the
+#   default to llama3.1:8b so it fits the CHEAPEST GPU instance. Correct figures
+#   don't need a big model (present.ts hands the model preformatted amounts), so
+#   8b is the sensible, cheap default. Bump BREADCRUMBS_LOCAL_AGENT_MODEL only if
+#   your instance's VRAM allows — larger cards/instances cost more per hour:
+#     llama3.1:8b    ~8-12GB   g4dn.xlarge (T4 16GB)  ← cheapest GPU; the default
+#     qwen2.5:32b    ~24GB     g5/g6.xlarge (24GB, tight) — stronger tool use
+#     llama3.3:70b   ~40GB+    g5.12xlarge (4×A10G 96GB) or a single A100
+
+services:
+  ollama:
+    # VRAM-appropriate default for the cheapest single-GPU box; override to grow.
+    # (Last-file-wins over the local-agent overlay's 70b default for this key.)
+    environment:
+      OLLAMA_MODEL: ${BREADCRUMBS_LOCAL_AGENT_MODEL:-llama3.1:8b}
+    # Reserve the host's NVIDIA GPU(s) for the model container. `docker compose
+    # up` honors device reservations on a Linux host with the NVIDIA Container
+    # Toolkit installed (no swarm needed). `count: all` also covers multi-GPU
+    # boxes used for the 70b tier.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  api:
+    # Keep the api's model tag in lockstep with the tag ollama actually pulls.
+    environment:
+      BREADCRUMBS_LOCAL_AGENT_MODEL: ${BREADCRUMBS_LOCAL_AGENT_MODEL:-llama3.1:8b}

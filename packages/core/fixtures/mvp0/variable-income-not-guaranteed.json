@@ -1,0 +1,166 @@
+{
+  "id": "variable_income_not_guaranteed",
+  "description": "A pending freelance invoice would make the expected-reference path work, but its conservative minimum is zero so required obligations are not covered.",
+  "input": {
+    "requestId": "fixture_variable_income_not_guaranteed",
+    "plannedPurchaseId": "purchase_desk_chair",
+    "snapshot": {
+      "asOfDate": "2026-08-03",
+      "timezone": "America/Chicago",
+      "currency": "USD",
+      "config": {
+        "horizonDays": 30,
+        "minimumCashBufferCents": 25000,
+        "staleBalanceHours": 72,
+        "staleManualBalanceDays": 7,
+        "reliableIncomeConfidence": 0.8
+      },
+      "coverage": {
+        "balancesDeclaredComplete": true,
+        "incomeDeclaredCompleteThroughDate": "2026-09-02",
+        "obligationsDeclaredCompleteThroughDate": "2026-09-02",
+        "transactionsCompleteFromDate": "2026-08-01",
+        "userConfirmedNoOtherRequiredObligations": true
+      },
+      "accounts": [
+        {
+          "id": "account_checking",
+          "displayName": "Everyday checking",
+          "type": "checking",
+          "role": "spendable_cash",
+          "currency": "USD",
+          "currentBalanceCents": 70000,
+          "availableBalanceCents": 70000,
+          "includeInForecast": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "source": "fixture"
+        }
+      ],
+      "transactions": [],
+      "incomeSources": [
+        {
+          "id": "income_freelance_invoice",
+          "label": "Freelance invoice",
+          "expectedAmountCents": 100000,
+          "minimumExpectedAmountCents": 0,
+          "cadence": {
+            "kind": "once"
+          },
+          "nextExpectedDate": "2026-08-05",
+          "variability": "variable",
+          "reliability": "uncertain",
+          "category": "freelance",
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 0.45,
+            "confidenceReason": "client has not confirmed payment timing",
+            "isEstimated": true
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "recurringObligations": [
+        {
+          "id": "obligation_utilities",
+          "label": "Utilities",
+          "amountCents": 60000,
+          "cadence": {
+            "kind": "monthly",
+            "dayOfMonth": 6
+          },
+          "nextDueDate": "2026-08-06",
+          "category": "utilities",
+          "required": true,
+          "importance": "required",
+          "autopay": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "goals": [],
+      "plannedPurchases": [
+        {
+          "id": "purchase_desk_chair",
+          "label": "Desk chair",
+          "amountCents": 30000,
+          "purchaseDate": "2026-08-03",
+          "category": "office",
+          "necessity": "discretionary",
+          "deferrable": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "level": "RISKY",
+    "reasonCodes": [
+      "VARIABLE_INCOME_NOT_GUARANTEED",
+      "REQUIRED_OBLIGATION_SHORTFALL",
+      "TIMING_RESERVE_SHORTFALL"
+    ],
+    "targetReasonCode": "VARIABLE_INCOME_NOT_GUARANTEED",
+    "targetReasonParameters": {
+      "requiredMinimumBalanceCents": -20000,
+      "requiredMinimumBalanceDate": "2026-08-06",
+      "expectedReferenceMinimumBalanceCents": 40000,
+      "expectedReferenceMinimumBalanceDate": "2026-08-03"
+    },
+    "targetRelatedEntityIds": [
+      "income_freelance_invoice"
+    ],
+    "requiredPathMinimumBalanceCents": -20000,
+    "requiredPathMinimumBalanceDate": "2026-08-06",
+    "protectedPathMinimumBalanceCents": -20000,
+    "protectedPathMinimumBalanceDate": "2026-08-06",
+    "allEventsPathMinimumBalanceCents": -20000,
+    "allEventsPathMinimumBalanceDate": "2026-08-06",
+    "expectedReferencePathMinimumBalanceCents": 40000,
+    "expectedReferencePathMinimumBalanceDate": "2026-08-03",
+    "postPurchaseCashCents": 40000,
+    "timingReserveCents": 60000,
+    "timingReserveMarginCents": -45000,
+    "purchaseImpactOnMinimumCents": 30000,
+    "boundaries": [
+      "READ_ONLY_DECISION_SUPPORT",
+      "NOT_PERSONALIZED_FINANCIAL_ADVICE",
+      "NO_ACCOUNT_WRITES",
+      "DETERMINISTIC_CALCULATION"
+    ]
+  }
+}

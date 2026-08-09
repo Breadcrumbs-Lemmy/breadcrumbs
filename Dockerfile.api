@@ -1,0 +1,53 @@
+# Breadcrumbs API — packages/server plus its packages/core dependency.
+#
+# The server's `build` script is `tsc --noEmit` (type-check only) and it runs
+# through `tsx`, so there is no emitted `dist/` to copy. Rather than invent a
+# bundling step that would drift from how the app is developed, this image
+# type-checks at build time and runs the same way local development does.
+
+FROM node:22-alpine AS base
+RUN corepack enable
+WORKDIR /app
+
+# ---- Dependencies ---------------------------------------------------------
+# Manifests first, so a source-only change does not invalidate this layer.
+FROM base AS deps
+COPY package.json pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml* ./
+COPY packages/core/package.json packages/core/
+COPY packages/server/package.json packages/server/
+COPY apps/web/package.json apps/web/
+RUN pnpm install --no-frozen-lockfile
+
+# ---- Type check -----------------------------------------------------------
+# A broken build should fail here rather than at container start.
+FROM deps AS check
+COPY packages/core packages/core
+COPY packages/server packages/server
+RUN pnpm --filter @ai-fin-os/core build && pnpm --filter @ai-fin-os/server build
+
+# ---- Runtime --------------------------------------------------------------
+FROM check AS runtime
+ENV NODE_ENV=production
+# Pin the process timezone to UTC so every date bucket (periods, statement
+# windows, account-freshness checks) is computed the same way regardless of the
+# host's local zone. Financial period math must not shift with the deploy region.
+ENV TZ=UTC
+# 127.0.0.1 would bind to the container's own loopback and be unreachable from
+# the host. Containers must listen on all interfaces.
+ENV HOST=0.0.0.0
+ENV PORT=8787
+# Imported statements live on a volume so they survive a rebuild.
+ENV BREADCRUMBS_LOCAL_DATA_DIR=/data
+
+RUN mkdir -p /data && addgroup -S app && adduser -S app -G app && chown -R app:app /data /app
+USER app
+
+EXPOSE 8787
+
+# Healthy means the API answers, not merely that the process is alive — a Node
+# process can outlive a broken route table.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["pnpm", "--filter", "@ai-fin-os/server", "exec", "tsx", "src/main.ts"]

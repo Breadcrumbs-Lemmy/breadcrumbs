@@ -1,0 +1,192 @@
+# Local, offline assistant — an Ollama sidecar beside the API.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local-agent.yml up --build
+#     web  → http://localhost:5173
+#     api  → http://localhost:8787   (assistant now answers over a local model)
+#
+# WHY THIS IS A SEPARATE FILE
+#   The base docker-compose.yml is backend-owned infra (CD-011). This file is
+#   purely additive: it adds the `ollama` service and layers the local-agent env
+#   onto the existing `api` service without editing the base file. Leave it out
+#   and nothing changes; include it and the assistant runs on-box.
+#
+# THE ISOLATION MODEL (read this before production)
+#   The model is stateless text-in/text-out. Per-user isolation is NOT a property
+#   of the model — it is enforced in the API, which scopes every tool call and
+#   every memory read to the authenticated user (stores.forUser(userId)). One
+#   shared model serves all users safely; you do NOT want one model per user.
+#
+#   Inside Docker, the API reaches the model by service name (http://ollama:11434),
+#   not 127.0.0.1, so the code's loopback assertion is relaxed with
+#   ALLOW_NONLOOPBACK=true. Egress is instead shut at the network layer — see the
+#   `agent-net` note below — which is the guarantee that actually matters:
+#   the user's financial prompts never leave this host, and the model can't phone home.
+#   (This holds for the all-local default. If you split extraction onto the hosted
+#   provider — BREADCRUMBS_EXTRACTION_PROVIDER=anthropic below — a statement's text
+#   DOES leave the host on import; chat stays local. The app warns at startup and
+#   /status reports it as extractionOffline=false.)
+#
+# WHICH MODEL (the production default is llama3.3:70b, not the 8b we validated on)
+#   Correctness of figures does NOT depend on model size. The assistant never
+#   computes money — the deterministic engine does, and packages/server/src/agent/
+#   present.ts hands the model preformatted amounts it can only echo (see H-044).
+#   Verified: even llama3.1:8b, which once misplaced a decimal (169596c → the wrong
+#   "$16,959.60"), now returns the exact "$1,695.96". So model choice is about
+#   overall quality — instruction-following, tool selection, phrasing, not padding
+#   an answer with figures it wasn't asked for — where a larger model is clearly
+#   better. Set BREADCRUMBS_LOCAL_AGENT_MODEL to pick the tier your GPU fits:
+#     llama3.3:70b   ~40GB+ VRAM   production default; strongest following
+#     qwen2.5:32b    ~24GB VRAM    strong middle tier, excellent tool use
+#     llama3.1:8b    ~8-12GB VRAM  proven-correct low-VRAM / fast-verify tier
+#   The tag below is the single source of truth; the api service reads the same var.
+#   Match it to the C2 instance BEFORE the first `up` — the entrypoint pulls it once.
+#
+# SPLITTING CHAT AND EXTRACTION ACROSS TWO MODELS (optional)
+#   Chat and PDF statement extraction are different jobs. Chat only phrases
+#   figures the deterministic engine already computed (present.ts), so a small
+#   fast model is safe and snappy. Extraction reads an unfamiliar statement
+#   layout into structured rows — the one job where a bigger model clearly helps.
+#   Set BREADCRUMBS_LOCAL_EXTRACTION_MODEL to run them on separate models, e.g.
+#   chat=qwen2.5:3b, extraction=qwen2.5:32b. The sidecar pulls BOTH (the entrypoint
+#   pulls the extraction tag too), and the api routes each job to its own model.
+#   Leave it empty and nothing changes — one model serves both, exactly as before.
+#   EC2/VRAM note: Ollama loads a model on demand and can hold several resident at
+#   once, so a split box must fit whichever is loaded — and, if both stay warm
+#   (OLLAMA_KEEP_ALIVE), roughly their SUM. A 32B extractor won't fit a T4's 16GB
+#   next to a chat model; size the instance for the extractor, or keep extraction
+#   on the hosted model and only chat local.
+#
+# ── DEPLOYING ON EC2 (and keeping the bill small) ────────────────────────────
+#   The whole stack runs on one Linux EC2 box. Correct figures NEVER need a big
+#   GPU — present.ts hands the model preformatted amounts, so model size only
+#   affects phrasing/latency, not the numbers. That keeps the cheap paths open:
+#
+#   Cheapest (CPU-only): one general/compute instance (e.g. t3.xlarge or
+#     c7i.xlarge) runs everything, pinned to llama3.1:8b. Chat is usable; heavy
+#     PDF extraction can be slow (there is a 180s/chunk cap). Just base + this file.
+#
+#   Fast (GPU): add docker-compose.gpu.yml on an NVIDIA instance. The cheapest GPU
+#     is g4dn.xlarge (1× T4 16GB). Every GPU instance already includes vCPUs, so
+#     there is no separate "CPU+GPU" tier to buy — a GPU box IS both. 8b fits a T4.
+#
+#   The #1 cost lever either way: STOP the instance when idle — you pay compute
+#     only while it runs. The model weights persist on the EBS-backed
+#     `breadcrumbs-ollama-models` volume (which keeps costing a few cents/GB-month
+#     even while stopped), so a restart skips the re-pull. Prices vary by
+#     region/time — check the AWS pricing calculator.
+#
+#   Two gotchas when you STOP/START:
+#     • The auto-assigned public IPv4 CHANGES on every stop→start. Clients,
+#       bookmarks, or a VITE_BREADCRUMBS_API_BASE_URL pinned to the old address
+#       silently fail after a restart (the box is healthy — only its IP moved).
+#       Cheapest fix for a single-user box: just re-read the new public IP after
+#       each start. For a stable address, an Elastic IP or a DNS name works — but
+#       note that since Feb 2024 AWS charges ~$0.005/hr (~$3.6/mo) for EVERY
+#       public IPv4, including an Elastic IP, even while the instance is STOPPED,
+#       so a kept EIP eats into the stop-when-idle savings. The private IP is
+#       stable but LAN-only.
+#     • Lock the security group so :8787 and the web port are reachable only by
+#       you (your IP), never 0.0.0.0/0 — this box answers financial questions.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: breadcrumbs-ollama
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    environment:
+      # Single source of truth for the model tag; the api service reads the same var.
+      OLLAMA_MODEL: ${BREADCRUMBS_LOCAL_AGENT_MODEL:-llama3.3:70b}
+      # Optional second model, pulled by the entrypoint only when set and distinct
+      # (see "SPLITTING CHAT AND EXTRACTION" above). Empty ⇒ nothing extra pulled.
+      OLLAMA_EXTRACTION_MODEL: ${BREADCRUMBS_LOCAL_EXTRACTION_MODEL:-}
+    volumes:
+      # Weights persist across restarts/rebuilds — the multi-GB pull happens once.
+      - ollama-models:/root/.ollama
+      - ./docker/ollama-entrypoint.sh:/entrypoint.sh:ro
+    networks:
+      - agent-net
+    healthcheck:
+      # Gate on model-READY, not daemon-up. `ollama list` returns success the moment
+      # the daemon accepts connections — seconds in, long before the multi-GB pull
+      # finishes — so a plain `ollama list` check marks the service healthy and
+      # releases the api (depends_on: service_healthy) while models are still
+      # downloading; any extraction request in that window 404s. With a split, the
+      # extraction pull only starts after the chat pull, widening that window. So
+      # verify the tag(s) are actually cached: the chat model, plus the extraction
+      # model when it is set and distinct. `$$VAR` defers expansion to the container
+      # shell at runtime (compose would otherwise interpolate `$VAR` from the host).
+      # For a very large first pull, pre-seed the volume (see the volume note) so
+      # this passes on the first check instead of racing the retry budget.
+      test:
+        - CMD-SHELL
+        - >
+          ollama list | awk '{print $$1}' | grep -qxF "$$OLLAMA_MODEL" &&
+          { [ -z "$$OLLAMA_EXTRACTION_MODEL" ] ||
+            [ "$$OLLAMA_EXTRACTION_MODEL" = "$$OLLAMA_MODEL" ] ||
+            ollama list | awk '{print $$1}' | grep -qxF "$$OLLAMA_EXTRACTION_MODEL"; }
+      interval: 10s
+      timeout: 5s
+      retries: 180
+      start_period: 300s
+    restart: unless-stopped
+
+  api:
+    environment:
+      BREADCRUMBS_AGENT_PROVIDER: local
+      # Service-name URL over the compose network (not 127.0.0.1 — see header).
+      BREADCRUMBS_LOCAL_AGENT_BASE_URL: http://ollama:11434/v1
+      BREADCRUMBS_LOCAL_AGENT_MODEL: ${BREADCRUMBS_LOCAL_AGENT_MODEL:-llama3.3:70b}
+      # Optional split: a separate model for statement extraction. Empty ⇒ the
+      # chat model handles both. The sidecar pulls this too (OLLAMA_EXTRACTION_MODEL).
+      BREADCRUMBS_LOCAL_EXTRACTION_MODEL: ${BREADCRUMBS_LOCAL_EXTRACTION_MODEL:-}
+      # Required because the URL above is a service name, not loopback. The
+      # no-internet guarantee is kept by `agent-net`, not by the URL check.
+      # Do NOT set this when the model sits on a network you don't fully control.
+      BREADCRUMBS_LOCAL_AGENT_ALLOW_NONLOOPBACK: "true"
+      # Optional: run statement EXTRACTION on a different provider than chat.
+      # Unset ⇒ extraction runs on this same local model (no change). Set to
+      # "anthropic" to keep chat on-device but send PDF statements to a small,
+      # cheap hosted extractor: it reuses ANTHROPIC_API_KEY and the model named in
+      # BREADCRUMBS_EXTRACTION_MODEL (unset ⇒ a small, cheap default, not the big
+      # chat model). This sends a statement's text off-box on
+      # import (the app warns and /status reports extractionOffline=false) — and it
+      # works here with NO network change, because the `api` container keeps its
+      # internet route via the `default` network; only `ollama` is cut off by
+      # `agent-net` (see the note below). To instead split onto a SECOND local
+      # endpoint, set BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL (a loopback/service URL)
+      # and, if it isn't loopback, BREADCRUMBS_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK.
+      BREADCRUMBS_EXTRACTION_PROVIDER: ${BREADCRUMBS_EXTRACTION_PROVIDER:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BREADCRUMBS_EXTRACTION_MODEL: ${BREADCRUMBS_EXTRACTION_MODEL:-}
+      BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL: ${BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL:-}
+      BREADCRUMBS_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK: ${BREADCRUMBS_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK:-}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - default
+      - agent-net
+
+networks:
+  agent-net:
+    driver: bridge
+    # HARDENING: after the first successful model pull, set this to `true` to cut
+    # the model's internet route entirely. Serving runs from the cached volume and
+    # needs no egress, so the assistant keeps working while the model container is
+    # provably unable to reach the internet. Left false here so the first-boot pull
+    # can download the weights.
+    #   Scope: `internal: true` isolates ONLY the `ollama` container. The `api`
+    #   container sits on both this network and `default`, so it KEEPS its internet
+    #   route — which is what lets a split-out hosted extractor
+    #   (BREADCRUMBS_EXTRACTION_PROVIDER=anthropic) reach Anthropic even with this
+    #   hardened. The all-local default never uses that route.
+    internal: false
+
+volumes:
+  ollama-models:
+    # Pinned to a fixed volume name rather than the compose-default
+    # `<project>_ollama-models`, so the multi-GB weights survive `compose down`
+    # AND can be pre-seeded: a plain `ollama pull` into this same volume (e.g.
+    # during verification) means the first `compose up` skips the download
+    # entirely. The entrypoint only pulls when `ollama list` misses the tag.
+    name: breadcrumbs-ollama-models

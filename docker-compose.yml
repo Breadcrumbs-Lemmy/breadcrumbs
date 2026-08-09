@@ -1,0 +1,78 @@
+# Breadcrumbs — full stack.
+#
+#   docker compose up --build
+#   web  → http://localhost:5173
+#   api  → http://localhost:8787
+#
+# Plaid is optional. Without credentials the API starts fine and Plaid routes
+# are simply not registered; CSV import and every spending endpoint still work.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: breadcrumbs-api
+    ports:
+      - "8787:8787"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      BREADCRUMBS_LOCAL_DATA_DIR: /data
+      # The browser calls the API from the host's origin, so that origin — not
+      # the compose service name — is what CORS must allow. In production
+      # (NODE_ENV=production is baked into the image) ONLY these origins are
+      # honored; loopback is no longer auto-trusted. Set this to your real
+      # deployed frontend origin(s) when you go live behind a domain.
+      BREADCRUMBS_CORS_ORIGINS: ${BREADCRUMBS_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      # Auth posture. single_user (default) = no login, every request is the
+      # owner — right for a personal deployment. Flip to multi_user for a shared
+      # instance; the first registrant (or BREADCRUMBS_OWNER_EMAIL) becomes admin.
+      BREADCRUMBS_AUTH_MODE: ${BREADCRUMBS_AUTH_MODE:-single_user}
+      BREADCRUMBS_OWNER_EMAIL: ${BREADCRUMBS_OWNER_EMAIL:-}
+      # Set to "closed" to stop public registration once your users are seeded.
+      BREADCRUMBS_REGISTRATION: ${BREADCRUMBS_REGISTRATION:-}
+      # Assistant defaults to hosted Claude on the cheapest capable tier (Haiku
+      # 4.5). The key is passed through from the environment / .env — never baked
+      # into the image. To run fully offline instead, use the
+      # docker-compose.local-agent.yml overlay, which points these at the Ollama
+      # sidecar. Bump BREADCRUMBS_AGENT_MODEL to claude-sonnet-5 / claude-opus-5
+      # if answers slip.
+      BREADCRUMBS_AGENT_PROVIDER: ${BREADCRUMBS_AGENT_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BREADCRUMBS_AGENT_MODEL: ${BREADCRUMBS_AGENT_MODEL:-claude-haiku-4-5-20251001}
+      # Statement extraction inherits the chat model unless set here. Import
+      # accuracy matters most — override to a stronger tier if rows misread.
+      BREADCRUMBS_EXTRACTION_MODEL: ${BREADCRUMBS_EXTRACTION_MODEL:-}
+      # Supply these in .env to enable Plaid. Absent, Plaid routes stay off.
+      PLAID_ENV: ${PLAID_ENV:-}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
+      PLAID_SECRET: ${PLAID_SECRET:-}
+      PLAID_CLIENT_NAME: ${PLAID_CLIENT_NAME:-Breadcrumbs}
+      PLAID_COUNTRY_CODES: ${PLAID_COUNTRY_CODES:-US}
+      PLAID_REDIRECT_URI: ${PLAID_REDIRECT_URI:-}
+    volumes:
+      # Imported statements persist across rebuilds. Financial data should not
+      # vanish because an image was rebuilt.
+      - breadcrumbs-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # Baked in at build time by Vite. The browser resolves this, so it must
+        # be an address the *host* can reach — never http://api:8787, which only
+        # exists inside the compose network.
+        VITE_BREADCRUMBS_API_BASE_URL: ${VITE_BREADCRUMBS_API_BASE_URL:-http://localhost:8787}
+    container_name: breadcrumbs-web
+    ports:
+      - "5173:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  breadcrumbs-data:

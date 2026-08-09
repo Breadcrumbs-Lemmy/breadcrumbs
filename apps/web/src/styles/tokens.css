@@ -1,0 +1,374 @@
+/* Breadcrumbs design tokens — docs/ui-design-system.md
+ *
+ * Defined as CSS custom properties so the token layer survives a change of
+ * styling library. Tailwind references these; it does not define them.
+ *
+ * Brand: "Cartograph." A finance app is a map of where your money went —
+ * Breadcrumbs helps you follow the trail. Warm rather than clinical, quiet
+ * rather than loud, with a deep teal accent and a single teal→honey brand
+ * gradient doing the emphatic, wayfinding work. The palette is richer and more
+ * confident than the first pass (which read as "basic"), but every value is
+ * still chosen so nothing shouts on a screen people open when anxious. */
+
+:root {
+  /* ---- Surfaces -------------------------------------------------------- */
+  /* Warm off-white, not #FFF. Pure white under a big numeral reads as a
+     spreadsheet; a warm base reads as paper — and now carries a faint grain. */
+  --surface-base: #f7f4ee;
+  --surface-raised: #ffffff;
+  --surface-sunken: #ece7de;
+  --surface-inset: #e3ddd1;
+
+  --border-subtle: #e4ded4;
+  --border-strong: #cabfb0;
+  --border-focus: #1d6b5a;
+
+  /* ---- Ink ------------------------------------------------------------- */
+  --text-primary: #1b1915;
+  --text-secondary: #574f45;
+  --text-tertiary: #6f665c;
+  --text-inverse: #f7f4ee;
+
+  /* ---- Signature accent ------------------------------------------------ */
+  /* Deep teal-green. Money-adjacent without being spreadsheet-green, and dark
+     enough to carry white text at AA. Unchanged in hue from launch so the
+     brand stays continuous; the world around it got warmer and richer. */
+  --accent: #1d6b5a;
+  --accent-hover: #175646;
+  --accent-soft: #dcece7;
+  --accent-ink: #0d3b31;
+
+  /* The warm end of the brand trail. "bread" — money, the slang the name plays
+     on — wears this in the wordmark. Brand voice only, never encodes data. */
+  --brand-honey: #c07a40;
+
+  /* ---- Brand gradient -------------------------------------------------- */
+  /* The "trail": teal → green → honey, the path money leaves. Used ONLY for
+     brand moments — the logo, a hero flourish, focus of identity — and NEVER
+     to encode data, per the no-verdict-colour rule. */
+  --brand-gradient: linear-gradient(135deg, #1d6b5a 0%, #2f8f74 48%, #c07a40 100%);
+  --brand-gradient-soft: linear-gradient(135deg, #dcece7 0%, #e8efe4 50%, #f6ecdf 100%);
+
+  /* ---- Directional, never judgemental ---------------------------------- */
+  /* Used for "up" and "down" on spending changes. Deliberately low-chroma and
+     deliberately NOT red/green: spending more on groceries is information, not
+     a failure. See D-006. */
+  --rise: #92592e;
+  --rise-soft: #f6ece0;
+  --fall: #3f6f84;
+  --fall-soft: #e6eef2;
+
+  /* ---- Genuine alarm --------------------------------------------------- */
+  /* Reserved for real warnings only. Never appears on the spending home. */
+  --alert: #a3372a;
+  --alert-soft: #f9ebe8;
+
+  /* ---- Category identity ----------------------------------------------- */
+  /* Eight hues walking the wheel like regions on a map — richer than the first
+     muted set (which read as "basic") but held at similar chroma and lightness
+     so they identify a category without ranking it. Assignment is stable per
+     category id so a category keeps its colour; hue is never a verdict. */
+  --cat-1: #b06a3a; /* terracotta */
+  --cat-2: #9c7f34; /* ochre      */
+  --cat-3: #6d8f42; /* moss       */
+  --cat-4: #2f8f74; /* pine       */
+  --cat-5: #3a86a6; /* lake       */
+  --cat-6: #5a6cc0; /* indigo     */
+  --cat-7: #8a5fb8; /* violet     */
+  --cat-8: #b1568a; /* rose       */
+
+  /* ---- Affordability levels -------------------------------------------- */
+  /* Used only by the affordability surfaces, which are a secondary destination
+     since D-011. Resolved per-scope by [data-level]. */
+  --affordable-fg: #1d6b5a;
+  --affordable-bg: #e6f2ec;
+  --affordable-border: #c1e0d3;
+
+  --tight-fg: #8a5b28;
+  --tight-bg: #faf1e2;
+  --tight-border: #ecd8bb;
+
+  --risky-fg: #a3372a;
+  --risky-bg: #f9ebe8;
+  --risky-border: #edc6be;
+
+  --unknown-fg: #556170;
+  --unknown-bg: #eef0f2;
+  --unknown-border: #d6dae0;
+
+  /* ---- Forecast chart series ------------------------------------------- */
+  --data-required: #1d6b5a;
+  --data-protected: #8a5fb8;
+  --data-all-events: #857b70;
+  --data-expected: #c2bab0;
+  --data-buffer: #a1683a;
+  --data-zero: #a3372a;
+
+  /* ---- Ambient (background texture, behind everything) ----------------- */
+  /* Two soft glows and a grain strength. In light these are barely-there warmth;
+     the dark theme turns them into a slow aurora. Consumed by .app-ambient. */
+  --ambient-glow-a: rgba(29, 107, 90, 0.07);
+  --ambient-glow-b: rgba(192, 122, 64, 0.06);
+  --ambient-glow-c: rgba(138, 95, 184, 0.04);
+  --grain-opacity: 0.4;
+
+  /* ---- Interactive net (canvas line mesh; see components/NeuralPulses.tsx) - */
+  /* A line mesh layered over the ambient glows, drawn on <canvas>. The colour is
+     read at runtime via cssVar("--net-color"); --net-opacity fades the whole
+     layer so the mesh never competes with content. */
+  --net-color: #1d6b5a;
+  --net-opacity: 0.4;
+
+  /* ---- Type ------------------------------------------------------------ */
+  /* Now actually loaded (src/styles/fonts.css). Inter for interface + money,
+     Fraunces as the warm display/brand voice, Plex Mono for code hints. */
+  --font-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Fraunces Variable", Fraunces, Georgia, ui-serif, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* ---- Elevation ------------------------------------------------------- */
+  /* Two-layer, low-opacity, warm-tinted. A single hard shadow reads cheap. */
+  --shadow-sm: 0 1px 2px rgba(26, 22, 16, 0.04), 0 1px 1px rgba(26, 22, 16, 0.03);
+  --shadow-md: 0 2px 4px rgba(26, 22, 16, 0.04), 0 8px 20px rgba(26, 22, 16, 0.07);
+  --shadow-lg: 0 4px 10px rgba(26, 22, 16, 0.06), 0 20px 40px rgba(26, 22, 16, 0.10);
+
+  /* ---- Radii ----------------------------------------------------------- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  /* ---- Motion ---------------------------------------------------------- */
+  /* Fast enough to feel responsive, slow enough to read as deliberate. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* A restrained overshoot for the segmented indicator and pills — enough to
+     feel physical, not so much it bounces like a toy on a finance screen. */
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.5, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 420ms;
+}
+
+/* ---- Explicit dark theme -------------------------------------------------
+ * Applied when the user picks "Dark" in the ThemeToggle. These values are
+ * intentionally duplicated in the @media block below — both blocks must be
+ * kept in sync when the dark palette changes. The duplication is preferable
+ * to a CSS custom-property chain that would make a dev reading the file
+ * trace two hops to find an actual colour. */
+:root[data-theme="dark"] {
+  --surface-base: #14120f;
+  --surface-raised: #1e1b17;
+  --surface-sunken: #100e0c;
+  --surface-inset: #262119;
+
+  --border-subtle: #2c2822;
+  --border-strong: #453e35;
+  --border-focus: #5fb99f;
+
+  --text-primary: #f1ece3;
+  --text-secondary: #aca293;
+  --text-tertiary: #948a7c;
+  --text-inverse: #14120f;
+
+  --accent: #5fb99f;
+  --accent-hover: #74c9b0;
+  --accent-soft: #17332b;
+  --accent-ink: #a8ded0;
+
+  /* Warmer honey so "bread" holds its glow against the dark canvas. */
+  --brand-honey: #e8a05c;
+
+  --brand-gradient: linear-gradient(135deg, #5fb99f 0%, #45a086 45%, #e8a05c 100%);
+  --brand-gradient-soft: linear-gradient(135deg, #17332b 0%, #1c2a24 50%, #2a2016 100%);
+
+  --rise: #cf9a63;
+  --rise-soft: #2a1f14;
+  --fall: #86aec6;
+  --fall-soft: #16232b;
+
+  --alert: #e0806f;
+  --alert-soft: #2c1a16;
+
+  --cat-1: #d99461;
+  --cat-2: #cdaa58;
+  --cat-3: #9dbb5f;
+  --cat-4: #55c0a0;
+  --cat-5: #63aad0;
+  --cat-6: #8496e6;
+  --cat-7: #ab86dd;
+  --cat-8: #d67ba6;
+
+  --affordable-fg: #7fd1b4;
+  --affordable-bg: #16281f;
+  --affordable-border: #2c4a3b;
+
+  --tight-fg: #ddb072;
+  --tight-bg: #241c11;
+  --tight-border: #453520;
+
+  --risky-fg: #e0806f;
+  --risky-bg: #2c1a16;
+  --risky-border: #4d2b26;
+
+  --unknown-fg: #a6afbd;
+  --unknown-bg: #1a1c1f;
+  --unknown-border: #343a42;
+
+  --data-required: #5fb99f;
+  --data-protected: #ab86dd;
+  --data-all-events: #aca293;
+  --data-expected: #6b6359;
+  --data-buffer: #cf9a63;
+  --data-zero: #e0806f;
+
+  --ambient-glow-a: rgba(95, 185, 159, 0.10);
+  --ambient-glow-b: rgba(232, 160, 92, 0.07);
+  --ambient-glow-c: rgba(167, 133, 221, 0.08);
+  --grain-opacity: 0.28;
+
+  --net-color: #5fb99f;
+  --net-opacity: 0.45;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.35), 0 20px 44px rgba(0, 0, 0, 0.46);
+}
+
+/* ---- System dark mode ----------------------------------------------------
+ * Only fires when the user has NOT pinned a theme ("System" choice). The
+ * :not selectors guard against overriding an explicit light/dark choice with
+ * the OS preference — that would make the toggle unreliable.
+ * SYNC NOTE: these values must stay identical to :root[data-theme="dark"]. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --surface-base: #14120f;
+    --surface-raised: #1e1b17;
+    --surface-sunken: #100e0c;
+    --surface-inset: #262119;
+
+    --border-subtle: #2c2822;
+    --border-strong: #453e35;
+    --border-focus: #5fb99f;
+
+    --text-primary: #f1ece3;
+    --text-secondary: #aca293;
+    --text-tertiary: #837a6d;
+    --text-inverse: #14120f;
+
+    --accent: #5fb99f;
+    --accent-hover: #74c9b0;
+    --accent-soft: #17332b;
+    --accent-ink: #a8ded0;
+
+    --brand-honey: #e8a05c;
+
+    --brand-gradient: linear-gradient(135deg, #5fb99f 0%, #45a086 45%, #e8a05c 100%);
+    --brand-gradient-soft: linear-gradient(135deg, #17332b 0%, #1c2a24 50%, #2a2016 100%);
+
+    --rise: #cf9a63;
+    --rise-soft: #2a1f14;
+    --fall: #86aec6;
+    --fall-soft: #16232b;
+
+    --alert: #e0806f;
+    --alert-soft: #2c1a16;
+
+    --cat-1: #d99461;
+    --cat-2: #cdaa58;
+    --cat-3: #9dbb5f;
+    --cat-4: #55c0a0;
+    --cat-5: #63aad0;
+    --cat-6: #8496e6;
+    --cat-7: #ab86dd;
+    --cat-8: #d67ba6;
+
+    --affordable-fg: #7fd1b4;
+    --affordable-bg: #16281f;
+    --affordable-border: #2c4a3b;
+
+    --tight-fg: #ddb072;
+    --tight-bg: #241c11;
+    --tight-border: #453520;
+
+    --risky-fg: #e0806f;
+    --risky-bg: #2c1a16;
+    --risky-border: #4d2b26;
+
+    --unknown-fg: #a6afbd;
+    --unknown-bg: #1a1c1f;
+    --unknown-border: #343a42;
+
+    --data-required: #5fb99f;
+    --data-protected: #ab86dd;
+    --data-all-events: #aca293;
+    --data-expected: #6b6359;
+    --data-buffer: #cf9a63;
+    --data-zero: #e0806f;
+
+    --ambient-glow-a: rgba(95, 185, 159, 0.10);
+    --ambient-glow-b: rgba(232, 160, 92, 0.07);
+    --ambient-glow-c: rgba(167, 133, 221, 0.08);
+    --grain-opacity: 0.28;
+
+    --net-color: #5fb99f;
+    --net-opacity: 0.45;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(0, 0, 0, 0.36);
+    --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.35), 0 20px 44px rgba(0, 0, 0, 0.46);
+  }
+}
+
+/* Any subtree carrying data-level resolves the level variables, so components
+   never branch on level to choose a colour. */
+[data-level="AFFORDABLE"] {
+  --level-fg: var(--affordable-fg);
+  --level-bg: var(--affordable-bg);
+  --level-border: var(--affordable-border);
+}
+[data-level="TIGHT"] {
+  --level-fg: var(--tight-fg);
+  --level-bg: var(--tight-bg);
+  --level-border: var(--tight-border);
+}
+[data-level="RISKY"] {
+  --level-fg: var(--risky-fg);
+  --level-bg: var(--risky-bg);
+  --level-border: var(--risky-border);
+}
+[data-level="UNKNOWN"] {
+  --level-fg: var(--unknown-fg);
+  --level-bg: var(--unknown-bg);
+  --level-border: var(--unknown-border);
+}
+
+/* Money and dates align on the decimal. A figure that shifts horizontally as
+   it updates undermines confidence in the number. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv01" 1;
+}
+
+/* Large numerals want tighter tracking than body text. */
+.numeral {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.022em;
+  font-weight: 560;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    /* Fire immediately: without this, a delayed "forwards" animation (e.g. the
+       logo's staggered stem/bowl/crumb) sits in its invisible pre-delay state
+       for the full delay before snapping in — the opposite of reduced motion.
+       Zeroing the delay lands every animation on its final frame at mount. */
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,40 @@
+# --- Secrets & local config (NEVER commit) ---
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.local
+*.pem
+*.key
+
+# --- Dependencies ---
+node_modules/
+.pnpm-store/
+
+# --- Build output ---
+dist/
+build/
+*.tsbuildinfo
+apps/web/dist/
+
+# --- Runtime data (file-backed stores default to ~/.breadcrumbs, but guard
+#     against a repo-local dataDir override) ---
+data/
+.breadcrumbs/
+*.local.json
+
+# --- Logs ---
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# --- Editor / OS junk ---
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Test / coverage ---
+coverage/
+.vitest/

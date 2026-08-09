@@ -1,0 +1,327 @@
+{
+  "description": "Canonical S-004 merchant and category normalization examples for noisy statement descriptors.",
+  "cases": [
+    {
+      "name": "netflix_checkcard_variant",
+      "input": {
+        "merchantName": "CHECKCARD NETFLIX.COM 866-579-7172 CA",
+        "originalDescription": "POS DEBIT NETFLIX.COM LOS GATOS CA",
+        "rawCategory": "Entertainment",
+        "amountCents": -1549
+      },
+      "expected": {
+        "merchantName": "Netflix",
+        "normalizedMerchantId": "netflix",
+        "merchantAmbiguity": false,
+        "category": "streaming",
+        "categoryDisplayName": "Streaming",
+        "flowType": "SPEND",
+        "uncertaintyCodes": []
+      }
+    },
+    {
+      "name": "spotify_usa_variant",
+      "input": {
+        "merchantName": "SPOTIFY USA P05F3B27D",
+        "originalDescription": "Card purchase Spotify USA New York NY",
+        "rawCategory": "Music & Audio",
+        "amountCents": -1099
+      },
+      "expected": {
+        "merchantName": "Spotify",
+        "normalizedMerchantId": "spotify",
+        "merchantAmbiguity": false,
+        "category": "music_audio",
+        "categoryDisplayName": "Music and audio",
+        "flowType": "SPEND",
+        "uncertaintyCodes": []
+      }
+    },
+    {
+      "name": "apple_bill_app_store_ambiguous",
+      "input": {
+        "merchantName": "APL* ITUNES.COM/BILL 866-712-7753 CA",
+        "originalDescription": "APPLE.COM/BILL",
+        "rawCategory": "Digital Purchase",
+        "amountCents": -299
+      },
+      "expected": {
+        "merchantName": "Apple App Store",
+        "normalizedMerchantId": "apple_app_store",
+        "merchantAmbiguity": true,
+        "category": "software",
+        "categoryDisplayName": "Software",
+        "flowType": "SPEND",
+        "uncertaintyCodes": ["ambiguous_processor"]
+      }
+    },
+    {
+      "name": "apple_icloud_specific_variant",
+      "input": {
+        "merchantName": "APPLE ICLOUD 50GB",
+        "originalDescription": "APPLE SERVICES ICLOUD",
+        "rawCategory": "Cloud Storage",
+        "amountCents": -99
+      },
+      "expected": {
+        "merchantName": "Apple iCloud",
+        "normalizedMerchantId": "apple_icloud",
+        "merchantAmbiguity": false,
+        "category": "cloud_storage",
+        "categoryDisplayName": "Cloud storage",
+        "flowType": "SPEND",
+        "uncertaintyCodes": []
+      }
+    },
+    {
+      "name": "common_travel_descriptor",
+      "input": {
+        "merchantName": "SOUTHWEST AIR 5262441112233 DALLAS TX",
+        "originalDescription": "SWA AIRLINE TICKET",
+        "rawCategory": "Travel Flights",
+        "amountCents": -21599
+      },
+      "expected": {
+        "merchantName": "Southwest Airlines",
+        "normalizedMerchantId": "southwest_airlines",
+        "merchantAmbiguity": false,
+        "category": "travel",
+        "categoryDisplayName": "Travel",
+        "flowType": "SPEND",
+        "uncertaintyCodes": []
+      }
+    },
+    {
+      "name": "common_food_descriptor",
+      "input": {
+        "merchantName": "TST* TACO DELI #44 AUSTIN TX",
+        "originalDescription": "Toast restaurant charge",
+        "rawCategory": "Food and Drink Restaurants",
+        "amountCents": -1890
+      },
+      "expected": {
+        "merchantName": "Taco Deli",
+        "normalizedMerchantId": "taco_deli",
+        "merchantAmbiguity": false,
+        "category": "dining",
+        "categoryDisplayName": "Dining",
+        "flowType": "SPEND",
+        "uncertaintyCodes": []
+      }
+    },
+    {
+      "name": "common_shopping_descriptor",
+      "input": {
+        "merchantName": "AMZN Mktp US*AB1CD2E3",
+        "originalDescription": "Amazon Marketplace Seattle WA",
+        "rawCategory": "General Merchandise",
+        "amountCents": -6800
+      },
+      "expected": {
+        "merchantName": "Amazon",
+        "normalizedMerchantId": "amazon",
+        "merchantAmbiguity": false,
+        "category": "shopping",
+        "categoryDisplayName": "Shopping",
+        "flowType": "SPEND",
+        "uncertaintyCodes": []
+      }
+    },
+    {
+      "name": "ambiguous_processor_without_underlying_merchant",
+      "input": {
+        "merchantName": "PAYPAL *PMTS 4029357733 CA",
+        "originalDescription": "PayPal payment",
+        "rawCategory": "Shopping",
+        "amountCents": -4900
+      },
+      "expected": {
+        "merchantName": "PayPal",
+        "normalizedMerchantId": "paypal",
+        "merchantAmbiguity": true,
+        "category": "shopping",
+        "categoryDisplayName": "Shopping",
+        "flowType": "SPEND",
+        "uncertaintyCodes": ["ambiguous_processor"]
+      }
+    },
+    {
+      "name": "unknown_card_purchase",
+      "input": {
+        "merchantName": "DEBIT CARD PURCHASE 123456",
+        "originalDescription": "Card purchase",
+        "amountCents": -2700
+      },
+      "expected": {
+        "merchantName": "Unknown merchant",
+        "normalizedMerchantId": "unknown_merchant",
+        "merchantAmbiguity": true,
+        "category": "unknown",
+        "categoryDisplayName": "Unknown",
+        "flowType": "SPEND",
+        "uncertaintyCodes": ["unknown_merchant", "unknown_category"]
+      }
+    },
+    {
+      "name": "payment_like_ordinary_merchant_text",
+      "input": {
+        "merchantName": "PAYMENT TO NETFLIX VISA",
+        "originalDescription": "Online payment to Netflix Visa account",
+        "rawCategory": "Payment",
+        "amountCents": -1549
+      },
+      "expected": {
+        "merchantName": "Netflix",
+        "normalizedMerchantId": "netflix",
+        "merchantAmbiguity": false,
+        "category": "transfer",
+        "categoryDisplayName": "Transfer",
+        "flowType": "UNCLASSIFIED",
+        "uncertaintyCodes": ["transfer_like_unpaired"]
+      }
+    },
+    {
+      "name": "credit_card_payment_target_text",
+      "input": {
+        "merchantName": "AUTOPAY TARGET VISA",
+        "originalDescription": "Card payment from checking",
+        "rawCategory": "Shopping",
+        "amountCents": -8800
+      },
+      "expected": {
+        "merchantName": "Credit card payment",
+        "normalizedMerchantId": "credit_card_payment",
+        "merchantAmbiguity": false,
+        "category": "credit_card_payment",
+        "categoryDisplayName": "Credit card payment",
+        "flowType": "UNCLASSIFIED",
+        "uncertaintyCodes": ["transfer_like_unpaired"]
+      }
+    },
+    {
+      "name": "pfc_rent_and_utilities_internet_is_utilities_not_housing",
+      "input": {
+        "merchantName": "METRO FIBER INTERNET 8829 AUSTIN TX",
+        "rawCategory": "RENT_AND_UTILITIES_INTERNET_AND_CABLE",
+        "amountCents": -7999
+      },
+      "expected": { "category": "utilities", "categoryDisplayName": "Utilities", "flowType": "SPEND" }
+    },
+    {
+      "name": "pfc_rent_and_utilities_rent_is_housing",
+      "input": {
+        "merchantName": "GREENFIELD LEASING 4471",
+        "rawCategory": "RENT_AND_UTILITIES_RENT",
+        "amountCents": -145000
+      },
+      "expected": { "category": "housing", "categoryDisplayName": "Housing", "flowType": "SPEND" }
+    },
+    {
+      "name": "pfc_personal_care_gym_is_fitness",
+      "input": {
+        "merchantName": "RIVERSIDE GYM 221 CHICAGO IL",
+        "rawCategory": "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS",
+        "amountCents": -4500
+      },
+      "expected": { "category": "fitness", "categoryDisplayName": "Fitness", "flowType": "SPEND" }
+    },
+    {
+      "name": "pfc_general_services_childcare_is_childcare",
+      "input": {
+        "merchantName": "BRIGHT START DAYCARE",
+        "rawCategory": "GENERAL_SERVICES_CHILDCARE",
+        "amountCents": -120000
+      },
+      "expected": { "category": "childcare", "categoryDisplayName": "Childcare", "flowType": "SPEND" }
+    },
+    {
+      "name": "pfc_general_services_insurance_is_insurance",
+      "input": {
+        "merchantName": "SHIELD MUTUAL POLICY 55",
+        "rawCategory": "GENERAL_SERVICES_INSURANCE",
+        "amountCents": -18000
+      },
+      "expected": { "category": "insurance", "categoryDisplayName": "Insurance", "flowType": "SPEND" }
+    },
+    {
+      "name": "pfc_general_services_education_is_education",
+      "input": {
+        "merchantName": "NORTHSIDE TUTORING CENTER",
+        "rawCategory": "GENERAL_SERVICES_EDUCATION",
+        "amountCents": -24000
+      },
+      "expected": { "category": "education", "categoryDisplayName": "Education", "flowType": "SPEND" }
+    },
+    {
+      "name": "pfc_entertainment_tv_and_movies_is_streaming",
+      "input": {
+        "merchantName": "SUMMIT TV SERVICE",
+        "rawCategory": "ENTERTAINMENT_TV_AND_MOVIES",
+        "amountCents": -1299
+      },
+      "expected": { "category": "streaming", "categoryDisplayName": "Streaming", "flowType": "SPEND" }
+    },
+    {
+      "name": "pfc_entertainment_video_games_falls_back_to_entertainment_primary",
+      "input": {
+        "merchantName": "NEUTRAL GAME OUTLET",
+        "rawCategory": "ENTERTAINMENT_VIDEO_GAMES",
+        "amountCents": -5999
+      },
+      "expected": { "category": "entertainment", "categoryDisplayName": "Entertainment", "flowType": "SPEND" }
+    },
+    {
+      "name": "pfc_loan_payments_credit_card_is_credit_card_payment_excluded_from_spend",
+      "input": {
+        "merchantName": "NATIONWIDE BANK",
+        "rawCategory": "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT",
+        "amountCents": -50000
+      },
+      "expected": { "category": "credit_card_payment", "flowType": "UNCLASSIFIED" }
+    },
+    {
+      "name": "pfc_transfer_out_savings_is_savings_transfer_excluded_from_spend",
+      "input": {
+        "merchantName": "ALLY BANK SAVINGS DEPOSIT",
+        "rawCategory": "TRANSFER_OUT_SAVINGS",
+        "amountCents": -30000
+      },
+      "expected": { "category": "savings_transfer", "flowType": "UNCLASSIFIED" }
+    },
+    {
+      "name": "pfc_unmapped_general_merchandise_detailed_falls_back_to_shopping",
+      "input": {
+        "merchantName": "NEUTRAL OFFICE VENDOR",
+        "rawCategory": "GENERAL_MERCHANDISE_OFFICE_SUPPLIES",
+        "amountCents": -3400
+      },
+      "expected": { "category": "shopping", "categoryDisplayName": "Shopping", "flowType": "SPEND" }
+    }
+  ],
+  "crossAccountBehavior": {
+    "transactions": [
+      {
+        "accountId": "account_local_checking",
+        "merchantName": "SPOTIFY USA 877-7781161 NY",
+        "originalDescription": "Checking card Spotify USA",
+        "rawCategory": "Music & Audio",
+        "amountCents": -1099
+      },
+      {
+        "accountId": "account_amex_gold",
+        "merchantName": "CHECKCARD SPOTIFY P05F3B27D",
+        "originalDescription": "Credit card Spotify USA",
+        "rawCategory": "Music & Audio",
+        "amountCents": -1099
+      }
+    ],
+    "expected": {
+      "normalizedMerchantId": "spotify",
+      "category": "music_audio",
+      "merchantTransactionCount": 2,
+      "merchantOutflowCents": 2198,
+      "checkingOutflowCents": 1099,
+      "creditCardOutflowCents": 1099
+    }
+  }
+}

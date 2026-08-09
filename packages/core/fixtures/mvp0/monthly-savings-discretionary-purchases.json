@@ -1,0 +1,286 @@
+{
+  "id": "monthly_savings_discretionary_purchases",
+  "description": "Monthly savings is the first supported goal. These discretionary purchase scenarios show how a $99 video game, a representative $499 video game console, and a $125 restaurant meal affect the user's ability to keep the planned monthly savings contribution and the $250 read-only cash buffer intact.",
+  "input": {
+    "requestId": "fixture_monthly_savings_video_game_99",
+    "plannedPurchaseId": "purchase_video_game_99",
+    "snapshot": {
+      "asOfDate": "2026-08-03",
+      "timezone": "America/Chicago",
+      "currency": "USD",
+      "config": {
+        "horizonDays": 30,
+        "minimumCashBufferCents": 25000,
+        "staleBalanceHours": 72,
+        "staleManualBalanceDays": 7,
+        "reliableIncomeConfidence": 0.8
+      },
+      "coverage": {
+        "balancesDeclaredComplete": true,
+        "incomeDeclaredCompleteThroughDate": "2026-09-02",
+        "obligationsDeclaredCompleteThroughDate": "2026-09-02",
+        "transactionsCompleteFromDate": "2026-08-01",
+        "userConfirmedNoOtherRequiredObligations": true
+      },
+      "accounts": [
+        {
+          "id": "account_checking",
+          "displayName": "Everyday checking",
+          "type": "checking",
+          "role": "spendable_cash",
+          "currency": "USD",
+          "currentBalanceCents": 151000,
+          "availableBalanceCents": 151000,
+          "includeInForecast": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "source": "fixture"
+        }
+      ],
+      "transactions": [],
+      "incomeSources": [
+        {
+          "id": "income_salary",
+          "label": "Salaried paycheck",
+          "expectedAmountCents": 200000,
+          "minimumExpectedAmountCents": 200000,
+          "cadence": {
+            "kind": "biweekly",
+            "anchorDate": "2026-08-17"
+          },
+          "nextExpectedDate": "2026-08-17",
+          "variability": "fixed",
+          "reliability": "confirmed",
+          "category": "paycheck",
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "recurringObligations": [
+        {
+          "id": "obligation_rent",
+          "label": "Rent",
+          "amountCents": 70000,
+          "cadence": {
+            "kind": "monthly",
+            "dayOfMonth": 6
+          },
+          "nextDueDate": "2026-08-06",
+          "category": "housing",
+          "required": true,
+          "importance": "required",
+          "autopay": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        },
+        {
+          "id": "obligation_utilities",
+          "label": "Utilities",
+          "amountCents": 15000,
+          "cadence": {
+            "kind": "monthly",
+            "dayOfMonth": 15
+          },
+          "nextDueDate": "2026-08-15",
+          "category": "utilities",
+          "required": true,
+          "importance": "required",
+          "autopay": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "goals": [
+        {
+          "id": "goal_monthly_savings",
+          "label": "Monthly savings",
+          "goalType": "monthly_savings_target",
+          "targetAmountCents": 600000,
+          "currentAmountCents": 180000,
+          "monthlyContributionCents": 30000,
+          "nextContributionDate": "2026-08-16",
+          "contributionCadence": {
+            "kind": "monthly",
+            "dayOfMonth": 16
+          },
+          "priority": "high",
+          "protection": "protected",
+          "category": "savings_transfer",
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "plannedPurchases": [
+        {
+          "id": "purchase_video_game_99",
+          "label": "Video game",
+          "amountCents": 9900,
+          "purchaseDate": "2026-08-03",
+          "category": "entertainment",
+          "necessity": "discretionary",
+          "deferrable": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        },
+        {
+          "id": "purchase_video_game_console_499",
+          "label": "Representative video game console ($499)",
+          "amountCents": 49900,
+          "purchaseDate": "2026-08-03",
+          "category": "entertainment",
+          "necessity": "discretionary",
+          "deferrable": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        },
+        {
+          "id": "purchase_restaurant_meal_125",
+          "label": "Expensive restaurant meal",
+          "amountCents": 12500,
+          "purchaseDate": "2026-08-03",
+          "category": "dining",
+          "necessity": "discretionary",
+          "deferrable": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ]
+    }
+  },
+  "scenarios": [
+    {
+      "id": "video_game_99",
+      "plannedPurchaseId": "purchase_video_game_99",
+      "expected": {
+        "level": "AFFORDABLE",
+        "reasonCodes": ["BUFFER_PASSED", "TIMING_RESERVE_PASSED"],
+        "requiredPathMinimumBalanceCents": 56100,
+        "requiredPathMinimumBalanceDate": "2026-08-15",
+        "protectedPathMinimumBalanceCents": 26100,
+        "protectedPathMinimumBalanceDate": "2026-08-16",
+        "allEventsPathMinimumBalanceCents": 26100,
+        "allEventsPathMinimumBalanceDate": "2026-08-16",
+        "postPurchaseCashCents": 141100,
+        "timingReserveCents": 85000,
+        "timingReserveMarginCents": 31100
+      }
+    },
+    {
+      "id": "video_game_console_499",
+      "plannedPurchaseId": "purchase_video_game_console_499",
+      "expected": {
+        "level": "RISKY",
+        "reasonCodes": ["HIGH_PRIORITY_GOAL_SHORTFALL"],
+        "requiredPathMinimumBalanceCents": 16100,
+        "requiredPathMinimumBalanceDate": "2026-08-15",
+        "protectedPathMinimumBalanceCents": -13900,
+        "protectedPathMinimumBalanceDate": "2026-08-16",
+        "allEventsPathMinimumBalanceCents": -13900,
+        "allEventsPathMinimumBalanceDate": "2026-08-16",
+        "postPurchaseCashCents": 101100,
+        "timingReserveCents": 85000,
+        "timingReserveMarginCents": -8900,
+        "relatedGoalIds": ["goal_monthly_savings"]
+      }
+    },
+    {
+      "id": "restaurant_meal_125",
+      "plannedPurchaseId": "purchase_restaurant_meal_125",
+      "expected": {
+        "level": "TIGHT",
+        "reasonCodes": ["GOAL_BUFFER_CONFLICT", "BUFFER_BELOW_MINIMUM"],
+        "requiredPathMinimumBalanceCents": 53500,
+        "requiredPathMinimumBalanceDate": "2026-08-15",
+        "protectedPathMinimumBalanceCents": 23500,
+        "protectedPathMinimumBalanceDate": "2026-08-16",
+        "allEventsPathMinimumBalanceCents": 23500,
+        "allEventsPathMinimumBalanceDate": "2026-08-16",
+        "postPurchaseCashCents": 138500,
+        "timingReserveCents": 85000,
+        "timingReserveMarginCents": 28500,
+        "relatedGoalIds": ["goal_monthly_savings"]
+      }
+    }
+  ]
+}

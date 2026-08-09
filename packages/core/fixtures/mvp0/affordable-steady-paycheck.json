@@ -1,0 +1,265 @@
+{
+  "id": "affordable_steady_paycheck",
+  "description": "Individual salaried user paid bi-weekly with current balances, required monthly bills, a monthly savings goal, a planned purchase, and an expected affordable response.",
+  "input": {
+    "requestId": "fixture_affordable_steady_paycheck",
+    "plannedPurchaseId": "purchase_laptop_stand",
+    "snapshot": {
+      "asOfDate": "2026-08-03",
+      "timezone": "America/Chicago",
+      "currency": "USD",
+      "config": {
+        "horizonDays": 30,
+        "minimumCashBufferCents": 25000,
+        "staleBalanceHours": 72,
+        "staleManualBalanceDays": 7,
+        "reliableIncomeConfidence": 0.8
+      },
+      "coverage": {
+        "balancesDeclaredComplete": true,
+        "incomeDeclaredCompleteThroughDate": "2026-09-02",
+        "obligationsDeclaredCompleteThroughDate": "2026-09-02",
+        "transactionsCompleteFromDate": "2026-08-01",
+        "userConfirmedNoOtherRequiredObligations": true
+      },
+      "accounts": [
+        {
+          "id": "account_checking",
+          "displayName": "Everyday checking",
+          "type": "checking",
+          "role": "spendable_cash",
+          "currency": "USD",
+          "currentBalanceCents": 250000,
+          "availableBalanceCents": 250000,
+          "includeInForecast": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "source": "fixture"
+        }
+      ],
+      "transactions": [
+        {
+          "id": "tx_aug_rent",
+          "accountId": "account_checking",
+          "postedDate": "2026-08-01",
+          "merchantName": "Landlord",
+          "amountCents": -120000,
+          "currency": "USD",
+          "category": "housing",
+          "normalizedMerchantId": "landlord",
+          "flowType": "SPEND",
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-01",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture"
+        },
+        {
+          "id": "tx_aug_groceries",
+          "accountId": "account_checking",
+          "postedDate": "2026-08-04",
+          "merchantName": "Grocery Mart",
+          "amountCents": -8000,
+          "currency": "USD",
+          "category": "groceries",
+          "normalizedMerchantId": "grocery_mart",
+          "flowType": "SPEND",
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-04",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture"
+        },
+        {
+          "id": "tx_aug_paycheck",
+          "accountId": "account_checking",
+          "postedDate": "2026-08-17",
+          "merchantName": "Employer Payroll",
+          "amountCents": 200000,
+          "currency": "USD",
+          "category": "income",
+          "normalizedMerchantId": "employer_payroll",
+          "flowType": "INCOME",
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-17",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture"
+        }
+      ],
+      "incomeSources": [
+        {
+          "id": "income_salary",
+          "label": "Salaried paycheck",
+          "expectedAmountCents": 200000,
+          "minimumExpectedAmountCents": 200000,
+          "cadence": {
+            "kind": "biweekly",
+            "anchorDate": "2026-08-17"
+          },
+          "nextExpectedDate": "2026-08-17",
+          "variability": "fixed",
+          "reliability": "confirmed",
+          "category": "paycheck",
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "recurringObligations": [
+        {
+          "id": "obligation_rent",
+          "label": "Rent",
+          "amountCents": 120000,
+          "cadence": {
+            "kind": "monthly",
+            "dayOfMonth": 6
+          },
+          "nextDueDate": "2026-08-06",
+          "category": "housing",
+          "required": true,
+          "importance": "required",
+          "autopay": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        },
+        {
+          "id": "obligation_utilities",
+          "label": "Utilities",
+          "amountCents": 15000,
+          "cadence": {
+            "kind": "monthly",
+            "dayOfMonth": 15
+          },
+          "nextDueDate": "2026-08-15",
+          "category": "utilities",
+          "required": true,
+          "importance": "required",
+          "autopay": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "goals": [
+        {
+          "id": "goal_monthly_savings",
+          "label": "Monthly savings",
+          "goalType": "monthly_savings_target",
+          "targetAmountCents": 500000,
+          "currentAmountCents": 120000,
+          "monthlyContributionCents": 30000,
+          "nextContributionDate": "2026-08-24",
+          "contributionCadence": {
+            "kind": "monthly",
+            "dayOfMonth": 24
+          },
+          "priority": "high",
+          "protection": "protected",
+          "category": "savings_transfer",
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "plannedPurchases": [
+        {
+          "id": "purchase_laptop_stand",
+          "label": "Laptop stand",
+          "amountCents": 35000,
+          "purchaseDate": "2026-08-03",
+          "category": "office",
+          "necessity": "discretionary",
+          "deferrable": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "level": "AFFORDABLE",
+    "reasonCodes": ["BUFFER_PASSED", "TIMING_RESERVE_PASSED"],
+    "requiredPathMinimumBalanceCents": 80000,
+    "protectedPathMinimumBalanceCents": 80000,
+    "allEventsPathMinimumBalanceCents": 80000,
+    "minimumBalanceDate": "2026-08-15",
+    "postPurchaseCashCents": 215000,
+    "timingReserveCents": 135000,
+    "timingReserveMarginCents": 55000
+  }
+}

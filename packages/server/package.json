@@ -1,0 +1,36 @@
+{
+  "name": "@ai-fin-os/server",
+  "version": "0.1.0",
+  "description": "AI Fin OS HTTP API — auth, per-user stores, Plaid + statement ingestion, AI agent.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "tsx src/main.ts",
+    "test": "vitest run",
+    "backup": "tsx src/cli/backup.ts"
+  },
+  "dependencies": {
+    "@ai-fin-os/core": "workspace:*",
+    "@anthropic-ai/sdk": "^0.115.0",
+    "@fastify/rate-limit": "^11.2.0",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.11.2",
+    "plaid": "^45.0.0",
+    "unpdf": "^1.8.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "tsx": "^4.23.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

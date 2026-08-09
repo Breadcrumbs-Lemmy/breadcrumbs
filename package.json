@@ -1,0 +1,24 @@
+{
+  "name": "ai-finance-operating-system",
+  "version": "0.1.0",
+  "description": "AI Fin OS (Breadcrumbs) — a personal-finance operating system.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @ai-fin-os/server dev",
+    "dev:web": "pnpm --filter @ai-fin-os/web dev",
+    "build": "pnpm run build:api && pnpm run build:web",
+    "build:api": "pnpm --filter @ai-fin-os/core build && pnpm --filter @ai-fin-os/server build",
+    "build:web": "pnpm --filter @ai-fin-os/web build",
+    "test": "pnpm --filter @ai-fin-os/core test && pnpm --filter @ai-fin-os/server test",
+    "test:api": "pnpm --filter @ai-fin-os/core test && pnpm --filter @ai-fin-os/server test",
+    "backup": "pnpm --filter @ai-fin-os/server backup",
+    "backup:list": "pnpm --filter @ai-fin-os/server backup list",
+    "backup:restore": "pnpm --filter @ai-fin-os/server backup restore"
+  }
+}

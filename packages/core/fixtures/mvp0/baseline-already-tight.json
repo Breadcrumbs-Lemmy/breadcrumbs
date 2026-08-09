@@ -1,0 +1,134 @@
+{
+  "id": "baseline_already_tight",
+  "description": "A same-day required insurance bill already leaves the baseline below the cash buffer; the planned purchase lowers that existing low point without creating a negative required balance.",
+  "input": {
+    "requestId": "fixture_baseline_already_tight",
+    "plannedPurchaseId": "purchase_work_bag",
+    "snapshot": {
+      "asOfDate": "2026-08-03",
+      "timezone": "America/Chicago",
+      "currency": "USD",
+      "config": {
+        "horizonDays": 30,
+        "minimumCashBufferCents": 25000,
+        "staleBalanceHours": 72,
+        "staleManualBalanceDays": 7,
+        "reliableIncomeConfidence": 0.8
+      },
+      "coverage": {
+        "balancesDeclaredComplete": true,
+        "incomeDeclaredCompleteThroughDate": "2026-09-02",
+        "obligationsDeclaredCompleteThroughDate": "2026-09-02",
+        "transactionsCompleteFromDate": "2026-08-01",
+        "userConfirmedNoOtherRequiredObligations": true
+      },
+      "accounts": [
+        {
+          "id": "account_checking",
+          "displayName": "Everyday checking",
+          "type": "checking",
+          "role": "spendable_cash",
+          "currency": "USD",
+          "currentBalanceCents": 80000,
+          "availableBalanceCents": 80000,
+          "includeInForecast": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "source": "fixture"
+        }
+      ],
+      "transactions": [],
+      "incomeSources": [],
+      "recurringObligations": [
+        {
+          "id": "obligation_car_insurance",
+          "label": "Car insurance",
+          "amountCents": 60000,
+          "cadence": {
+            "kind": "monthly",
+            "dayOfMonth": 3
+          },
+          "nextDueDate": "2026-08-03",
+          "category": "insurance",
+          "required": true,
+          "importance": "required",
+          "autopay": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ],
+      "goals": [],
+      "plannedPurchases": [
+        {
+          "id": "purchase_work_bag",
+          "label": "Work bag",
+          "amountCents": 10000,
+          "purchaseDate": "2026-08-03",
+          "category": "work",
+          "necessity": "discretionary",
+          "deferrable": true,
+          "active": true,
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-08-03",
+            "source": "fixture",
+            "warnings": []
+          },
+          "uncertainty": {
+            "confidence": 1,
+            "isEstimated": false
+          },
+          "source": "fixture",
+          "currency": "USD"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "level": "TIGHT",
+    "reasonCodes": [
+      "BUFFER_BELOW_MINIMUM",
+      "BASELINE_ALREADY_TIGHT"
+    ],
+    "targetReasonCode": "BASELINE_ALREADY_TIGHT",
+    "targetReasonParameters": {
+      "baselineMinimumBalanceCents": 20000,
+      "baselineMinimumBalanceDate": "2026-08-03",
+      "baselineBufferMarginCents": -5000,
+      "purchaseImpactOnMinimumCents": 10000,
+      "minimumCashBufferCents": 25000
+    },
+    "targetRelatedEntityIds": [],
+    "requiredPathMinimumBalanceCents": 10000,
+    "requiredPathMinimumBalanceDate": "2026-08-03",
+    "protectedPathMinimumBalanceCents": 10000,
+    "protectedPathMinimumBalanceDate": "2026-08-03",
+    "allEventsPathMinimumBalanceCents": 10000,
+    "allEventsPathMinimumBalanceDate": "2026-08-03",
+    "postPurchaseCashCents": 10000,
+    "timingReserveCents": 0,
+    "timingReserveMarginCents": -15000,
+    "purchaseImpactOnMinimumCents": 10000,
+    "boundaries": [
+      "READ_ONLY_DECISION_SUPPORT",
+      "NOT_PERSONALIZED_FINANCIAL_ADVICE",
+      "NO_ACCOUNT_WRITES",
+      "DETERMINISTIC_CALCULATION"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+/* Self-hosted webfonts (vendored by @fontsource, bundled by Vite).
+ *
+ * These are the fonts the token layer has always named but never loaded — the
+ * app was silently falling back to the system UI font, which is the single
+ * biggest reason the interface read as "basic". Self-hosting (rather than a
+ * Google Fonts <link>) keeps the app's offline-first promise: no runtime call
+ * to a third-party CDN, nothing to block behind a network the user may not
+ * have.
+ *
+ *   Fraunces Variable  — the brand/display voice. A soft, warm, high-contrast
+ *                        serif with optical sizing; it makes headlines and the
+ *                        wordmark feel typeset rather than defaulted.
+ *   Inter Variable     — interface + money. Excellent tabular figures so
+ *                        columns of currency align on the decimal.
+ *   IBM Plex Mono      — the occasional code/keyboard hint.
+ */
+@import "@fontsource-variable/fraunces/full.css";
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";

@@ -1,0 +1,1272 @@
+@import "./tokens.css";
+@import "./fonts.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--surface-base);
+    color: var(--text-primary);
+  }
+
+  /* One focus treatment everywhere. Visible, not decorative. */
+  :focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  button {
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      opacity var(--dur-fast) var(--ease-out);
+  }
+
+  /* Press feedback. Small enough to feel physical, not bouncy. */
+  button:active:not(:disabled) {
+    transform: scale(0.985);
+  }
+}
+
+@layer components {
+  /* Category and total bars grow from zero on mount. The animation is the only
+     one in the product that carries meaning: it reads as "filling up". */
+  .bar-fill {
+    transform-origin: left center;
+    animation: bar-grow var(--dur-slow) var(--ease-out) both;
+  }
+
+  @keyframes bar-grow {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  /* Content entering after a period or filter change. Short, no vertical
+     movement — a screen that slides on every tap gets tiring fast. */
+  .fade-in {
+    animation: fade-in var(--dur-base) var(--ease-out) both;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Popovers and menus: a small scale + rise from the trigger edge, so they
+     read as emerging from the control rather than blinking into existence. */
+  .pop-in {
+    transform-origin: top left;
+    animation: pop-in var(--dur-fast) var(--ease-spring) both;
+  }
+
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* One field treatment for text inputs and selects, so a mapping form of
+     mixed control types reads as one form rather than a browser default
+     sampler. */
+  .input {
+    width: 100%;
+    min-height: 38px;
+    padding: 0 0.75rem;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+  }
+
+  .input:hover:not(:disabled) {
+    border-color: var(--border-strong);
+  }
+
+  /* Selects render their popup with the OS palette; naming the scheme keeps a
+     dark form from opening a white menu. */
+  select.input {
+    color-scheme: light dark;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-tertiary) 50%),
+      linear-gradient(135deg, var(--text-tertiary) 50%, transparent 50%);
+    background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2rem;
+  }
+}
+
+@layer components {
+  /* The assistant composer is sticky over the fixed ambient background (glows,
+     grain, neural net) that shows through every screen. A flat opaque fill —
+     what this replaces — stamped a hard, darker rectangle onto that background,
+     visible as a "black box" around the chat input. Instead, blur only what
+     scrolls *behind* the input, so a long thread's text is masked as it passes
+     under the composer while the smooth ambient it rests on is left effectively
+     unchanged — no box, whether the thread is empty or full. The textarea and
+     Ask button keep their own solid fills, so the controls stay crisp. */
+  .composer-dock {
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  /* ===================================================================
+     Ambient background — see components/Ambient.tsx
+     Two soft glows + a paper grain that give the base colour depth. The
+     dark theme's third glow drifts slowly into an aurora.
+     =================================================================== */
+  .app-ambient {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  /* Neural net — a drifting graph of nodes and lines with travelling lights
+     fired by the cursor (components/NeuralPulses.tsx). One canvas draws both the
+     quiet background network and the sparks that ride its edges, so a pulse
+     always travels a line you can see. Sits one layer above the ambient glows
+     (-8 vs -10) and below all content. The canvas paints its own alphas (from
+     the --net-* tokens), so no layer opacity here; the listener is on window,
+     so pointer-events stay off and clicks fall straight through to the app. */
+  .app-pulse {
+    position: fixed;
+    inset: 0;
+    z-index: -8;
+    pointer-events: none;
+  }
+
+  .app-ambient__glow {
+    position: absolute;
+    inset: -25%;
+    background:
+      radial-gradient(38% 40% at 82% 14%, var(--ambient-glow-a), transparent 68%),
+      radial-gradient(42% 44% at 12% 86%, var(--ambient-glow-b), transparent 70%),
+      radial-gradient(34% 38% at 66% 80%, var(--ambient-glow-c), transparent 70%);
+    will-change: transform;
+  }
+
+  .app-ambient__grain {
+    position: absolute;
+    inset: 0;
+    opacity: var(--grain-opacity);
+    mix-blend-mode: soft-light;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
+  }
+
+  /* Aurora drift — dark theme only, so the light theme stays perfectly calm.
+     Both dark selectors (explicit + system) are covered, mirroring tokens.css. */
+  :root[data-theme="dark"] .app-ambient__glow {
+    animation: aurora-drift 28s var(--ease-in-out) infinite alternate;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]):not([data-theme="dark"]) .app-ambient__glow {
+      animation: aurora-drift 28s var(--ease-in-out) infinite alternate;
+    }
+  }
+
+  @keyframes aurora-drift {
+    from {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+      transform: translate3d(3%, -2.5%, 0) scale(1.08);
+    }
+  }
+
+  /* ===================================================================
+     Logo — see components/Logo.tsx
+     The mark is a lowercase "b" stamped into a coin. It mints itself: the
+     face fades up, the rim draws closed, the stem strokes down, the bowl
+     sweeps shut, and (hero only) a dropped crumb pops beside it and pulses
+     out like "you are here". On hover the coin spills more coins that fall
+     and fade. Non-animated logos skip .logo-animated and render fully at
+     rest; everything collapses to its finished state under reduced motion
+     via the global rule in tokens.css.
+     =================================================================== */
+  .logo-holder {
+    position: relative;
+    display: inline-flex;
+    line-height: 0;
+  }
+  /* Positioning context for the full-lockup coin-spill overlay (below), so it
+     can span the mark + wordmark rather than just the mark. */
+  .logo-lockup {
+    position: relative;
+  }
+
+  /* The coin: its face fades up and its rim draws closed before the "b"
+     lands, so the mark reads as a coin being minted. */
+  .logo-mark.logo-animated .logo-coin-face {
+    opacity: 0;
+    animation: fade-in var(--dur-slow) var(--ease-out) 0.02s forwards;
+  }
+  .logo-mark.logo-animated .logo-coin-ring {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: logo-draw 0.55s var(--ease-out) 0.04s forwards;
+  }
+  .logo-mark.logo-animated .logo-stem {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: logo-draw 0.42s var(--ease-out) 0.44s forwards;
+  }
+  .logo-mark.logo-animated .logo-bowl {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: logo-draw 0.5s var(--ease-out) 0.7s forwards;
+  }
+  /* Once the "b" has finished drawing (the bowl closes at ~1.2s), the whole
+     minted coin does a couple of turns on its vertical axis and settles
+     face-front — a struck coin spun on a table. 720° lands it exactly where it
+     began, and ease-out sheds the momentum so it comes to rest rather than
+     stopping dead. The parent .logo-holder carries the perspective so the spin
+     reads as a real disc turning edge-on, not a flat squash. Collapses to its
+     final (identity) frame under reduced motion via the global rule. */
+  .logo-mark.logo-animated {
+    transform-origin: 50% 50%;
+    animation: logo-coin-spin 0.95s var(--ease-out) 1.2s both;
+  }
+  .logo-mark.logo-animated .logo-crumb {
+    transform-box: fill-box;
+    transform-origin: center;
+    transform: scale(0);
+    /* Held invisible through the spin, then pops once the coin settles. */
+    animation: logo-pop 0.42s var(--ease-spring) 2.3s forwards;
+  }
+  .logo-mark.logo-animated .logo-crumb-ping {
+    transform-box: fill-box;
+    transform-origin: center;
+    opacity: 0;
+    animation: logo-ping 2.8s var(--ease-out) 2.55s infinite;
+  }
+
+  @keyframes logo-draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes logo-coin-spin {
+    from {
+      transform: perspective(320px) rotateY(0deg);
+    }
+    to {
+      transform: perspective(320px) rotateY(720deg);
+    }
+  }
+  @keyframes logo-pop {
+    0% {
+      transform: scale(0);
+    }
+    70% {
+      transform: scale(1.16);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes logo-ping {
+    0% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    70%,
+    100% {
+      opacity: 0;
+      transform: scale(3);
+    }
+  }
+
+  /* Coins spilling from the coin on hover. Six struck-gold tokens that fall AND
+     tumble — the flip is what sells them as metal discs rather than drops. The
+     overlay carries a `perspective` so each coin's rotateX foreshortens it to a
+     thin edge-on ellipse at the halfway point and back. Everything is a fraction
+     of the mark so it scales with any logo size; pointer-transparent so the mark
+     stays clickable; invisible at rest so nothing shows until hover. */
+  .logo-coindrop {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    perspective: 200px;
+    perspective-origin: 50% 42%;
+  }
+  .logo-drop {
+    position: absolute;
+    top: 44%;
+    left: 50%;
+    --sz: 26%;
+    --flip: 2.4;
+    width: var(--sz);
+    height: var(--sz);
+    border-radius: 50%;
+    opacity: 0;
+    transform-origin: 50% 50%;
+    will-change: transform, opacity;
+    /* Struck gold: a bright warm catchlight top-left ramping down to a dark
+       bronze edge. That highlight-to-shadow contrast is what reads as a rounded,
+       lit metal disc even at ~8px on screen. */
+    background: radial-gradient(
+      circle at 36% 30%,
+      #fff7db 0%,
+      #f7dd95 20%,
+      #e6ac52 48%,
+      #bd7a3b 74%,
+      #6f4218 100%
+    );
+    box-shadow:
+      inset 0 0.5px 0.6px rgba(255, 247, 220, 0.75),
+      inset 0 -1px 1.4px rgba(74, 44, 16, 0.6),
+      inset 0 0 0 0.6px rgba(120, 72, 24, 0.5),
+      0 1px 2px rgba(20, 16, 10, 0.32);
+  }
+  /* The raised inner field of the strike, a hair in from the milled rim. */
+  .logo-drop::before {
+    content: "";
+    position: absolute;
+    inset: 16%;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 42% 34%,
+      rgba(255, 246, 214, 0.55),
+      rgba(150, 96, 30, 0.04) 72%
+    );
+    box-shadow: inset 0 0 0 0.5px rgba(110, 66, 20, 0.42);
+  }
+  /* A hard specular glint over the top-left, fixed to the face so it swings
+     round with the coin as it tumbles. */
+  .logo-drop::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: linear-gradient(
+      122deg,
+      rgba(255, 255, 255, 0.7) 0%,
+      rgba(255, 255, 255, 0.12) 26%,
+      rgba(255, 255, 255, 0) 44%
+    );
+  }
+  /* Each coin's start column (left/top), size (--sz), tumble count (--flip, sign
+     = direction), horizontal drift (--dx), Z wobble (--spin), fall distance
+     (--fall × own height), delay and duration are set INLINE by the component
+     (see makeCoins in Logo.tsx), freshly randomised on every hover — so no two
+     spills fall the same way, and the count isn't capped at a hand-tuned six. */
+
+  /* Full-lockup spill: the overlay spans the whole "breadcrumbs" wordmark, not
+     just the mark, so coins drop from all along the word. Coins are sized off
+     the box HEIGHT (width:auto + square aspect-ratio) so they don't balloon in
+     the wide box; the inline `left` spreads them across the full width. */
+  .logo-coindrop--wide .logo-drop {
+    width: auto;
+    aspect-ratio: 1 / 1;
+  }
+
+  /* Hovering the mark itself, or anywhere on the full lockup, starts the
+     spill. Ease-in timing gives the coins gravity. */
+  .logo-holder:hover .logo-drop,
+  .logo-lockup:hover .logo-drop {
+    animation: logo-coin-fall var(--dur) cubic-bezier(0.5, 0.05, 0.8, 0.25) var(--delay) infinite;
+  }
+
+  /* Fall + tumble. rotateX runs from 0 through (--flip) full turns, so under the
+     overlay's perspective the disc foreshortens to a thin ellipse each half-turn
+     — a coin flipping end over end. rotateZ adds a gentle in-plane wobble. */
+  @keyframes logo-coin-fall {
+    0% {
+      opacity: 0;
+      transform: translate(0, 0) rotateX(0deg) rotateZ(0deg) scale(0.55);
+    }
+    12% {
+      opacity: 1;
+      transform: translate(calc(var(--dx) * 32%), 18%)
+        rotateX(calc(var(--flip) * 0.09turn)) rotateZ(calc(var(--spin) * 0.18)) scale(1);
+    }
+    70% {
+      opacity: 0.95;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(calc(var(--dx) * 118%), calc(var(--fall) * 100%))
+        rotateX(calc(var(--flip) * 1turn)) rotateZ(var(--spin)) scale(0.8);
+    }
+  }
+
+  /* ===================================================================
+     Coin glitter — a comet of light laps the mark's rim at random intervals
+     (JS-timed in LogoMark, NOT hover). A round, bright head leads a tail that
+     shrinks and dims behind it: six gold dots whose radius and opacity taper
+     head-to-tail (see GLINT_DOTS in Logo.tsx), orbiting the coin centre as one
+     rigid group and glowing just enough that their halos fuse into a single
+     streak. Gold in every theme — the coin face is the accent, the light on it
+     is metal. The group is mounted only for the ~1.5s of a lap, so each burst
+     runs fresh; it collapses to nothing under reduced motion (the JS never
+     mounts it, and the global rule in tokens.css resolves the animation to its
+     invisible final frame).
+     =================================================================== */
+  /* The comet is a fixed constellation of tapered dots that rotates as a whole
+     about the coin centre. transform-box: view-box is load-bearing: it makes
+     transform-origin resolve against the 40×40 viewBox origin (0,0), so
+     "20px 20px" lands on the coin centre — the default fill-box would pivot
+     about the group's own bounding box and send the comet orbiting off-centre.
+     The stacked drop-shadows give each dot a soft gold halo; where dots sit
+     close (near the head) the halos merge into a continuous trail. */
+  .logo-glint-comet {
+    transform-box: view-box;
+    transform-origin: 20px 20px;
+    will-change: transform, opacity;
+    filter: drop-shadow(0 0 0.8px rgba(255, 246, 207, 0.95))
+      drop-shadow(0 0 1.9px rgba(247, 221, 149, 0.7));
+    animation: logo-comet-lap 1.5s linear both;
+  }
+  /* One clean clockwise lap at constant angular speed — linear, because a
+     uniform rim shouldn't appear to speed up or coast. Fades in as it sets off
+     and out as it returns to the top; the 100% frame is fully invisible, so the
+     reduced-motion collapse leaves nothing behind. */
+  @keyframes logo-comet-lap {
+    0% {
+      opacity: 0;
+      transform: rotate(0deg);
+    }
+    8% {
+      opacity: 1;
+    }
+    88% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: rotate(360deg);
+    }
+  }
+  /* Glitter: each rim sparkle scales up bright then winks out, staggered
+     clockwise (inline --sd delay) so they trail the sweeping glint. */
+  .logo-spark {
+    transform-box: fill-box;
+    transform-origin: center;
+    opacity: 0;
+    transform: scale(0);
+    filter: drop-shadow(0 0 1px rgba(255, 247, 220, 0.9));
+    animation: logo-spark-twinkle 0.6s var(--ease-out) var(--sd, 0s) both;
+  }
+  @keyframes logo-spark-twinkle {
+    0% {
+      opacity: 0;
+      transform: scale(0);
+    }
+    45% {
+      opacity: 1;
+      transform: scale(1.25);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.2);
+    }
+  }
+
+  /* ===================================================================
+     Bank card — see components/BankCard.tsx
+     A physical-feeling card for each account. It turns on its vertical axis to
+     show its back — the masked account details — when hovered, focused, or
+     tapped (the `.is-flipped` toggle carries touch, where there is no hover).
+     The front and back are two faces of one disc via preserve-3d + hidden
+     backfaces. Under reduced motion the turn is instant (the global rule zeroes
+     the duration), so the information is still reachable, just without the
+     rotation.
+     =================================================================== */
+  .bankcard {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1.586 / 1;
+    /* Depth so the turn reads as a real disc rotating, not a flat squash. */
+    perspective: 1400px;
+    border-radius: var(--radius-lg);
+  }
+  .bankcard__inner {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    transition: transform 0.62s var(--ease-out);
+    will-change: transform;
+  }
+  /* Flip on the card's own hover/focus, on an ancestor marked .bankcard-flip
+     (so a wrapping "open account" button turns the card as a whole), or when
+     the React `.is-flipped` toggle is set (keyboard / touch). */
+  .bankcard:hover .bankcard__inner,
+  .bankcard:focus-visible .bankcard__inner,
+  .bankcard.is-flipped .bankcard__inner,
+  .bankcard-flip:hover .bankcard__inner,
+  .bankcard-flip:focus-visible .bankcard__inner {
+    transform: rotateY(180deg);
+  }
+  .bankcard__face {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    /* Explicit radius, not `inherit`: the parent .bankcard__inner has no radius
+       (only the non-clipping .bankcard root does), so `inherit` resolved to 0 —
+       which is why the faces read as sharp-cornered rectangles. Rounding the
+       face (and thus its overflow clip) is a big part of "less square". */
+    border-radius: var(--radius-lg);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    /* Depth off the page plus a hairline milled bevel — a bright top edge and a
+       faint full-perimeter ring — so the card catches light like a real pressed
+       card instead of reading as a flat rectangle. The faces are dark surfaces
+       in both themes, so these white insets are safe. */
+    box-shadow:
+      var(--shadow-md),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    /* Cards are their own dark surface regardless of theme, so their light text
+       is set locally rather than inheriting the page ink. */
+    color: rgba(255, 255, 255, 0.92);
+  }
+  .bankcard__back {
+    transform: rotateY(180deg);
+  }
+  /* Reflective light-sweep: a bright specular streak that crosses the face
+     LEFT→RIGHT every ~8s ("from time to time", not a constant shimmer), as
+     though a moving light glinted off the card. It's a gradient on the ::before
+     overlay, moved by shifting background-position (compositor-friendly, no
+     layout); the face's own overflow:hidden + border-radius clip it to the
+     rounded card, and pointer-events:none keeps it click-through. z-index rides
+     it over the card content and the static gloss. Under reduced motion the
+     global rule lands the animation on its final frame (streak parked off-screen
+     right) — a calm card, no frozen band. It lives on .bankcard__face so it
+     hides/turns WITH the face: the front's glint never bleeds onto the back. */
+  .bankcard__face::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      110deg,
+      transparent 34%,
+      rgba(255, 255, 255, 0.06) 43%,
+      rgba(255, 255, 255, 0.18) 47%,
+      rgba(255, 255, 255, 0.42) 50%,
+      rgba(255, 255, 255, 0.18) 53%,
+      rgba(255, 255, 255, 0.06) 57%,
+      transparent 66%
+    );
+    background-size: 220% 100%;
+    background-position: 150% 0;
+    background-repeat: no-repeat;
+    animation: bankcard-sheen 8s var(--ease-in-out) infinite;
+  }
+  @keyframes bankcard-sheen {
+    0% {
+      background-position: -150% 0;
+    }
+    /* Crosses in the first ~1.1s, then parks off the right edge (invisible) for
+       the rest of the cycle so it reads as an occasional reflection. */
+    14%,
+    100% {
+      background-position: 150% 0;
+    }
+  }
+  /* A richer static gloss layered over the face: a soft top-left corner light, a
+     gentle diagonal laminate, and a faint bottom vignette for depth. Sits above
+     the content but below the moving streak. */
+  .bankcard__face::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      radial-gradient(135% 100% at 12% -12%, rgba(255, 255, 255, 0.2), transparent 44%),
+      linear-gradient(125deg, rgba(255, 255, 255, 0.1), transparent 38%),
+      linear-gradient(0deg, rgba(0, 0, 0, 0.3), transparent 30%);
+  }
+  /* The magnetic stripe on the back. */
+  .bankcard__stripe {
+    background: linear-gradient(180deg, #100e0c, #211d18);
+  }
+  /* The EMV chip on the front — a milled gold rounded square. */
+  .bankcard__chip {
+    background: linear-gradient(135deg, #f7dd95 0%, #e6ac52 45%, #bd7a3b 100%);
+    box-shadow: inset 0 0 0 0.5px rgba(110, 66, 20, 0.5);
+  }
+  .bankcard__chip::before {
+    content: "";
+    position: absolute;
+    inset: 22% 18%;
+    border: 0.5px solid rgba(90, 54, 16, 0.55);
+    border-radius: 2px;
+  }
+
+  /* ===================================================================
+     Signature micro-interactions
+     =================================================================== */
+
+  /* A glossy top-light on proportional bars, so a filled bar reads as a
+     physical object catching light rather than a flat rectangle. */
+  .bar-sheen {
+    position: relative;
+  }
+  .bar-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 60%);
+    pointer-events: none;
+  }
+
+  /* Loading placeholders that shimmer rather than sit dead. */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-sunken);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.14),
+      transparent
+    );
+    animation: shimmer 1.5s var(--ease-in-out) infinite;
+  }
+  @keyframes shimmer {
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Screen content settling in on navigation. A short rise + fade, applied via
+     a key change so it replays per route without a router transition library. */
+  .screen-enter {
+    animation: screen-enter var(--dur-base) var(--ease-out) both;
+  }
+  @keyframes screen-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* =====================================================================
+   Theme-switch reveal (View Transitions API)
+   A radial wipe of the new theme out from the toggle. Progressive
+   enhancement: browsers without startViewTransition just swap instantly,
+   and ThemeToggle skips the transition entirely under reduced motion.
+   Declared outside @layer so it reliably overrides the UA default
+   cross-fade on the view-transition pseudo-elements.
+   ===================================================================== */
+::view-transition-old(root) {
+  animation: none;
+}
+::view-transition-new(root) {
+  animation: theme-reveal var(--dur-slow) var(--ease-out);
+}
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0% at var(--vt-x, 50%) var(--vt-y, 0%));
+  }
+  to {
+    clip-path: circle(150% at var(--vt-x, 50%) var(--vt-y, 0%));
+  }
+}
+
+/* =====================================================================
+   Assistant mascot — see components/AssistantMascot.tsx
+   A realistic gold "b" coin anchored in the bottom-right corner, with a
+   little teal "b-guy" living behind it. The coin idly rotates on its
+   vertical axis (rolling left/right to random angles — driven in JS via
+   rAF, so it never translates over content or off-screen), and every so
+   often the guy climbs up, pops his head over the top rim (hands gripping
+   the edge) and floats a chat thought-bubble. The peek is a set of CSS
+   transitions whose resting state (data-peek="down") is the plain face-on
+   coin, so the global reduced-motion collapse — and the JS director, which
+   parks the coin and never schedules a peek under reduced motion — leaves
+   it calm and still.
+   ===================================================================== */
+@layer components {
+  /* Anchored footprint; only the coin button inside is interactive, so the
+     surrounding stage never eats clicks on the page beneath it. One --coin-scale
+     var shrinks the whole assembly (coin + guy + hands + bubble) as a unit on
+     smaller screens; the JS director reads it to convert its viewport-px roll
+     targets into the roller's own (unscaled) coordinate space. */
+  .mascot-root {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 40;
+    pointer-events: none;
+    --coin-scale: 1;
+    transform: scale(var(--coin-scale));
+    transform-origin: bottom right;
+  }
+  @media (max-width: 1023px) {
+    .mascot-root {
+      --coin-scale: 0.9;
+    }
+  }
+  @media (max-width: 639.98px) {
+    .mascot-root {
+      --coin-scale: 0.82;
+    }
+  }
+
+  /* DOCKED layout — phones / cramped screens (matches DOCK_MQ in the component).
+     The coin hangs off the RIGHT edge with only ~1/4 showing (the rest tucked
+     off-screen) so it keeps a tiny footprint on a phone; the director rolls the
+     roller UP and DOWN this edge (up only to ~mid-screen) and the guy peeks out
+     to the LEFT. `top` matches DOCK_HOME_VH so JS and CSS agree on the resting
+     height. Scaling about the right edge keeps the tuck fraction stable.
+     right: -46px → ~46px of the 62px (scaled) coin is off-screen ⇒ ~1/4 shows. */
+  .mascot-root[data-mode="docked"] {
+    right: -46px;
+    bottom: auto;
+    top: 64vh;
+    transform-origin: right center;
+  }
+
+  /* The stage shares one centre between four layers: the guy's head behind
+     the coin (z1), the coin itself (z2), the hands over the front rim (z3)
+     and the thought-bubble (z4). Nothing is clipped, so the head and bubble
+     can rise above the top edge when the guy peeks. */
+  .coin-stage {
+    position: relative;
+    width: 76px;
+    height: 76px;
+  }
+
+  /* The roller carries the whole assembly's horizontal travel. The JS director
+     writes translateX() here when the coin rolls, so the guy (head + hands) and
+     the thought-bubble — all positioned against this element — move with the
+     coin and stay locked behind/around it wherever it rolls to. The coin's own
+     spin/roll rotation lives on .coin-spin, one layer down. */
+  .coin-roller {
+    position: absolute;
+    inset: 0;
+    will-change: transform;
+  }
+
+  /* ---- the coin ---- */
+  .mascot-hit {
+    position: relative;
+    z-index: 2;
+    display: block;
+    padding: 0;
+    border: none;
+    background: none;
+    pointer-events: auto;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mascot-hit:focus-visible {
+    outline: none;
+  }
+  .mascot-hit:focus-visible .coin-persp {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: 50%;
+  }
+
+  /* The perspective root; also the element we scale on hover, since JS owns
+     the transform on .coin-spin every frame and can't share it with CSS. */
+  .coin-persp {
+    display: block;
+    width: 76px;
+    height: 76px;
+    perspective: 620px;
+    transition: transform 150ms var(--ease-out);
+  }
+  .mascot-hit:hover .coin-persp {
+    transform: scale(1.06);
+  }
+  .mascot-hit:active .coin-persp {
+    transform: scale(0.95);
+  }
+
+  /* JS owns this element's transform every frame (spin + roll + lean). It's a
+     real 3D cylinder: the two minted faces are pushed apart along Z and a ring
+     of reeded segments (.coin-edge) bridges them, so a spin shows the metal
+     edge instead of collapsing to a flat line. --coin-h is half the thickness;
+     it must match HALF_T in the component so the rim meets both faces. */
+  .coin-spin {
+    --coin-h: 4px;
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    will-change: transform;
+  }
+  .coin-face {
+    position: absolute;
+    inset: 0;
+    display: block;
+    backface-visibility: hidden;
+  }
+  .coin-face--front {
+    transform: translateZ(var(--coin-h));
+  }
+  .coin-face--back {
+    transform: rotateY(180deg) translateZ(var(--coin-h));
+  }
+  .coin-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 5px 7px rgba(60, 38, 4, 0.34));
+  }
+
+  /* The cylindrical, reeded gold rim. Its segments are positioned in 3D by the
+     component (rotateZ → translateX → rotateY 90°); here we only paint them:
+     a vertical gold gradient (bright band in the middle so the edge catches
+     light) plus a dark inset seam on one side for the milled/knurled look. */
+  .coin-edge {
+    position: absolute;
+    inset: 0;
+    display: block;
+    transform-style: preserve-3d;
+    pointer-events: none;
+  }
+  .coin-edge-seg {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    background: linear-gradient(
+      to bottom,
+      #452d08 0%,
+      #7c4d0f 16%,
+      #d79f3d 40%,
+      #fff2b2 50%,
+      #c78f2f 60%,
+      #7c4d0f 84%,
+      #3c2607 100%
+    );
+    box-shadow: inset -1px 0 0 rgba(80, 50, 8, 0.55);
+    backface-visibility: hidden;
+  }
+
+  /* ---- the little b-guy ---- */
+  /* His head rests centred behind the coin (fully occluded); on a peek it
+     rises above the top rim. */
+  .coin-guy {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    z-index: 1;
+    width: 46px;
+    height: 46px;
+    margin-left: -23px;
+    opacity: 0;
+    transform: translateY(16px);
+    /* This is the resting (tucked-away) state, so this transition is the CLIMB
+       DOWN: he slides back down behind the coin over ~560ms and only fades once
+       he's most of the way there (opacity delayed), so he visibly descends
+       rather than blinking out. The climb UP gets its own timing below. */
+    transition:
+      transform 560ms cubic-bezier(0.4, 0, 0.7, 0.35),
+      opacity 200ms linear 380ms;
+  }
+  .coin-guy .guy-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 2px 3px rgba(12, 40, 32, 0.3));
+  }
+
+  /* Two mittens curling over the front of the top rim. They stay PLANTED on the
+     rim — no transform, ever — so they can't slide up or down through the coin
+     face; the body is what travels. Only their grip (opacity) changes. Resting
+     state = the RELEASE (climb-down): they keep gripping while the body descends
+     and let go last (late, quick fade), so he never blinks off. */
+  .coin-hands {
+    position: absolute;
+    left: 50%;
+    top: -3px;
+    z-index: 3;
+    width: 72px;
+    margin-left: -36px;
+    opacity: 0;
+    transition: opacity 160ms linear 360ms;
+  }
+  .coin-hands .hands-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  /* The chat thought-bubble: an HTML pill (crisp text at any DPI) floating up
+     and to the LEFT of the peeking head, so it grows toward the page centre and
+     never toward the screen's right edge. Anchored by its bottom-right corner.
+     Its bottom clears the top of the fully-peeked head (whose top rises ~30px
+     above the stage, i.e. ~106px above the stage bottom), so the pill sits
+     entirely above the head and coin and never overlaps them; the two trailing
+     dots bridge the small gap down to the head. */
+  .coin-bubble {
+    position: absolute;
+    right: 20px;
+    bottom: 108px;
+    z-index: 4;
+    opacity: 0;
+    transform: translateY(8px) scale(0.7);
+    transform-origin: bottom right;
+    transition:
+      transform 320ms var(--ease-spring),
+      opacity 220ms var(--ease-out);
+  }
+  .bubble-card {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    padding: 7px 12px;
+    border-radius: 14px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 8px 18px rgba(20, 30, 26, 0.18);
+    color: var(--text-primary);
+  }
+  .bubble-chat {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    color: var(--accent);
+  }
+  .bubble-text {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  /* Two trailing "thought" dots leading down from the pill toward the head. */
+  .bubble-dot {
+    position: absolute;
+    border-radius: 50%;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+  }
+  .bubble-dot--1 {
+    width: 9px;
+    height: 9px;
+    right: 10px;
+    bottom: -7px;
+  }
+  .bubble-dot--2 {
+    width: 5px;
+    height: 5px;
+    right: 3px;
+    bottom: -15px;
+  }
+
+  /* ---- the peek ---- (data-peek toggled by the JS director) */
+  /* Each up-state carries its own CLIMB-UP transition (a spring rise with a
+     quick fade-in), so the direction up and the direction down read
+     differently — up springs into view, down is a slower descent (see the base
+     rules above, which own the climb-down timing). */
+  .coin-stage[data-peek="up"] .coin-guy {
+    opacity: 1;
+    transform: translateY(-30px);
+    transition:
+      transform 520ms var(--ease-spring),
+      opacity 200ms var(--ease-out);
+  }
+  .coin-stage[data-peek="up"] .coin-hands {
+    opacity: 1;
+    /* Grip appears quickly as the body starts to rise — no transform, the hands
+       are anchored on the rim and only the body (head) climbs past them. */
+    transition: opacity 180ms var(--ease-out) 40ms;
+  }
+  .coin-stage[data-peek="up"] .coin-bubble {
+    opacity: 1;
+    transform: none;
+    transition-delay: 160ms, 160ms;
+  }
+
+  /* ---- side-peek ---- (docked coin, OR a corner coin tucked off-edge by content) */
+  /* On a docked (edge-hung) coin — or a corner coin tucked partly off the right
+     edge because content filled its home (data-occluded) — the guy can't climb
+     over the top; he climbs out to the LEFT around the coin. Rest state is tucked
+     behind the coin toward its centre; the peek slides him out to the left. The
+     base rule owns the CLIMB-DOWN (slide back behind + late fade); the up rule
+     springs him out. Both modes share this geometry. */
+  .mascot-root[data-mode="docked"] .coin-guy,
+  .mascot-root[data-occluded="true"] .coin-guy {
+    top: 50%;
+    left: 0;
+    margin-top: -23px;
+    margin-left: 8px;
+    transform: translateX(16px);
+    transition:
+      transform 560ms cubic-bezier(0.4, 0, 0.7, 0.35),
+      opacity 200ms linear 380ms;
+  }
+  /* With most of the coin tucked off-screen, the guy pops out further to the LEFT
+     so his whole head clears the thin visible sliver and reads as a real peek. */
+  .mascot-root[data-mode="docked"] .coin-stage[data-peek="up"] .coin-guy,
+  .mascot-root[data-occluded="true"] .coin-stage[data-peek="up"] .coin-guy {
+    opacity: 1;
+    transform: translateX(-44px);
+    transition:
+      transform 520ms var(--ease-spring),
+      opacity 200ms var(--ease-out);
+  }
+  /* The mittens grip the TOP rim; on a side-peek the top rim is off-screen, so
+     the side-peek is head + bubble only. */
+  .mascot-root[data-mode="docked"] .coin-hands,
+  .mascot-root[data-occluded="true"] .coin-hands {
+    display: none;
+  }
+  /* Bubble floats up and to the left of the side-peeked head, staying clear of
+     the off-screen right edge (grows toward the page, anchored bottom-right). */
+  .mascot-root[data-mode="docked"] .coin-bubble,
+  .mascot-root[data-occluded="true"] .coin-bubble {
+    right: 64px;
+    bottom: 72px;
+    transform-origin: bottom right;
+  }
+
+  /* ---- "always visible" (calm) ---- (data-guy toggled by the JS director) */
+  /* The character preference "always" holds the guy (and bubble) over the rim
+     the whole time. The director sets data-peek="up" statically and marks the
+     root data-guy="static" so the climb-up/down transitions don't run — he is
+     simply present, not animating in. The peek end-state rules above still
+     supply his pose; only the movement is removed. */
+  /* The guy's side-peek pose (docked / occluded) is set at specificity (0,5,0),
+     so a plain `.mascot-root[data-guy="static"] .coin-guy` (0,3,0) can't turn its
+     transition off — the climb would still animate (and can even freeze mid-slide
+     if the tab is backgrounded as it starts). Match that (0,5,0) weight via the
+     always-"up" static pose so `transition: none` wins by source order in every
+     mode. Hands and bubble have no (0,5,0) rule, so a plain selector suffices. */
+  .mascot-root[data-guy="static"] .coin-stage[data-peek="up"] .coin-guy,
+  .mascot-root[data-guy="static"] .coin-hands,
+  .mascot-root[data-guy="static"] .coin-bubble {
+    transition: none;
+  }
+
+  /* ---- the popover ---- */
+  .mascot-panel {
+    position: fixed;
+    right: 18px;
+    bottom: 116px;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    width: min(360px, calc(100vw - 32px));
+    max-height: min(72vh, 560px);
+    padding: 0;
+    overflow: hidden;
+    transform-origin: bottom right;
+    animation: mascot-panel-in 240ms var(--ease-out) both;
+  }
+  @keyframes mascot-panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .mascot-panel__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 12px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .mascot-panel__badge {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    color: var(--accent);
+  }
+  .mascot-panel__badge .coin-svg {
+    width: 30px;
+    height: 30px;
+    filter: none;
+  }
+  .mascot-panel__close {
+    flex: none;
+    margin-left: auto;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    color: var(--text-tertiary);
+    transition: color 140ms var(--ease-out), background-color 140ms var(--ease-out);
+  }
+  .mascot-panel__close:hover {
+    color: var(--text-primary);
+    background: var(--surface-sunken);
+  }
+
+  .mascot-panel__thread {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 12px;
+    overflow-y: auto;
+  }
+  .mascot-panel__intro {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .mascot-panel__body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 12px;
+  }
+
+  .mascot-msg {
+    max-width: 88%;
+    padding: 7px 11px;
+    border-radius: 13px;
+  }
+  .mascot-msg--user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: var(--text-inverse);
+    border-bottom-right-radius: 4px;
+  }
+  .mascot-msg--assistant {
+    align-self: flex-start;
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+    border-bottom-left-radius: 4px;
+  }
+  .mascot-msg--declined,
+  .mascot-msg--error {
+    color: var(--text-secondary);
+  }
+
+  .mascot-typing {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+  }
+  .mascot-typing span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    animation: mascot-typing 1s var(--ease-in-out) infinite;
+  }
+  .mascot-typing span:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .mascot-typing span:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  @keyframes mascot-typing {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: translateY(0);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(-3px);
+    }
+  }
+
+  .mascot-panel__form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .mascot-panel__form .input {
+    flex: 1;
+    min-width: 0;
+  }
+  .mascot-panel__send {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: var(--text-inverse);
+    font-size: 15px;
+    line-height: 1;
+    transition: background-color 140ms var(--ease-out), opacity 140ms var(--ease-out);
+  }
+  .mascot-panel__send:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .mascot-panel__send:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .mascot-panel__full,
+  .mascot-panel__link {
+    padding: 9px 12px;
+    color: var(--accent);
+    font-size: 12.5px;
+    text-align: left;
+    border-top: 1px solid var(--border-subtle);
+    transition: color 140ms var(--ease-out);
+  }
+  .mascot-panel__link {
+    align-self: flex-start;
+    border-top: none;
+    padding: 0;
+  }
+  .mascot-panel__full:hover,
+  .mascot-panel__link:hover {
+    color: var(--accent-hover);
+  }
+}
