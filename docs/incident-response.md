@@ -15,7 +15,7 @@ current as the deployment changes.
 | --- | --- | --- |
 | Security owner (incident lead) | `Lemuel Mutah` | `lemuelmutah@gmail.com` |
 | Engineering on-call | `Lemuel Mutah` | `lemuelmutah@gmail.com` |
-| Plaid support / incident reporting | Plaid | Plaid Dashboard → Support; per your Plaid agreement's incident-reporting terms |
+| Plaid support / incident reporting | Plaid | Plaid Dashboard → Support; `privacy@plaid.com` for data-protection matters; binding window per your Plaid production agreement (see step 5) |
 | Anthropic support | Anthropic | account/support channel |
 
 Primary reporting channel for anyone who spots something: `email (lemuelmutah@gmail.com)`.
@@ -64,9 +64,15 @@ being actively exploited. **When in doubt, treat it as an incident and triage.**
 ### 5. Notify
 - **Users:** notify affected users of what happened, what data was involved, and
   what they should do, within the applicable timeframe.
-- **Plaid:** report per Plaid's incident-reporting requirements (a security
-  incident affecting Plaid-sourced data is reportable — check your Plaid
-  agreement for the required window and channel).
+- **Plaid:** a security incident affecting Plaid-sourced data is reportable. The
+  binding window and channel are in your **Plaid production Developer Agreement /
+  Data Protection terms** (Plaid Dashboard → Legal/Agreements) — confirm the exact
+  deadline there, as it is not published on Plaid's public pages. **Operator
+  default until confirmed:** notify Plaid without undue delay and no later than
+  **72 hours** after confirming a reportable incident (a self-imposed target, not
+  a quoted Plaid term; use the shorter figure if your agreement specifies one).
+  Channels: Plaid Dashboard → Support, and `privacy@plaid.com` for data-protection
+  matters (escalate via your Plaid account contact if you have one).
 - **Others:** notify any additional parties required by contract or law.
 - Route all external notifications through the incident lead so messaging is
   consistent and accurate — do not over- or under-state scope.
