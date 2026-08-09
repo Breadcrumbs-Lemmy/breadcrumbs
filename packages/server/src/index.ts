@@ -24,6 +24,7 @@ export {
   getTransactions,
 } from "./plaid/adapter";
 export { createPlaidClient } from "./plaid/client";
+export { FieldCipher, FieldCipherKeyError, loadFieldCipher } from "./crypto/field-cipher";
 export { loadPlaidConfig, PlaidConfigError } from "./plaid/config";
 export { PlaidAdapterError } from "./plaid/errors";
 export { FilePlaidTokenStore, InMemoryPlaidTokenStore } from "./plaid/token-store";

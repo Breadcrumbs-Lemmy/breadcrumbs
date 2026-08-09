@@ -9,14 +9,16 @@
  * (persistence), and one user's connection is never returned to another
  * (isolation). It was only ever checked by hand — these pin it.
  */
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { OWNER_USER_ID } from "../src/auth/types";
+import { FieldCipher } from "../src/crypto/field-cipher";
 import { FilePlaidTokenStore } from "../src/plaid/token-store";
 
 describe("FilePlaidTokenStore", () => {
@@ -110,5 +112,57 @@ describe("FilePlaidTokenStore", () => {
 
     const stats = await stat(filePath);
     expect(stats.mode & 0o777).toBe(0o600);
+  });
+
+  describe("encryption at rest", () => {
+    const cipher = new FieldCipher(randomBytes(32));
+
+    it("stores the access token as ciphertext on disk but returns it plaintext", async () => {
+      const writer = new FilePlaidTokenStore(filePath, cipher);
+      const saved = await writer.save({ userId: "usr_alice", itemId: "item-a", accessToken: "access-alice-secret" });
+      // The caller still gets the usable plaintext token.
+      expect(saved.accessToken).toBe("access-alice-secret");
+
+      // The plaintext must never touch the file.
+      const onDisk = await readFile(filePath, "utf8");
+      expect(onDisk).not.toContain("access-alice-secret");
+      expect(onDisk).toContain("bcenc1:");
+
+      // A fresh instance with the same key reads it back intact.
+      const reader = new FilePlaidTokenStore(filePath, cipher);
+      const loaded = await reader.get(saved.connectionId);
+      expect(loaded?.accessToken).toBe("access-alice-secret");
+    });
+
+    it("cannot read tokens written under a different key", async () => {
+      const saved = await new FilePlaidTokenStore(filePath, cipher).save({
+        userId: "usr_alice",
+        itemId: "item-a",
+        accessToken: "tok",
+      });
+      const wrongKey = new FilePlaidTokenStore(filePath, new FieldCipher(randomBytes(32)));
+      await expect(wrongKey.get(saved.connectionId)).rejects.toThrow();
+    });
+
+    it("reads legacy plaintext records and migrates them to ciphertext on next write", async () => {
+      // Simulate a record written before encryption was enabled.
+      const legacy = await new FilePlaidTokenStore(filePath).save({
+        userId: "usr_alice",
+        itemId: "item-a",
+        accessToken: "legacy-plain",
+      });
+      expect(await readFile(filePath, "utf8")).toContain("legacy-plain");
+
+      // Turning encryption on: the old token is still readable (passthrough)...
+      const encrypted = new FilePlaidTokenStore(filePath, cipher);
+      expect((await encrypted.get(legacy.connectionId))?.accessToken).toBe("legacy-plain");
+
+      // ...and a write (markSynced) re-encrypts it in place.
+      await encrypted.markSynced(legacy.connectionId, "2026-08-09T00:00:00.000Z");
+      const onDisk = await readFile(filePath, "utf8");
+      expect(onDisk).not.toContain("legacy-plain");
+      expect(onDisk).toContain("bcenc1:");
+      expect((await encrypted.get(legacy.connectionId))?.accessToken).toBe("legacy-plain");
+    });
   });
 });

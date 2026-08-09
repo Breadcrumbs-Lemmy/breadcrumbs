@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { createPlaidClient } from "../plaid/client";
 import type { PlaidConfig } from "../plaid/config";
+import { loadFieldCipher } from "../crypto/field-cipher";
 import { FilePlaidTokenStore, InMemoryPlaidTokenStore } from "../plaid/token-store";
 import type { PlaidClientLike } from "../plaid/adapter";
 import type { PlaidTokenStore } from "../plaid/token-store";
@@ -138,11 +139,22 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
     // Persist bank connections to disk for a real server so a restart does not
     // un-link every user's bank; an ephemeral (test-shaped) server keeps them in
     // RAM, matching how its identity and imports stay off the real data dir.
+    // Encrypt Plaid access tokens at rest when a key is configured. Missing key
+    // on a real (persistent) server = tokens stored plaintext behind file perms:
+    // warn loudly, since a production box handling real banks should set one.
+    const fieldCipher = loadFieldCipher(process.env);
+    if (!ephemeral && !fieldCipher) {
+      console.warn(
+        "[plaid] WARNING: BREADCRUMBS_ENCRYPTION_KEY is not set — Plaid access tokens " +
+          "are stored WITHOUT application-level encryption (file permissions only). " +
+          "Set a 32-byte key (openssl rand -base64 32) to encrypt them at rest.",
+      );
+    }
     const plaidTokenStore =
       options.plaidTokenStore ??
       (ephemeral
         ? new InMemoryPlaidTokenStore()
-        : new FilePlaidTokenStore(join(defaultLocalDataDir(), "plaid", "connections.json")));
+        : new FilePlaidTokenStore(join(defaultLocalDataDir(), "plaid", "connections.json"), fieldCipher));
     await registerPlaidRoutes(app, {
       client: options.plaidClient ?? createPlaidClient(options.plaidConfig),
       config: options.plaidConfig,

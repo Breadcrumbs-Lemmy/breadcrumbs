@@ -35,13 +35,15 @@ level that remains *after* the listed mitigations are applied.
 
 ### R-02 — Compromise of third-party secrets (Plaid access tokens, API keys)
 - **Likelihood:** Medium · **Impact:** Critical · **Inherent:** High
-- **Mitigations (in place):** secrets loaded from environment only, never
-  committed (`.env` git-ignored); config validation never echoes secret values
-  into logs/errors (`plaid/config.ts`).
-- **Gaps / planned:** application-level encryption of Plaid tokens at rest
-  (today relies on operator disk encryption — see IR §token rotation and policy
-  §12.1).
-- **Residual:** Medium
+- **Mitigations (in place):** Plaid access tokens encrypted at rest with
+  AES-256-GCM, key from environment, decrypted only in memory
+  (`crypto/field-cipher.ts`, `plaid/token-store.ts`); secrets loaded from
+  environment only, never committed (`.env` git-ignored); config validation
+  never echoes secret values into logs/errors (`plaid/config.ts`).
+- **Gaps / planned:** extend the same field encryption to the persisted
+  transaction store (`local/store.ts`); move the encryption key into a secrets
+  manager / KMS rather than a plain env var.
+- **Residual:** Low–Medium
 - **Owner:** Engineering + Operator · **Review:** Quarterly
 
 ### R-03 — Credential stuffing / brute-force against user accounts
