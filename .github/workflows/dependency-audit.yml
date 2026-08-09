@@ -26,8 +26,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-      # No install needed: `pnpm audit` resolves advisories from the committed
+      # No `cache: pnpm` on purpose: this job never runs `pnpm install`, so the
+      # pnpm store never exists and setup-node's cache-save post-step would fail
+      # the job. `pnpm audit` resolves advisories straight from the committed
       # lockfile, so the scan is fast and can't be skewed by a fresh resolution.
       - name: Audit dependencies for known vulnerabilities
         run: pnpm audit --audit-level high
