@@ -2,8 +2,8 @@
 
 | | |
 | --- | --- |
-| **Document owner** | `{SECURITY OWNER — name / role}` |
-| **Organization** | `{LEGAL ORG NAME}` ("the Company"), operator of Breadcrumbs |
+| **Document owner** | `Lemuel Mutah — Owner & Maintainer (sole developer)` |
+| **Organization** | `Lemuel Mutah (sole operator — no incorporated entity)` ("the Company"), operator of Breadcrumbs |
 | **Version** | 0.1 (draft) |
 | **Effective date** | 2026-08-09 |
 | **Next review** | 2027-02-09 (reviewed at least every 6 months and after any material change) |
@@ -47,7 +47,7 @@ the risk surface and is a deliberate product boundary.
 
 ## 2. Roles and responsibilities
 
-- **Security owner** (`{NAME}`) — owns this policy, approves changes, runs the
+- **Security owner** (`Lemuel Mutah`) — owns this policy, approves changes, runs the
   periodic risk review, and coordinates incident response.
 - **Engineering** — implements and maintains technical controls, reviews code
   before merge, and keeps dependencies patched.
@@ -156,7 +156,7 @@ maintained as a living document alongside this policy (`docs/risk-register.md`).
 ## 6. Incident response
 
 1. **Detect & report** — anyone who suspects an incident notifies the security
-   owner immediately via `{CONTACT CHANNEL}`.
+   owner immediately via `email (lemuelmutah@gmail.com)`.
 2. **Triage** — the security owner assesses scope: what data, whose, and whether
    third-party secrets (Plaid/Anthropic) are implicated.
 3. **Contain** — revoke affected sessions (password change / disable revokes all
@@ -167,8 +167,9 @@ maintained as a living document alongside this policy (`docs/risk-register.md`).
 5. **Recover & learn** — restore from backup if needed, then record a
    post-incident review capturing cause, fix, and preventive follow-ups.
 
-**Status: Planned** — to be expanded into a standalone runbook
-(`docs/incident-response.md`) with named contacts and Plaid's reporting details.
+**Status: Implemented (documented).** Expanded into a standalone runbook
+([incident-response.md](incident-response.md)) with named contacts; confirming
+Plaid's agreement-specific reporting window/channel remains an operator action.
 
 ---
 
@@ -262,9 +263,10 @@ Tracked openly so this document stays honest:
 3. ~~**Dependency vulnerability scanning** wired into CI.~~ **Done** — `pnpm audit`
    (high/critical) on every push/PR and weekly (`.github/workflows/dependency-audit.yml`).
 4. ~~Documented **log-review / alerting** procedure~~ **Done** —
-   [logging-and-monitoring.md](logging-and-monitoring.md). Remaining: native
-   app-level request logging with redaction (currently `logger: false`), and an
-   **incident-response** runbook with named contacts.
+   [logging-and-monitoring.md](logging-and-monitoring.md); ~~**incident-response**
+   runbook with named contacts~~ **Done** —
+   [incident-response.md](incident-response.md). Remaining: native app-level
+   request logging with redaction (currently `logger: false`).
 5. ~~Living **risk register** and formal **data-retention** schedule.~~ **Done** —
    [risk-register.md](risk-register.md) and
    [data-retention-schedule.md](data-retention-schedule.md); a formal

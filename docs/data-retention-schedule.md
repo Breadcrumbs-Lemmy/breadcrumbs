@@ -2,7 +2,7 @@
 
 Status: Living
 Last updated: 2026-08-09
-Owner: `{SECURITY OWNER — name / role}`
+Owner: `Lemuel Mutah — Owner & Maintainer (sole developer)`
 Companion to: [Information Security Policy](information-security-policy.md) §10, [Plaid Security Questionnaire](plaid-security-questionnaire.md) §A, [Risk Register](risk-register.md)
 
 > **Purpose.** The formal retention schedule referenced by policy §10. It states,

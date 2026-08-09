@@ -2,7 +2,7 @@
 
 Status: Living
 Last updated: 2026-08-09
-Owner: `{SECURITY OWNER — name / role}`
+Owner: `Lemuel Mutah — Owner & Maintainer (sole developer)`
 Companion to: [Information Security Policy](information-security-policy.md), [Risk Register](risk-register.md), [Incident Response Runbook](incident-response.md)
 
 > **Purpose.** Ready-to-paste answers for Plaid's production-access security
@@ -209,7 +209,8 @@ rotate exposed secrets, remove/re-link the affected Plaid Item) → recover →
 **notify affected users and Plaid per Plaid's incident-reporting requirements** →
 post-mortem. **Status: Implemented (documented).** Source:
 [incident-response.md](incident-response.md), policy §6. **Operator action
-needed:** fill in the named contacts and Plaid's reporting channel.
+needed:** confirm Plaid's incident-reporting channel and window per your Plaid
+agreement (named contacts are filled in).
 
 ---
 

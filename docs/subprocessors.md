@@ -2,7 +2,7 @@
 
 Status: Living
 Last updated: 2026-08-09
-Owner: `{SECURITY OWNER — name / role}`
+Owner: `Lemuel Mutah — Owner & Maintainer (sole developer)`
 Companion to: [Information Security Policy](information-security-policy.md) §9, [Plaid Security Questionnaire](plaid-security-questionnaire.md) §A/§I, [Risk Register](risk-register.md) R-04
 
 > **Purpose.** The formal, standalone subprocessor inventory referenced by policy

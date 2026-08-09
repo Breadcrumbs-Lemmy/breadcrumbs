@@ -2,7 +2,7 @@
 
 Status: Living
 Last updated: 2026-08-09
-Owner: `{SECURITY OWNER — name / role}`
+Owner: `Lemuel Mutah — Owner & Maintainer (sole developer)`
 Companion to: [Information Security Policy](information-security-policy.md) §5, [Plaid Security Questionnaire](plaid-security-questionnaire.md) §G, [Incident Response Runbook](incident-response.md), [Risk Register](risk-register.md) R-03/R-07
 
 > **Purpose.** The documented periodic log-review procedure and alerting

@@ -2,7 +2,7 @@
 
 Status: Living
 Last updated: 2026-08-09
-Owner: `{SECURITY OWNER — name / role}`
+Owner: `Lemuel Mutah — Owner & Maintainer (sole developer)`
 Companion to: [Information Security Policy](information-security-policy.md) §3
 
 This is the living risk assessment referenced by the InfoSec policy. It is the

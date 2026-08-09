@@ -2,23 +2,23 @@
 
 Status: Living
 Last updated: 2026-08-09
-Owner: `{SECURITY OWNER — name / role}`
+Owner: `Lemuel Mutah — Owner & Maintainer (sole developer)`
 Companion to: [Information Security Policy](information-security-policy.md) §6
 
 The step-by-step procedure for a suspected or confirmed security incident. Keep
-it short enough to actually follow under pressure. Fill the `{...}` placeholders
-before relying on it.
+it short enough to actually follow under pressure. Keep the contacts below
+current as the deployment changes.
 
 ## Contacts
 
 | Role | Name | Reach |
 | --- | --- | --- |
-| Security owner (incident lead) | `{NAME}` | `{PHONE / SIGNAL / EMAIL}` |
-| Engineering on-call | `{NAME}` | `{CONTACT}` |
+| Security owner (incident lead) | `Lemuel Mutah` | `lemuelmutah@gmail.com` |
+| Engineering on-call | `Lemuel Mutah` | `lemuelmutah@gmail.com` |
 | Plaid support / incident reporting | Plaid | Plaid Dashboard → Support; per your Plaid agreement's incident-reporting terms |
 | Anthropic support | Anthropic | account/support channel |
 
-Primary reporting channel for anyone who spots something: `{CHANNEL}`.
+Primary reporting channel for anyone who spots something: `email (lemuelmutah@gmail.com)`.
 
 ## What counts as an incident
 
@@ -31,7 +31,7 @@ being actively exploited. **When in doubt, treat it as an incident and triage.**
 
 ### 1. Detect & report (minutes)
 - Anyone who suspects an incident notifies the security owner immediately via
-  `{CHANNEL}`. Do not investigate silently — report first.
+  `email (lemuelmutah@gmail.com)`. Do not investigate silently — report first.
 - The security owner becomes incident lead and opens a timestamped log
   (what, when noticed, by whom).
 
