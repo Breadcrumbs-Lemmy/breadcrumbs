@@ -20,6 +20,9 @@ This folder is the product source of truth for AI Finance Operating System. It s
 | [Money Flow Taxonomy](money-flow-taxonomy.md) | Living | `[UI: Claude]` How spending, income, transfers, refunds, and fees are classified across multiple accounts and institutions. Prevents double-counting. |
 | [Pattern Detection Spec](pattern-detection-spec.md) | Living | Deterministic MVP 0 rules, thresholds, confidence, safeguards, and fixtures for backend pattern detection. |
 | [MVP 0 Data Quality And Safety](data-quality-and-safety.md) | Living | Backend validation, freshness, uncertainty, duplicate-protection, and read-only/non-advice safeguards. |
+| [Information Security Policy](information-security-policy.md) | Living | Documented InfoSec policy: risk identification, mitigations (mapped to real controls), monitoring, incident response, subprocessors, and operator responsibilities. For vendor/Plaid security questionnaires. |
+| [Risk Register](risk-register.md) | Living | The "Identify" companion to the InfoSec policy: rated risks (R-01…R-07) mapped to mitigations, with residual ratings and owners. |
+| [Incident Response Runbook](incident-response.md) | Living | Step-by-step incident procedure: detect, triage/severity, contain, recover, notify (incl. Plaid), and post-mortem. |
 | [MVP 0 Backend Design](mvp0-backend-design.md) | Living | Implementation-ready backend data model, forecast, decision, architecture, and UI-facing contract. |
 | [MVP 0 Test Fixtures](mvp0-test-fixtures.md) | Living | Representative deterministic fixture scenarios with expected outcomes. |
 | [Plaid Sandbox Scaffold](plaid-sandbox.md) | Living | Server-only read-only Plaid Sandbox setup, endpoints, safety boundaries, and UI Link handoff. |

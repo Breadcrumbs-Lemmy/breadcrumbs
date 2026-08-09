@@ -1,9 +1,48 @@
 # Decision Log
 
 Status: Living  
-Last updated: 2026-08-06
+Last updated: 2026-08-09
 
 Use this log for material product, architecture, data, and compliance decisions. Add new entries at the top unless a project convention later says otherwise.
+
+## D-015: Documented Information Security Policy And Supporting Procedures
+
+Date: 2026-08-09
+Status: Accepted
+Relates to: `D-012` (Plaid), `D-014` (auth, isolation, offline assistant)
+
+Decision: The project adopts a documented Information Security Policy
+([`information-security-policy.md`](information-security-policy.md)) plus two
+supporting procedures — a living [Risk Register](risk-register.md) and an
+[Incident Response Runbook](incident-response.md). Together they operationalize
+identify → mitigate → monitor for the information security risks relevant to the
+business, so the organization can truthfully answer vendor/partner security
+questionnaires (Plaid production access being the immediate driver).
+
+Rationale: Moving toward Plaid production means attesting, in writing, to a real
+security program. The technical controls already exist in code (scrypt hashing,
+deny-by-default authorization, per-user isolation, brute-force lockout,
+secret-scrubbing config, atomic persistence); what was missing was the governance
+wrapper that names them, identifies the risks, and states how they are monitored.
+The policy maps every control to its source file and marks each as Implemented,
+Operator, or Planned so the attestation is honest rather than aspirational.
+
+Consequences:
+
+- Each control is explicitly typed. **Operator** controls (TLS, disk encryption,
+  backups, network exposure) are the deployer's responsibility for self-hosted
+  installs, documented in the policy §11 — security is a shared responsibility.
+- Five gaps are tracked openly (policy §12): app-level encryption of stored Plaid
+  tokens, MFA enforcement, dependency scanning in CI, the log-review/alerting
+  procedure, and formal data-retention. Closing any of them updates the policy
+  and, where material, gets its own decision entry.
+- Review cadence is committed (policy §7): policy every 6 months, risk register
+  and access review quarterly, dependency scan per release, IR drill annually.
+- The documents are drafts until an accountable owner signs off; they must not be
+  submitted as a formal attestation before that review. Placeholders (`{ORG}`,
+  `{SECURITY OWNER}`, contacts) must be filled first.
+- This does not change application behavior; it is a governance/compliance
+  decision. It complements `D-012`/`D-014` rather than superseding them.
 
 ## D-014: Production Backbone — Auth Modes, Isolation By Construction, An Offline Local Assistant, And Per-User Memory
 
