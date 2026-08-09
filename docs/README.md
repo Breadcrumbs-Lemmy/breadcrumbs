@@ -23,6 +23,7 @@ This folder is the product source of truth for AI Finance Operating System. It s
 | [Information Security Policy](information-security-policy.md) | Living | Documented InfoSec policy: risk identification, mitigations (mapped to real controls), monitoring, incident response, subprocessors, and operator responsibilities. For vendor/Plaid security questionnaires. |
 | [Risk Register](risk-register.md) | Living | The "Identify" companion to the InfoSec policy: rated risks (R-01…R-07) mapped to mitigations, with residual ratings and owners. |
 | [Incident Response Runbook](incident-response.md) | Living | Step-by-step incident procedure: detect, triage/severity, contain, recover, notify (incl. Plaid), and post-mortem. |
+| [Plaid Security Questionnaire](plaid-security-questionnaire.md) | Living | Ready-to-paste answers for Plaid's production-access security questionnaire, each mapped to a real control with an honest Implemented/Operator/Planned status, plus the open items to disclose truthfully. |
 | [MVP 0 Backend Design](mvp0-backend-design.md) | Living | Implementation-ready backend data model, forecast, decision, architecture, and UI-facing contract. |
 | [MVP 0 Test Fixtures](mvp0-test-fixtures.md) | Living | Representative deterministic fixture scenarios with expected outcomes. |
 | [Plaid Sandbox Scaffold](plaid-sandbox.md) | Living | Server-only read-only Plaid Sandbox setup, endpoints, safety boundaries, and UI Link handoff. |
