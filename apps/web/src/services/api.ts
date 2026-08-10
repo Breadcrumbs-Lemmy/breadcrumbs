@@ -30,7 +30,10 @@ import type {
   Budget,
   BudgetProgress,
   FinancialSnapshot,
+  Goal,
+  GoalsEvaluation,
   InsightsResult,
+  SavingsGoalInput,
   SpendingSummary,
   TransactionPage,
 } from "@ai-fin-os/core";
@@ -365,6 +368,45 @@ export function fetchBudgetProgress(params: {
   key?: string;
 }): Promise<ApiOutcome<BudgetProgress>> {
   return request(`/api/v1/budgets/progress${qs({ currency: "USD", ...params })}`);
+}
+
+// ---- Goals ----------------------------------------------------------------
+
+/** A user's declared savings goals. Mirrors the server's `GoalState`: the store
+ *  holds the canonical `Goal` shape core `buildSavingsGoals` produced from the
+ *  user's reduced input. The browser edits *input* and reads back canonical
+ *  goals; it never computes progress from them — that's `fetchGoalProgress`. */
+export type GoalConfig = {
+  currency: string;
+  goals: Goal[];
+};
+
+/** The reduced shape a user declares (the POST body). The server shapes each into
+ *  a canonical `Goal` via core `buildSavingsGoals` (`CD-003`), so the browser
+ *  never fills in cadence, next-contribution, freshness, or confidence itself. */
+export type GoalInput = SavingsGoalInput;
+
+/** `GET /api/v1/goals` — the raw declared goals (canonical shape, no progress). */
+export function fetchGoals(): Promise<ApiOutcome<GoalConfig>> {
+  return request("/api/v1/goals");
+}
+
+/** `POST /api/v1/goals` — replace the whole set. Body is the reduced *input*; the
+ *  server shapes and returns the canonical set (sorted by id). Whole-set replace is
+ *  deliberate (the screen edits a small set as one object), and POST (not PUT) keeps
+ *  this on the server's CORS-allowlisted verb set that every other mutation uses. */
+export function saveGoals(params: {
+  currency?: string;
+  goals: GoalInput[];
+}): Promise<ApiOutcome<GoalConfig>> {
+  return post("/api/v1/goals", { currency: "USD", ...params });
+}
+
+/** `GET /api/v1/goals/progress` — per-goal progress, status and pace plus a
+ *  rollup, computed server-side by core `evaluateGoals` (`CD-011` — no browser
+ *  arithmetic) at the latest-data "now". */
+export function fetchGoalProgress(): Promise<ApiOutcome<GoalsEvaluation>> {
+  return request(`/api/v1/goals/progress${qs({ currency: "USD" })}`);
 }
 
 // ---- Transactions ---------------------------------------------------------

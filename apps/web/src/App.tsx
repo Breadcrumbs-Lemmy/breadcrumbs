@@ -28,6 +28,7 @@ import { AppShell, type NavItem } from "./components/AppShell";
 import { CheckScreen } from "./screens/CheckScreen";
 import { SpendingScreen } from "./screens/SpendingScreen";
 import { BudgetsScreen } from "./screens/BudgetsScreen";
+import { GoalsScreen } from "./screens/GoalsScreen";
 import { TransactionsScreen } from "./screens/TransactionsScreen";
 import { InsightsScreen } from "./screens/InsightsScreen";
 import { AccountsScreen } from "./screens/AccountsScreen";
@@ -60,6 +61,7 @@ const ScenarioAside = import.meta.env.DEV ? lazy(() => import("./dev/ScenarioAsi
 type Route =
   | "spending"
   | "budgets"
+  | "goals"
   | "transactions"
   | "insights"
   | "accounts"
@@ -300,6 +302,16 @@ function AppContent() {
           />
         )}
 
+        {route === "goals" && (
+          <GoalsScreen
+            onBack={() => setRoute("check")}
+            onImport={() => {
+              setImportOrigin("goals");
+              setRoute("import");
+            }}
+          />
+        )}
+
         {route === "transactions" && (
           <TransactionsScreen
             focus={txFocus ?? undefined}
@@ -355,6 +367,7 @@ function AppContent() {
             onChange={setDraft}
             onSubmit={() => void submit()}
             submitting={submitting}
+            onOpenGoals={() => setRoute("goals")}
             snapshotNotes={snapshotNotes}
             obligations={snapshot?.recurringObligations.filter((o) => o.required)}
             obligationsConfirmed={obligationsConfirmed}

@@ -10,8 +10,10 @@ import type {
   AffordabilityRequestValidationIssue,
   AffordabilityResponse,
 } from "@ai-fin-os/core";
+import type { Goal } from "@ai-fin-os/core";
 import { principalOf } from "../auth/middleware";
 import { getLocalSpendingState } from "../local/statement-import";
+import type { GoalStoreProvider } from "../local/goal-store-provider";
 import type { StatementImportStoreProvider } from "../local/store-provider";
 import { registerSafeErrorHandler } from "./errors";
 
@@ -27,6 +29,10 @@ export type AffordabilityApiInvalidRequestError = {
 
 export type RegisterAffordabilityRoutesOptions = {
   stores: StatementImportStoreProvider;
+  /** User-declared savings goals, injected into the snapshot so the engine's
+   *  goal handling runs on real input (`D-G7`). Optional: without it the snapshot
+   *  carries no goals, exactly as before this feature. */
+  goals?: GoalStoreProvider;
 };
 
 export async function registerAffordabilityRoutes(
@@ -49,7 +55,8 @@ export async function registerAffordabilityRoutes(
    */
   app.get(AFFORDABILITY_SNAPSHOT_PATH, async (request, reply) => {
     const currency = currencyFrom(request.query);
-    const store = await options.stores.forUser(principalOf(request).userId);
+    const userId = principalOf(request).userId;
+    const store = await options.stores.forUser(userId);
     const state = await getLocalSpendingState(store, currency);
 
     if (state.transactions.length === 0) {
@@ -61,6 +68,13 @@ export async function registerAffordabilityRoutes(
       });
     }
 
+    // Inject the user's declared goals so the engine's already-written goal
+    // handling runs on real input (`D-G7`). Goals are passed in, never derived
+    // (`D-G2`), so "nothing is invented" still holds. Only goals in the snapshot
+    // currency are injected: the engine blocks on any mixed currency, and a goal
+    // saved in another currency is out of scope for this single-currency verdict.
+    const goals = await loadGoalsInCurrency(options.goals, userId, currency);
+
     return buildSnapshotFromHistory({
       accounts: state.accounts,
       transactions: annotateRecurrenceSignals({
@@ -69,6 +83,7 @@ export async function registerAffordabilityRoutes(
         currency,
       }),
       currency,
+      goals,
     });
   });
 
@@ -78,6 +93,20 @@ export async function registerAffordabilityRoutes(
 function currencyFrom(query: unknown): string {
   const value = (query as { currency?: unknown } | null | undefined)?.currency;
   return typeof value === "string" && /^[A-Za-z]{3}$/.test(value) ? value.toUpperCase() : "USD";
+}
+
+/** The user's stored goals for the snapshot currency. Absent provider (or store)
+ *  yields none, so the snapshot is unchanged from before this feature. A goal
+ *  with no currency is treated as the snapshot currency (it was declared there). */
+async function loadGoalsInCurrency(
+  provider: GoalStoreProvider | undefined,
+  userId: string,
+  currency: string,
+): Promise<Goal[]> {
+  if (!provider) return [];
+  const store = await provider.forUser(userId);
+  const { goals } = await store.load();
+  return goals.filter((goal) => (goal.currency ?? currency).toUpperCase() === currency);
 }
 
 async function evaluateAffordabilityRequest(

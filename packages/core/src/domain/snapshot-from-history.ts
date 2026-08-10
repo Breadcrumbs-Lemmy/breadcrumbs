@@ -32,6 +32,7 @@ import type {
   DataCoverage,
   FinancialSnapshot,
   ForecastConfig,
+  Goal,
   IncomeSource,
   RecurringObligation,
   Transaction,
@@ -56,6 +57,10 @@ export type SnapshotFromHistoryOptions = {
   /** Defaults to the latest posted date, keeping the result deterministic. */
   asOfDate?: string;
   config?: Partial<ForecastConfig>;
+  /** User-declared savings goals, injected verbatim. Goals are declarations, not
+   *  observations (`D-G2`): they are passed in, never derived from transactions,
+   *  so "nothing is invented" still holds. Defaults to none. */
+  goals?: Goal[];
 };
 
 export type SnapshotDerivation = {
@@ -106,8 +111,11 @@ export function buildSnapshotFromHistory(
       recurringObligations: obligations.obligations,
       // Goals and planned purchases are declarations, not observations. Nothing
       // in a bank statement says "I intend to save $400 a month", and inventing
-      // one would put a goal the user never set into their forecast.
-      goals: [],
+      // one would put a goal the user never set into their forecast. So goals are
+      // *injected* by the caller from the user's stored declarations, never
+      // derived here (`D-G2`); planned purchases stay unset until they get the
+      // same declaration layer.
+      goals: options.goals ?? [],
       plannedPurchases: [],
     },
     notes: {
