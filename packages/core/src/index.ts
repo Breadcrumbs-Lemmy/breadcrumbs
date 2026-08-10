@@ -37,6 +37,11 @@ export type {
   EvaluateGoalsOptions,
   GoalsEvaluation,
 } from "./domain/goals";
+export { suggestSavingsCapacity, ESSENTIAL_CATEGORIES } from "./domain/savings-capacity";
+export type {
+  SavingsCapacityOptions,
+  SavingsCapacitySuggestion,
+} from "./domain/savings-capacity";
 export { buildAccountsView } from "./domain/accounts-view";
 export {
   DEFAULT_RECURRING_SPENDING_CONFIG,

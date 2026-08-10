@@ -47,6 +47,19 @@ async function serverWithSpending() {
   return app;
 }
 
+/** A server seeded with three *complete* calendar months (Apr/May/Jun 2022), for
+ *  the savings-capacity suggestion — which needs whole months to observe. */
+async function serverWithMonths() {
+  const app = await createServer({ statementImportStore: new InMemoryStatementImportStore() });
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/v1/local/statement-imports/commit",
+    payload: monthsImportPayload(),
+  });
+  expect(response.statusCode).toBe(200);
+  return app;
+}
+
 /** A valid canonical goal built through core, for the store-level tests that need
  *  to save real `Goal` shapes (not the reduced route input). */
 function sampleGoal(overrides: Partial<Parameters<typeof buildSavingsGoal>[0]> = {}): Goal {
@@ -326,6 +339,55 @@ describe("goal routes", () => {
     const response = await app.inject({ method: "GET", url: "/api/v1/goals/progress?currency=US" });
     expect(response.statusCode).toBe(400);
     expect(JSON.parse(response.body).error.code).toBe("INVALID_GOALS_PROGRESS_QUERY");
+    await app.close();
+  });
+});
+
+describe("goal savings-capacity suggestion (D-G11)", () => {
+  it("returns zeros and hasEnoughData=false when only a partial month exists", async () => {
+    // The shared fixture is July 2022 alone, and its latest transaction is the
+    // 20th — so July is a partial (still-filling) month and no complete month
+    // exists. The honest answer is "not enough data", not a confident number.
+    const app = await serverWithSpending();
+    const response = await app.inject({ method: "GET", url: "/api/v1/goals/suggestion?currency=USD" });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      currency: "USD",
+      floorCents: 0,
+      ceilingCents: 0,
+      monthsConsidered: 0,
+      hasEnoughData: false,
+    });
+    await app.close();
+  });
+
+  it("observes the median surplus and income-above-essentials over complete months", async () => {
+    // Three identical complete months (Apr/May/Jun 2022), the last transaction on
+    // 30 Jun so June is whole. Per month: income 400000; essentials groceries
+    // 30000 + transport 10000 + utilities 8000 = 48000; discretionary coffee 5000.
+    //   surplus = 400000 − 53000 = 347000  (the floor)
+    //   income − essentials = 400000 − 48000 = 352000  (the ceiling)
+    const app = await serverWithMonths();
+    const response = await app.inject({ method: "GET", url: "/api/v1/goals/suggestion?currency=USD" });
+    expect(response.statusCode).toBe(200);
+    const suggestion = JSON.parse(response.body);
+    expect(suggestion).toMatchObject({
+      currency: "USD",
+      floorCents: 347_000,
+      ceilingCents: 352_000,
+      monthsConsidered: 3,
+      hasEnoughData: true,
+    });
+    // The ceiling sits above the floor by exactly the discretionary (coffee) spend.
+    expect(suggestion.ceilingCents).toBeGreaterThan(suggestion.floorCents);
+    await app.close();
+  });
+
+  it("rejects a malformed suggestion currency", async () => {
+    const app = await serverWithSpending();
+    const response = await app.inject({ method: "GET", url: "/api/v1/goals/suggestion?currency=US" });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).error.code).toBe("INVALID_GOALS_SUGGESTION_QUERY");
     await app.close();
   });
 });
@@ -629,6 +691,45 @@ describe("goal routes — per-user isolation over HTTP", () => {
     await app.close();
   });
 });
+
+/** Three identical complete months. Amounts are `outflow_positive` CSV, so the
+ *  payroll (negative) is income and the rest are spends. June's last row is the
+ *  30th, so the latest transaction closes June and all three months are whole. */
+function monthsImportPayload() {
+  const rows = ["date,description,amount"];
+  for (const ym of ["2022-04", "2022-05", "2022-06"]) {
+    const coffeeDay = ym === "2022-06" ? "30" : "22"; // close June on its last day
+    rows.push(
+      `${ym}-01,ACME PAYROLL DIRECT DEP,-4000.00`, // income 400000
+      `${ym}-05,WHOLE FOODS MKT 102,300.00`, // groceries (essential) 30000
+      `${ym}-12,SHELL OIL 5567,100.00`, // transportation (essential) 10000
+      `${ym}-18,COMED UTILITY,80.00`, // utilities (essential) 8000
+      `${ym}-${coffeeDay},STARBUCKS STORE 214,50.00`, // coffee (discretionary) 5000
+    );
+  }
+  return {
+    requestId: "goal_routes_months_fixture",
+    csv: rows.join("\n"),
+    accountId: ACCOUNT_ID,
+    account: {
+      id: ACCOUNT_ID,
+      displayName: "Local Checking",
+      institutionName: "Local Bank",
+      type: "checking",
+      currency: "USD",
+      currentBalanceCents: 412300,
+      includeInForecast: true,
+    },
+    currency: "USD",
+    dateFormat: "iso",
+    mapping: {
+      postedDate: "date",
+      amount: "amount",
+      amountSignConvention: "outflow_positive",
+      description: "description",
+    },
+  };
+}
 
 function importPayload() {
   const rows = [

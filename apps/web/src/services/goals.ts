@@ -12,11 +12,18 @@
  * remaining amount and projection arrives already computed by core `evaluateGoals`
  * (`CD-011`). It only fetches, pairs the two responses, and forwards typed input.
  */
-import type { GoalsEvaluation } from "@ai-fin-os/core";
-import { fetchGoalProgress, fetchGoals, saveGoals, type GoalConfig } from "./api";
+import type { GoalsEvaluation, SavingsCapacitySuggestion } from "@ai-fin-os/core";
+import {
+  fetchGoalProgress,
+  fetchGoals,
+  fetchSavingsSuggestion,
+  saveGoals,
+  type GoalConfig,
+} from "./api";
 
 export { saveGoals };
 export type { GoalConfig, GoalInput } from "./api";
+export type { SavingsCapacitySuggestion } from "@ai-fin-os/core";
 
 export type GoalsOutcome =
   | {
@@ -25,18 +32,32 @@ export type GoalsOutcome =
       config: GoalConfig;
       /** Backend-computed progress, status and pace for the same set. */
       progress: GoalsEvaluation;
+      /** A factual read of the user's own recent cash flow, for pre-filling a
+       *  monthly target (`D-G11`). `null` when it couldn't be fetched — a
+       *  non-fatal miss: the screen still edits goals, just without a prompt. */
+      suggestion: SavingsCapacitySuggestion | null;
     }
   | { kind: "error"; message: string };
 
 /** Load everything the Goals screen needs: the configured goals and their
- *  computed progress, together. A failure in either read fails the load. */
+ *  computed progress, together. A failure in either read fails the load. The
+ *  savings suggestion is best-effort and never fails the load. */
 export async function loadGoals(): Promise<GoalsOutcome> {
-  const [configResult, progressResult] = await Promise.all([fetchGoals(), fetchGoalProgress()]);
+  const [configResult, progressResult, suggestionResult] = await Promise.all([
+    fetchGoals(),
+    fetchGoalProgress(),
+    fetchSavingsSuggestion(),
+  ]);
 
   if (configResult.kind !== "ok") return { kind: "error", message: errorMessage(configResult.kind) };
   if (progressResult.kind !== "ok") return { kind: "error", message: errorMessage(progressResult.kind) };
 
-  return { kind: "ready", config: configResult.data, progress: progressResult.data };
+  return {
+    kind: "ready",
+    config: configResult.data,
+    progress: progressResult.data,
+    suggestion: suggestionResult.kind === "ok" ? suggestionResult.data : null,
+  };
 }
 
 /** Maps a non-ok API outcome kind to a human message. `ok` never reaches here. */

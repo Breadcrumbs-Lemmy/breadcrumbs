@@ -33,6 +33,7 @@ import type {
   Goal,
   GoalsEvaluation,
   InsightsResult,
+  SavingsCapacitySuggestion,
   SavingsGoalInput,
   SpendingSummary,
   TransactionPage,
@@ -407,6 +408,14 @@ export function saveGoals(params: {
  *  arithmetic) at the latest-data "now". */
 export function fetchGoalProgress(): Promise<ApiOutcome<GoalsEvaluation>> {
   return request(`/api/v1/goals/progress${qs({ currency: "USD" })}`);
+}
+
+/** `GET /api/v1/goals/suggestion` — a *factual observation* of the user's own
+ *  cash flow (median monthly surplus + income-above-essentials over recent
+ *  complete months), computed server-side by core `suggestSavingsCapacity`. Used
+ *  to pre-fill a monthly target; it is never advice (`D-G11`). */
+export function fetchSavingsSuggestion(): Promise<ApiOutcome<SavingsCapacitySuggestion>> {
+  return request(`/api/v1/goals/suggestion${qs({ currency: "USD" })}`);
 }
 
 // ---- Transactions ---------------------------------------------------------

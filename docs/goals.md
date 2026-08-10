@@ -1,6 +1,7 @@
 # Goal tracking (savings targets) — design & decisions
 
-Status: Building 2026-08-10 (autonomous session) — awaiting user review of D-G1..D-G10
+Status: Reworked 2026-08-10 (post-review) — D-G1..D-G10 approved; rework adds
+D-G11 (observed savings suggestion) and a monthly-first editor. Awaiting review of D-G11.
 Owner: `[UI: Claude]`
 Roadmap: `L-010` (the named blocker for `S-006` goal-conflict insights)
 
@@ -35,7 +36,12 @@ Each is a deliberate call made autonomously. Change any and I'll rework it.
   rest of the canonical shape deterministically (monthly cadence on the 1st, next
   contribution = the 1st of the month after `asOfDate`, `source: "manual"`,
   confidence 1, `active: true`). No new goal types; no other `Goal` fields are
-  exposed in v1.
+  exposed in v1. **Rework (post-review):** the editor is **monthly-first** — the
+  monthly contribution is the primary lever (pre-filled per D-G11) and a
+  `targetDate` deadline is explicitly optional/secondary, so a plain "$X a month,
+  no deadline" savings habit is the expected path. The target amount is still
+  required (pace and progress are shares *of* a target); only the deadline is
+  optional.
 
 - **D-G2 — A goal is declared, never inferred.** `buildSnapshotFromHistory`
   deliberately leaves `goals: []` — a bank statement cannot observe intent, and
@@ -60,7 +66,7 @@ Each is a deliberate call made autonomously. Change any and I'll rework it.
   user's own declared plan — never advice (`D-002`).
 
 - **D-G5 — Persistence.** Per-user goal store, one JSON file at
-  `<dataDir>/users/<id>/goals.json`, identical to the budget/statement stores:
+  `<dataDir>/users/<id>/goals.json`, identical to the statement store:
   atomic temp-write-then-rename, mode 0600, a serialized write queue, and the
   same optional `FieldCipher` envelope (`{ "$enc": … }`) — goals reveal financial
   intent, so they are encrypted at rest when a key is configured. Isolation is by
@@ -68,8 +74,9 @@ Each is a deliberate call made autonomously. Change any and I'll rework it.
 
 - **D-G6 — Endpoints.**
   - `GET /api/v1/goals` → the stored canonical set `{ currency, goals: Goal[] }`.
-  - `POST /api/v1/goals` → replace the whole set (whole-set replace, as budgets do,
-    and on POST not PUT for the same CORS reason — see `docs/budgets.md` D-B6).
+  - `POST /api/v1/goals` → replace the whole set (whole-set replace — the screen edits
+    a small set as one object — and on POST not PUT to stay on the server's
+    CORS-allowlisted verb set).
     The body is validated as the small *input* shape and shaped to canonical goals
     server-side via core `buildSavingsGoal`; returns the saved set.
   - `GET /api/v1/goals/progress?currency=USD` → `evaluateGoals` over the stored
@@ -87,29 +94,61 @@ Each is a deliberate call made autonomously. Change any and I'll rework it.
 - **D-G9 — UI placement & colour.** Goals are a dedicated screen reached from the
   affordability/planning surface (goals answer "can I still afford my future?"),
   not a nav tab — the nav spells `C·A·P·I·T·A·L` and a tab would spoil it (same
-  rule as Budgets/Settings). Status is word-first (Reached / On track / Behind);
-  colour is a restrained accent only and never the sole signal (mirrors budgets
-  `D-B9`): positive states (`reached`, `on_track`) → `--accent`, `behind` →
+  rule as Settings). Status is word-first (Reached / On track / Behind);
+  colour is a restrained accent only and never the sole signal: positive states
+  (`reached`, `on_track`) → `--accent`, `behind` →
   `--alert`.
 
 - **D-G10 — Single currency.** Like the rest of MVP 0, v1 is single-currency. A
   goal carries the request currency; mixed currencies are not normalized (matches
   the affordability engine's own guard).
 
+- **D-G11 — Observed savings suggestion (a fact, never advice).** The one thing a
+  user cannot easily answer for themselves is *how much a month is realistic*.
+  D-G2 forbids inventing a goal, but reporting what the user's **own** transactions
+  already show is an observation, not a recommendation — so a new goal's monthly
+  field is pre-filled from a **range** derived from imported history, framed
+  strictly as a read of their cash flow:
+  - **Floor** = the median, over recent *complete* calendar months, of
+    `inflow − outflow` (what was actually left each month). Clamped at 0.
+  - **Ceiling** = the median of `inflow − essential outflow`, where essentials are
+    an explicit `ESSENTIAL_CATEGORIES` set (housing, utilities, groceries,
+    transport, insurance, medical, childcare, debt payments). Always `≥` floor.
+  - A "complete month" is a whole calendar month inside `[earliest, asOfDate]`;
+    leading/trailing partial months are excluded, so a half-month never distorts
+    the median. Needs `≥ 2` complete months (`hasEnoughData`); below that the UI
+    says so plainly and pre-fills nothing.
+  - **All arithmetic is in core** `suggestSavingsCapacity`
+    (`packages/core/src/domain/savings-capacity.ts`), reusing
+    `summarizeMonthlySpending` as the single source of truth for
+    transfer-exclusion and per-month totals. `GET /api/v1/goals/suggestion` only
+    supplies the user's transactions and the data-derived `asOfDate`; the browser
+    formats cents and never computes (`CD-011`).
+  - **Framing (charter).** The UI presents this as *"Your recent savings room …
+    across your last N complete months about $X was left … up to $Y sat above your
+    essential bills"* with the explicit line *"a read of your own transactions, not
+    advice."* It is never phrased as what the user *should* save; the pre-fill is a
+    convenience, freely overwritten, and the chips only snap to the observed
+    floor/ceiling. This keeps the read-only, no-advice boundary (`D-002`, `D-006`)
+    intact while answering the real question the user asked on review.
+
 ## Files
 
 - `packages/core/src/domain/goals.ts` (new), `packages/core/src/index.ts` (export),
   `packages/core/src/domain/snapshot-from-history.ts` (optional `goals` param),
   `packages/core/tests/goals.test.ts` (new).
+- `packages/core/src/domain/savings-capacity.ts` (new — D-G11 suggestion),
+  `packages/core/tests/savings-capacity.test.ts` (new).
 - `packages/server/src/local/goal-store.ts` (new),
   `packages/server/src/local/goal-store-provider.ts` (new),
-  `packages/server/src/http/goal-routes.ts` (new),
+  `packages/server/src/http/goal-routes.ts` (new; `GET /goals/suggestion` for D-G11),
   `packages/server/src/http/affordability-routes.ts` (inject stored goals),
   `packages/server/src/http/server.ts` (wire routes + eraseUserData),
   `packages/server/tests/goal-routes.test.ts` (new),
   `packages/server/tests/account-deletion.test.ts` (goal erasure).
-- `apps/web/src/services/goals.ts` (new),
-  `apps/web/src/screens/GoalsScreen.tsx` (new),
+- `apps/web/src/services/goals.ts` (new; carries the suggestion),
+  `apps/web/src/services/api.ts` (`fetchSavingsSuggestion`),
+  `apps/web/src/screens/GoalsScreen.tsx` (new; monthly-first editor + savings-room note),
   the affordability/planning screen (entry-point card),
   `apps/web/src/App.tsx` (route wiring).
 

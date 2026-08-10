@@ -22,7 +22,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
-import { buildSavingsGoals, evaluateGoals } from "@ai-fin-os/core";
+import { buildSavingsGoals, evaluateGoals, suggestSavingsCapacity } from "@ai-fin-os/core";
 import type { SavingsGoalInput, Transaction } from "@ai-fin-os/core";
 
 import { principalOf } from "../auth/middleware";
@@ -34,6 +34,7 @@ import { registerSafeErrorHandler } from "./errors";
 
 export const GOALS_PATH = "/api/v1/goals";
 export const GOALS_PROGRESS_PATH = "/api/v1/goals/progress";
+export const GOALS_SUGGESTION_PATH = "/api/v1/goals/suggestion";
 
 /** An amount is integer cents, non-negative, and bounded well below any real
  *  goal so a fat-fingered or hostile value can't overflow downstream
@@ -74,6 +75,10 @@ const SaveGoalsSchema = z
   .strict();
 
 const ProgressQuerySchema = z.object({
+  currency: z.string().length(3).default("USD"),
+});
+
+const SuggestionQuerySchema = z.object({
   currency: z.string().length(3).default("USD"),
 });
 
@@ -131,6 +136,30 @@ export async function registerGoalRoutes(
     const asOfDate = asOfDateFor((await getLocalSpendingState(spendingStore, currency)).transactions);
 
     return reply.send(evaluateGoals({ goals: goalState.goals, asOfDate, currency }));
+  });
+
+  // A *factual observation* of the user's own cash flow, never advice (`D-G11`):
+  // the median monthly surplus and the median income-above-essentials over recent
+  // complete months, used to pre-fill a monthly savings target. All arithmetic is
+  // in core `suggestSavingsCapacity`; this layer only supplies the user's own
+  // transactions and the data-derived "now".
+  app.get(GOALS_SUGGESTION_PATH, async (request, reply) => {
+    const parsed = SuggestionQuerySchema.safeParse(request.query);
+    if (!parsed.success) return badRequest(reply, "INVALID_GOALS_SUGGESTION_QUERY", parsed.error.issues);
+    const currency = parsed.data.currency;
+
+    const spendingStore = await options.stores.forUser(principalOf(request).userId);
+    const spending = await getLocalSpendingState(spendingStore, currency);
+    const asOfDate = asOfDateFor(spending.transactions);
+
+    return reply.send(
+      suggestSavingsCapacity({
+        transactions: spending.transactions,
+        accounts: spending.accounts,
+        currency,
+        asOfDate,
+      }),
+    );
   });
 }
 

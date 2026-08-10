@@ -22,7 +22,13 @@
  * good states, `--alert` for behind — never the sole signal.
  */
 import { useCallback, useEffect, useState } from "react";
-import type { GoalProgress, GoalPriority, GoalProtection, GoalStatus } from "@ai-fin-os/core";
+import type {
+  GoalProgress,
+  GoalPriority,
+  GoalProtection,
+  GoalStatus,
+  SavingsCapacitySuggestion,
+} from "@ai-fin-os/core";
 import { loadGoals, saveGoals, type GoalInput, type GoalsOutcome } from "../services/goals";
 import { centsToDollars, dollarsToCents } from "../model/snapshot";
 import { formatMoney } from "../format/money";
@@ -55,8 +61,11 @@ const STATUS_META: Record<GoalStatus, { label: string; color: string; soft: stri
 
 const PRIORITIES: GoalPriority[] = ["high", "medium", "low"];
 
-function emptyDraft(): Draft {
-  return { label: "", target: "", saved: "", monthly: "", targetDate: "", priority: "medium", protection: "flexible" };
+/** A blank row. `monthly` may be pre-filled from the observed savings-room floor
+ *  (D-G11) so a new goal starts at a figure the user's own cash flow supports —
+ *  a convenience, freely overwritten, never a prescription. */
+function emptyDraft(monthly = ""): Draft {
+  return { label: "", target: "", saved: "", monthly, targetDate: "", priority: "medium", protection: "flexible" };
 }
 
 export function GoalsScreen({ onBack, onImport }: { onBack: () => void; onImport?: () => void }) {
@@ -104,9 +113,13 @@ export function GoalsScreen({ onBack, onImport }: { onBack: () => void; onImport
   }, [touch]);
 
   const addRow = useCallback(() => {
-    setDraft((rows) => [...rows, emptyDraft()]);
+    // Start a new goal at the observed monthly floor (what the user has typically
+    // kept), so the primary field is already a realistic figure they can adjust.
+    const prefill =
+      ready?.suggestion?.hasEnoughData ? centsToDollars(ready.suggestion.floorCents) : "";
+    setDraft((rows) => [...rows, emptyDraft(prefill)]);
     touch();
-  }, [touch]);
+  }, [ready, touch]);
 
   const removeRow = useCallback((index: number) => {
     setDraft((rows) => rows.filter((_, i) => i !== index));
@@ -186,8 +199,8 @@ export function GoalsScreen({ onBack, onImport }: { onBack: () => void; onImport
           </button>
           <h1 className="font-display text-[1.6rem] font-medium text-ink">Goals</h1>
           <p className="mt-1 max-w-[52ch] text-body text-ink-secondary">
-            Name a savings target, say how much you set aside each month, and watch the pace. Goals
-            never move money — they tell you whether the plan reaches the number in time.
+            Set how much you put aside each month toward a target — a deadline is optional. You'll
+            see whether the plan reaches the number, and by when. Goals never move money.
           </p>
         </div>
       </div>
@@ -258,10 +271,15 @@ function GoalsBody({
         </div>
         <p className="font-display text-[1.35rem] font-medium text-ink">No goals yet</p>
         <p className="mx-auto mt-2 max-w-[42ch] text-body text-ink-secondary">
-          Set your first savings target — an emergency fund, a trip, a deposit. You'll see whether
-          your monthly contribution reaches it in time, and it'll factor into the affordability
-          check.
+          Set your first savings target — an emergency fund, a trip, a deposit. Say what you put
+          aside each month and you'll see when it lands; it'll factor into the affordability check
+          too.
         </p>
+        {view.suggestion?.hasEnoughData && (
+          <div className="mt-4 text-left">
+            <SavingsRoomNote suggestion={view.suggestion} />
+          </div>
+        )}
         <button
           type="button"
           onClick={onAddRow}
@@ -312,12 +330,15 @@ function GoalsBody({
         <SectionLabel>Your goals</SectionLabel>
 
         <Card className="space-y-5">
+          <SavingsRoomNote suggestion={view.suggestion} />
+
           {draft.length > 0 ? (
             <div className="space-y-6">
               {draft.map((row, i) => (
                 <GoalEditor
                   key={i}
                   row={row}
+                  suggestion={view.suggestion}
                   onChange={(patch) => onUpdateRow(i, patch)}
                   onRemove={() => onRemoveRow(i)}
                 />
@@ -437,14 +458,17 @@ function StatusPill({ status }: { status: GoalStatus }) {
 
 function GoalEditor({
   row,
+  suggestion,
   onChange,
   onRemove,
 }: {
   row: Draft;
+  suggestion: SavingsCapacitySuggestion | null;
   onChange: (patch: Partial<Draft>) => void;
   onRemove: () => void;
 }) {
   const name = row.label.trim() || "this goal";
+  const canSuggest = suggestion?.hasEnoughData ?? false;
   return (
     <div className="space-y-3 rounded-md border border-line-subtle bg-surface-sunken px-4 py-4">
       <div className="flex items-center gap-3">
@@ -466,7 +490,30 @@ function GoalEditor({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {/* Each month — the primary lever. Pre-filled from the observed savings
+          room (D-G11); the chips let the user snap to the floor or ceiling of
+          their own range. A deadline and target refine it, but this is enough
+          on its own to start pacing a monthly habit. */}
+      <div>
+        <LabelledMoney
+          label="Each month"
+          value={row.monthly}
+          onChange={(v) => onChange({ monthly: v })}
+          placeholder="0"
+          ariaLabel={`Monthly contribution for ${name}`}
+        />
+        {canSuggest && suggestion && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-ink-tertiary">
+            <span>From your cash flow:</span>
+            <SuggestChip cents={suggestion.floorCents} onPick={(v) => onChange({ monthly: v })} />
+            {suggestion.ceilingCents !== suggestion.floorCents && (
+              <SuggestChip cents={suggestion.ceilingCents} onPick={(v) => onChange({ monthly: v })} />
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <LabelledMoney
           label="Target"
           value={row.target}
@@ -480,13 +527,6 @@ function GoalEditor({
           onChange={(v) => onChange({ saved: v })}
           placeholder="0"
           ariaLabel={`Amount saved for ${name}`}
-        />
-        <LabelledMoney
-          label="Each month"
-          value={row.monthly}
-          onChange={(v) => onChange({ monthly: v })}
-          placeholder="0"
-          ariaLabel={`Monthly contribution for ${name}`}
         />
       </div>
 
@@ -570,6 +610,64 @@ function LabelledMoney({
           onChange={(e) => onChange(e.target.value)}
         />
       </div>
+    </div>
+  );
+}
+
+/** A one-tap fill for the monthly field: snap it to an observed figure (the
+ *  savings-room floor or ceiling). Shows the amount; the parent decides which. */
+function SuggestChip({ cents, onPick }: { cents: number; onPick: (dollars: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(centsToDollars(cents))}
+      className="rounded-pill border border-line-subtle px-2 py-0.5 tabular text-ink-secondary transition-colors hover:border-accent hover:text-accent"
+    >
+      {formatMoney(cents)}
+    </button>
+  );
+}
+
+/** A factual read of the user's own recent cash flow (D-G11) — never advice.
+ *  States the observed monthly range (median surplus → median income above
+ *  essential bills) so a pre-filled monthly contribution has a visible, honest
+ *  basis. It describes what the user's transactions already show and leaves the
+ *  number to them; it never says what they *should* save. With too little
+ *  history it says so plainly rather than inventing a figure. */
+function SavingsRoomNote({ suggestion }: { suggestion: SavingsCapacitySuggestion | null }) {
+  if (!suggestion || !suggestion.hasEnoughData) {
+    return (
+      <div className="rounded-md border border-line-subtle bg-surface-sunken px-4 py-3">
+        <p className="text-meta text-ink-secondary">
+          Import a couple of complete months and this will show how much your own cash flow has left
+          each month. Until then, enter whatever monthly amount you have in mind.
+        </p>
+      </div>
+    );
+  }
+
+  const { floorCents, ceilingCents, monthsConsidered } = suggestion;
+  const months = `${monthsConsidered} complete month${monthsConsidered === 1 ? "" : "s"}`;
+  return (
+    <div className="rounded-md border border-line-subtle bg-surface-sunken px-4 py-3">
+      <p className="text-label text-ink-secondary">Your recent savings room</p>
+      {floorCents === ceilingCents ? (
+        <p className="mt-1 text-meta text-ink-secondary">
+          Across your last {months}, about{" "}
+          <span className="tabular text-ink">{formatMoney(floorCents)}</span> a month was left after
+          everything you spent. New goals start there — change it to whatever fits.
+        </p>
+      ) : (
+        <p className="mt-1 text-meta text-ink-secondary">
+          Across your last {months}, about{" "}
+          <span className="tabular text-ink">{formatMoney(floorCents)}</span> a month was left after
+          everything you spent, and up to{" "}
+          <span className="tabular text-ink">{formatMoney(ceilingCents)}</span> sat above your
+          essential bills. New goals start at {formatMoney(floorCents)} a month — change it to
+          whatever fits.
+        </p>
+      )}
+      <p className="mt-1.5 text-[11px] text-ink-tertiary">A read of your own transactions, not advice.</p>
     </div>
   );
 }
