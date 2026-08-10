@@ -34,10 +34,12 @@ export function SpendingScreen({
   onCheckPurchase,
   onImport,
   onOpenBudgets,
+  onOpenCashflow,
 }: {
   onCheckPurchase?: () => void;
   onImport?: () => void;
   onOpenBudgets?: () => void;
+  onOpenCashflow?: () => void;
 }) {
   const [period, setPeriod] = useState<PeriodKind>("month");
   const [outcome, setOutcome] = useState<SpendingOutcome | null>(null);
@@ -344,6 +346,30 @@ export function SpendingScreen({
                   <span className="block text-body text-ink">Budgets</span>
                   <span className="mt-0.5 block text-meta text-ink-tertiary">
                     Set weekly or monthly caps and track them
+                  </span>
+                </span>
+                <span aria-hidden="true" className="text-ink-tertiary">
+                  ›
+                </span>
+              </button>
+            )}
+
+            {/* The forward-looking companion to this backward-looking screen:
+                what's scheduled to hit before the next paycheck. Reached from
+                here as a button card, not a nav tab (the rail spells
+                C·A·P·I·T·A·L, so it stays off it — same rule as Settings) —
+                see docs/cashflow.md D-C12. */}
+            {onOpenCashflow && (
+              <button
+                type="button"
+                onClick={onOpenCashflow}
+                className="card flex w-full items-center justify-between px-5 py-4 text-left hover:shadow-md"
+                style={{ transition: "box-shadow var(--dur-base) var(--ease-out)" }}
+              >
+                <span>
+                  <span className="block text-body text-ink">What's coming up</span>
+                  <span className="mt-0.5 block text-meta text-ink-tertiary">
+                    Upcoming income and bills before payday
                   </span>
                 </span>
                 <span aria-hidden="true" className="text-ink-tertiary">
