@@ -16,6 +16,7 @@ export { detectInsights, DEFAULT_INSIGHTS_CONFIG } from "./domain/insights";
 export { evaluateBudgets, DEFAULT_BUDGET_CONFIG } from "./domain/budgets";
 export type {
   Budget,
+  BudgetPeriodBasis,
   BudgetStatus,
   BudgetConfig,
   BudgetProjection,

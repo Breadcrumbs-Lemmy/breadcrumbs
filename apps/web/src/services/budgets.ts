@@ -2,12 +2,14 @@
  * Budgets data access for the Budgets screen.
  *
  * Three reads, one write:
- *   - `fetchBudgets`         → the caps the user configured (their intent).
- *   - `fetchBudgetProgress`  → spent-vs-limit for a month, computed *server-side*
- *                              by core `evaluateBudgets` (`CD-003`, `CD-011`).
- *   - `fetchSpendingSummary` → the month's category totals, used only to populate
- *                              the "add a budget" picker so a user budgets against
- *                              categories they actually spend in.
+ *   - `fetchBudgets`         → the caps the user configured (their intent — both
+ *                              windows at once).
+ *   - `fetchBudgetProgress`  → spent-vs-limit for the chosen window (week or
+ *                              month), computed *server-side* by core
+ *                              `evaluateBudgets` (`CD-003`, `CD-011`).
+ *   - `fetchSpendingSummary` → that window's category totals, used only to
+ *                              populate the "add a budget" picker so a user
+ *                              budgets against categories they actually spend in.
  *   - `saveBudgets`          → replace the whole set (re-exported unchanged).
  *
  * This module never sums, classifies, compares, or thresholds a figure — status,
@@ -26,7 +28,10 @@ import {
 export { saveBudgets };
 export type { BudgetConfig } from "./api";
 
-/** A category the user has spent in this month — the menu of things worth
+/** Which window the screen is editing/showing. */
+export type BudgetBasis = "week" | "month";
+
+/** A category the user has spent in this window — the menu of things worth
  *  capping. `outflowCents` is shown next to each option so a sensible first cap
  *  is obvious; it is a backend figure, displayed, never used in a calculation. */
 export type CategoryOption = {
@@ -38,30 +43,34 @@ export type CategoryOption = {
 export type BudgetsOutcome =
   | {
       kind: "ready";
-      /** The configured caps (what the save round-trips). */
+      /** The window this view is for. */
+      basis: BudgetBasis;
+      /** The configured caps for *both* windows (what the save round-trips). */
       config: BudgetConfig;
-      /** Backend-computed progress for the resolved month. */
+      /** Backend-computed progress for the resolved window. */
       progress: BudgetProgress;
-      /** Categories with spend this month, for the add-a-budget picker. */
+      /** Categories with spend this window, for the add-a-budget picker. */
       categories: CategoryOption[];
-      /** The month progress resolved to (e.g. `2026-08`) and its label. */
-      monthKey: string;
-      monthLabel: string;
+      /** The window progress resolved to (`2026-08` or `2026-W32`) and its label. */
+      periodKey: string;
+      periodLabel: string;
     }
   | { kind: "error"; message: string };
 
 /**
- * Load everything the Budgets screen needs for one month.
+ * Load everything the Budgets screen needs for one window.
  *
- * `key` selects the month (`YYYY-MM`); omitted resolves to the latest-data month
- * server-side. The spending summary is fetched *keyed to the month progress
- * resolved to*, so the picker and the progress bars can never describe different
- * months.
+ * `basis` selects the window (`month` default, or `week`). `key` selects which
+ * one — a month key (`YYYY-MM`) or an ISO-week key (`YYYY-Www`); omitted resolves
+ * to the latest-data window server-side. The spending summary is fetched *keyed
+ * to the progress window resolved to*, so the picker and the progress bars can
+ * never describe different periods. `config` always carries both windows' caps so
+ * a save can preserve the window the user isn't editing.
  */
-export async function loadBudgets(key?: string): Promise<BudgetsOutcome> {
+export async function loadBudgets(basis: BudgetBasis = "month", key?: string): Promise<BudgetsOutcome> {
   const [configResult, progressResult] = await Promise.all([
     fetchBudgets(),
-    fetchBudgetProgress({ key }),
+    fetchBudgetProgress({ period: basis, key }),
   ]);
 
   const configError = errorMessage(configResult.kind);
@@ -73,12 +82,12 @@ export async function loadBudgets(key?: string): Promise<BudgetsOutcome> {
   const config = configResult.data;
   const progress = progressResult.data;
 
-  // The add-a-budget menu is the same month's category totals, so a user only
-  // ever caps categories the month actually contains. A summary failure here is
+  // The add-a-budget menu is the same window's category totals, so a user only
+  // ever caps categories the window actually contains. A summary failure here is
   // non-fatal: the screen still edits existing caps, it just can't offer new
   // categories to add.
   const summaryResult = await fetchSpendingSummary({
-    period: "month",
+    period: basis,
     key: progress.period.key,
   });
   const categories: CategoryOption[] =
@@ -94,11 +103,12 @@ export async function loadBudgets(key?: string): Promise<BudgetsOutcome> {
 
   return {
     kind: "ready",
+    basis,
     config,
     progress,
     categories,
-    monthKey: progress.period.key,
-    monthLabel: progress.period.label,
+    periodKey: progress.period.key,
+    periodLabel: progress.period.label,
   };
 }
 

@@ -330,9 +330,9 @@ export function SpendingScreen({
             </button>
 
             {/* Budgets live on their own screen, reached from here rather than a
-                nav tab (the rail spells C·A·P·I·T·A·L). Monthly caps aren't shown
-                inline because this screen is multi-period and a monthly cap
-                against a week would mislead — see docs/budgets.md D-B10. */}
+                nav tab (the rail spells C·A·P·I·T·A·L). Caps aren't shown inline
+                because this screen is multi-period and a cap for one window shown
+                against another would mislead — see docs/budgets.md D-B10. */}
             {onOpenBudgets && (
               <button
                 type="button"
@@ -343,7 +343,7 @@ export function SpendingScreen({
                 <span>
                   <span className="block text-body text-ink">Budgets</span>
                   <span className="mt-0.5 block text-meta text-ink-tertiary">
-                    Set monthly caps and track them
+                    Set weekly or monthly caps and track them
                   </span>
                 </span>
                 <span aria-hidden="true" className="text-ink-tertiary">

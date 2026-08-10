@@ -3,8 +3,9 @@
  *
  * The spending summary answers "where did my money go?"; a budget answers the
  * very next question, "…and was that more than I meant to spend?" A budget is a
- * monthly spending *cap* for a normalized category (with an optional overall
- * cap). This module is the single place that arithmetic lives (`CD-003`): given
+ * spending *cap* for a normalized category over a **week or a month** (with an
+ * optional overall cap per window). This module is the single place that
+ * arithmetic lives (`CD-003`): given
  * an already-computed `SpendingSummary` and the user's configured limits, it
  * returns per-category and overall progress. The browser and the AI both consume
  * these figures; neither recomputes them.
@@ -21,13 +22,21 @@
 import type { Period } from "./periods";
 import type { CategoryTotal, SpendingSummary } from "./spending-summary";
 
-/** A configured monthly cap for one normalized spending category. */
+/** Which recurring window a cap governs. */
+export type BudgetPeriodBasis = "week" | "month";
+
+/** A configured spending cap for one normalized category, over one window. */
 export type Budget = {
   /** Normalized category id, matching `CategoryTotal.category`. */
   category: string;
-  /** Monthly limit in integer cents. Must be positive; non-positive limits are
-   *  ignored (a cap of zero or less is not a meaningful budget). */
+  /** Limit in integer cents for the window. Must be positive; non-positive
+   *  limits are ignored (a cap of zero or less is not a meaningful budget). */
   limitCents: number;
+  /** The window this cap governs. Omitted means `"month"` — the v1 default — so
+   *  budget files written before weekly caps existed stay valid, and a monthly
+   *  cap is never re-serialised with a redundant field. A category may carry one
+   *  weekly cap and one monthly cap; each is evaluated against its own period. */
+  period?: BudgetPeriodBasis;
 };
 
 /** Where spending sits against a cap. `near` is the amber warning band that
@@ -38,14 +47,14 @@ export type BudgetStatus = "under" | "near" | "over";
  *  as a named constant like `DEFAULT_INSIGHTS_CONFIG` so the bands are visible
  *  and overridable rather than magic numbers buried in a comparison. */
 export type BudgetConfig = {
-  /** At or above this share of the limit is `near`. Default 80%. */
+  /** At or above this share of the limit is `near`. Default 90%. */
   nearRatioBasisPoints: number;
   /** Strictly above this share of the limit is `over`. Default 100%. */
   overRatioBasisPoints: number;
 };
 
 export const DEFAULT_BUDGET_CONFIG: BudgetConfig = {
-  nearRatioBasisPoints: 8_000,
+  nearRatioBasisPoints: 9_000,
   overRatioBasisPoints: 10_000,
 };
 
@@ -140,6 +149,10 @@ export function evaluateBudgets(options: EvaluateBudgetsOptions): BudgetProgress
   const { summary } = options;
   const config: BudgetConfig = { ...DEFAULT_BUDGET_CONFIG, ...options.config };
   const period = summary.period;
+  // Only caps for the window being evaluated apply. A week summary evaluates
+  // weekly caps; anything else evaluates monthly caps. This is what lets one
+  // category hold both a weekly and a monthly cap without them colliding.
+  const basis: BudgetPeriodBasis = period.kind === "week" ? "week" : "month";
 
   const totalsByCategory = new Map<string, CategoryTotal>();
   for (const total of summary.categoryTotals) {
@@ -149,10 +162,14 @@ export function evaluateBudgets(options: EvaluateBudgetsOptions): BudgetProgress
   const lines: BudgetLine[] = [];
   const seenCategories = new Set<string>();
   for (const budget of options.budgets) {
+    // Skip caps that govern a different window than the one being evaluated. A
+    // budget with no explicit period is monthly (back-compat), so it matches a
+    // month summary only.
+    if ((budget.period ?? "month") !== basis) continue;
     // A non-positive cap is not a meaningful budget; the store validates this,
     // but core stays defensive so a bad file never divides by zero. Duplicate
-    // categories collapse to the first — deterministic, and the store enforces
-    // uniqueness upstream.
+    // categories collapse to the first within a window — deterministic, and the
+    // store enforces (period, category) uniqueness upstream.
     if (!Number.isFinite(budget.limitCents) || budget.limitCents <= 0) continue;
     if (seenCategories.has(budget.category)) continue;
     seenCategories.add(budget.category);

@@ -1,28 +1,32 @@
 /**
- * Budgets — set monthly spending caps and see how the month is tracking.
+ * Budgets — set weekly or monthly spending caps and see how the window is tracking.
  *
  * Reached from the Spending (Pulse) screen, never a nav tab (D-B8: a tab would
- * add an "S"/"B" and spoil the C·A·P·I·T·A·L acrostic). The screen has two
- * halves:
+ * add an "S"/"B" and spoil the C·A·P·I·T·A·L acrostic). A Week/Month toggle
+ * (D-B11, default Month) picks the window; the two halves below then describe it:
  *
- *   1. "This month" — read-only progress. Every bar, status, remaining figure and
- *      projection is computed server-side by core `evaluateBudgets` and rendered
- *      verbatim. The browser does no arithmetic on a financial value (`CD-011`);
- *      it formats cents and draws a bar whose width is a backend basis-point share.
+ *   1. "This week" / "This month" — read-only progress. Every bar, status,
+ *      remaining figure and projection is computed server-side by core
+ *      `evaluateBudgets` and rendered verbatim. The browser does no arithmetic on
+ *      a financial value (`CD-011`); it formats cents and draws a bar whose width
+ *      is a backend basis-point share.
  *   2. "Set your caps" — the editor. Here the browser only holds the *numbers the
- *      user types* and hands them back via PUT. Entering an intended cap is input,
- *      not calculation, so this stays inside the boundary.
+ *      user types* and hands them back via POST. Entering an intended cap is
+ *      input, not calculation, so this stays inside the boundary. Editing one
+ *      window preserves the other: a save merges the untouched window's caps and
+ *      both overall caps back in, so switching Week↔Month never drops anything.
  *
  * Status colour is word-first (D-B9): the word ("On track" / "Nearly there" /
  * "Over") and the bar carry the meaning; the hue is a restrained accent, never
  * the sole signal — the same discipline the `Delta` component uses.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { BudgetLine, BudgetStatus, OverallBudgetProgress } from "@ai-fin-os/core";
+import type { Budget, BudgetLine, BudgetStatus, OverallBudgetProgress } from "@ai-fin-os/core";
 import {
   loadBudgets,
   saveBudgets,
   type BudgetsOutcome,
+  type BudgetBasis,
 } from "../services/budgets";
 import type { BudgetConfig } from "../services/api";
 import { centsToDollars, dollarsToCents } from "../model/snapshot";
@@ -51,10 +55,12 @@ export function BudgetsScreen({
   onBack: () => void;
   onImport?: () => void;
 }) {
+  /** The window being edited/shown (D-B11). Month by default. */
+  const [basis, setBasis] = useState<BudgetBasis>("month");
   const [outcome, setOutcome] = useState<BudgetsOutcome | null>(null);
-  /** The month progress resolved to; carried so a post-save reload stays on the
-   *  same month rather than jumping if the latest-data month were to change. */
-  const [monthKey, setMonthKey] = useState<string | undefined>(undefined);
+  /** The window progress resolved to; carried so a post-save reload stays on the
+   *  same period rather than jumping if the latest-data window were to change. */
+  const [periodKey, setPeriodKey] = useState<string | undefined>(undefined);
 
   const [draft, setDraft] = useState<Draft[]>([]);
   const [overallAmount, setOverallAmount] = useState("");
@@ -65,32 +71,42 @@ export function BudgetsScreen({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const load = useCallback(async (key?: string) => {
+  const load = useCallback(async (loadBasis: BudgetBasis, key?: string) => {
     setOutcome(null);
-    const next = await loadBudgets(key);
+    const next = await loadBudgets(loadBasis, key);
     setOutcome(next);
     if (next.kind === "ready") {
       const labels = labelMap(next);
-      setMonthKey(next.monthKey);
+      setPeriodKey(next.periodKey);
+      // Only the caps governing the window being edited become rows; the other
+      // window's caps stay untouched and are merged back on save.
+      const forBasis = next.config.budgets.filter((b) => (b.period ?? "month") === loadBasis);
       setDraft(
-        next.config.budgets.map((b) => ({
+        forBasis.map((b) => ({
           category: b.category,
           displayName: labels.get(b.category) ?? b.category,
           amount: centsToDollars(b.limitCents),
         })),
       );
-      setOverallAmount(
-        next.config.overallLimitCents != null ? centsToDollars(next.config.overallLimitCents) : "",
-      );
+      const overall =
+        loadBasis === "week" ? next.config.overallWeeklyLimitCents : next.config.overallLimitCents;
+      setOverallAmount(overall != null ? centsToDollars(overall) : "");
       setAddCategory("");
       setAddAmount("");
       setSaveError(null);
     }
   }, []);
 
+  // Reload whenever the window changes — a fresh window resolves its own
+  // latest-data period, so no key is passed here.
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(basis);
+  }, [load, basis]);
+
+  const switchBasis = useCallback((next: BudgetBasis) => {
+    setBasis(next);
+    setSaved(false);
+  }, []);
 
   // Editing anything invalidates a prior "Saved ✓" so the confirmation never
   // lingers over changes it doesn't describe.
@@ -111,33 +127,45 @@ export function BudgetsScreen({
 
   const handleSave = useCallback(async () => {
     setSaveError(null);
+    if (!ready) return;
+    const period = basis;
 
-    const budgets: { category: string; limitCents: number }[] = [];
+    // Caps for the window being edited. A weekly cap carries `period: "week"`; a
+    // monthly cap omits it (unchanged shape). A blank amount = "drop this cap".
+    const edited: Budget[] = [];
     for (const row of draft) {
-      // A blank amount means "drop this cap" — the row simply isn't sent.
       if (row.amount.trim() === "") continue;
       const cents = dollarsToCents(row.amount);
       if (cents === undefined || cents <= 0) {
         setSaveError(`Enter a positive amount for ${row.displayName}, or remove it.`);
         return;
       }
-      budgets.push({ category: row.category, limitCents: cents });
+      edited.push(
+        period === "week"
+          ? { category: row.category, limitCents: cents, period: "week" }
+          : { category: row.category, limitCents: cents },
+      );
     }
 
-    let overallLimitCents: number | null = null;
+    let overallForBasis: number | null = null;
     if (overallAmount.trim() !== "") {
       const cents = dollarsToCents(overallAmount);
       if (cents === undefined || cents <= 0) {
-        setSaveError("Enter a positive overall cap, or clear it.");
+        setSaveError(`Enter a positive overall ${period === "week" ? "weekly" : "monthly"} cap, or clear it.`);
         return;
       }
-      overallLimitCents = cents;
+      overallForBasis = cents;
     }
 
+    // Preserve the window the user isn't editing: keep its per-category caps and
+    // its overall cap exactly as loaded, so a Week↔Month switch never drops them.
+    const otherBudgets = ready.config.budgets.filter((b) => (b.period ?? "month") !== period);
+
     const config: BudgetConfig = {
-      currency: ready?.config.currency ?? "USD",
-      overallLimitCents,
-      budgets,
+      currency: ready.config.currency ?? "USD",
+      overallLimitCents: period === "month" ? overallForBasis : ready.config.overallLimitCents,
+      overallWeeklyLimitCents: period === "week" ? overallForBasis : ready.config.overallWeeklyLimitCents,
+      budgets: [...otherBudgets, ...edited],
     };
 
     setSaving(true);
@@ -147,7 +175,7 @@ export function BudgetsScreen({
     if (result.kind === "ok") {
       // Reload so the progress bars reflect the caps just saved (and the server's
       // canonical sort order), then confirm.
-      await load(monthKey);
+      await load(period, periodKey);
       setSaved(true);
       return;
     }
@@ -158,7 +186,7 @@ export function BudgetsScreen({
           ? "The server rejected these budgets — check the amounts."
           : "Couldn't save your budgets.",
     );
-  }, [draft, overallAmount, ready, monthKey, load]);
+  }, [draft, overallAmount, ready, basis, periodKey, load]);
 
   function updateAmount(category: string, amount: string) {
     setDraft((d) => d.map((row) => (row.category === category ? { ...row, amount } : row)));
@@ -193,15 +221,18 @@ export function BudgetsScreen({
           </button>
           <h1 className="font-display text-[1.6rem] font-medium text-ink">Budgets</h1>
           <p className="mt-1 max-w-[52ch] text-body text-ink-secondary">
-            Set a monthly cap for a category and watch the month track against it. Caps never move
-            money — they just tell you where you stand.
+            Set a {basis === "week" ? "weekly" : "monthly"} cap for a category and watch the{" "}
+            {basis} track against it. Caps never move money — they just tell you where you stand.
           </p>
         </div>
-        {ready && (
-          <span className="shrink-0 rounded-pill bg-surface-sunken px-3 py-1 text-meta text-ink-secondary">
-            {ready.monthLabel}
-          </span>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <BasisToggle basis={basis} onChange={switchBasis} />
+          {ready && (
+            <span className="rounded-pill bg-surface-sunken px-3 py-1 text-meta text-ink-secondary">
+              {ready.periodLabel}
+            </span>
+          )}
+        </div>
       </div>
 
       {outcome === null && <Skeleton />}
@@ -235,6 +266,42 @@ export function BudgetsScreen({
         onAdd={addBudget}
         onSave={() => void handleSave()}
       />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** Week/Month segmented control (D-B11). Two buttons, one selected; the selection
+ *  is announced, not carried by colour alone. */
+function BasisToggle({ basis, onChange }: { basis: BudgetBasis; onChange: (next: BudgetBasis) => void }) {
+  const options: { value: BudgetBasis; label: string }[] = [
+    { value: "week", label: "Week" },
+    { value: "month", label: "Month" },
+  ];
+  return (
+    <div
+      role="tablist"
+      aria-label="Budget window"
+      className="inline-flex rounded-pill bg-surface-sunken p-0.5"
+    >
+      {options.map((opt) => {
+        const selected = basis === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onChange(opt.value)}
+            className={`min-h-[32px] rounded-pill px-3.5 text-meta transition-colors ${
+              selected ? "bg-surface text-ink shadow-sm" : "text-ink-secondary hover:text-ink"
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -279,6 +346,11 @@ function BudgetsBody({
   onSave: () => void;
 }) {
   const { progress } = view;
+  // Every window-relative noun comes from the progress period, so the copy can
+  // never disagree with the data it describes.
+  const noun = progress.period.kind === "week" ? "week" : "month";
+  const adj = noun === "week" ? "weekly" : "monthly";
+  const Adj = noun === "week" ? "Weekly" : "Monthly";
   const nothingImported = progress.budgetedCount === 0 && view.categories.length === 0 && draft.length === 0;
 
   if (nothingImported) {
@@ -289,8 +361,8 @@ function BudgetsBody({
         </div>
         <p className="font-display text-[1.35rem] font-medium text-ink">Nothing to budget yet</p>
         <p className="mx-auto mt-2 max-w-[40ch] text-body text-ink-secondary">
-          Import a statement first. Once your spending is grouped into categories, you can set a
-          monthly cap on any of them here.
+          Import a statement first. Once your spending is grouped into categories, you can set a{" "}
+          {adj} cap on any of them here.
         </p>
         {onImport && (
           <button
@@ -307,10 +379,10 @@ function BudgetsBody({
 
   return (
     <div className="space-y-8">
-      {/* ---- This month: computed progress (read-only) --------------------- */}
+      {/* ---- This week/month: computed progress (read-only) ---------------- */}
       <section>
         <div className="mb-3 flex items-baseline justify-between gap-4">
-          <SectionLabel>This month</SectionLabel>
+          <SectionLabel>This {noun}</SectionLabel>
           {progress.budgetedCount > 0 && (
             <span className="text-meta text-ink-tertiary">
               {summarizeCounts(progress.overCount, progress.nearCount, progress.underCount)}
@@ -318,18 +390,18 @@ function BudgetsBody({
           )}
         </div>
 
-        {progress.overall && <OverallCard overall={progress.overall} />}
+        {progress.overall && <OverallCard overall={progress.overall} noun={noun} />}
 
         {progress.lines.length > 0 ? (
           <Card padded={false} className="mt-3 overflow-hidden">
             {progress.lines.map((line, i) => (
-              <LineRow key={line.category} line={line} first={i === 0} />
+              <LineRow key={line.category} line={line} first={i === 0} noun={noun} />
             ))}
           </Card>
         ) : (
           !progress.overall && (
             <p className="text-body text-ink-secondary">
-              No caps set yet. Add one below and it&rsquo;ll start tracking this month.
+              No caps set yet. Add one below and it&rsquo;ll start tracking this {noun}.
             </p>
           )
         )}
@@ -340,10 +412,10 @@ function BudgetsBody({
         <SectionLabel>Set your caps</SectionLabel>
 
         <Card className="space-y-5">
-          {/* Overall monthly cap */}
+          {/* Overall weekly/monthly cap */}
           <div>
             <label className="mb-1 block text-label text-ink-secondary" htmlFor="budget-overall">
-              Overall monthly cap
+              Overall {adj} cap
             </label>
             <div className="flex items-center gap-2">
               <MoneyInput
@@ -385,7 +457,7 @@ function BudgetsBody({
                     onChange={(v) => onUpdateAmount(row.category, v)}
                     placeholder="0"
                     className="w-[128px]"
-                    ariaLabel={`Monthly cap for ${row.displayName}`}
+                    ariaLabel={`${Adj} cap for ${row.displayName}`}
                   />
                   <button
                     type="button"
@@ -414,7 +486,7 @@ function BudgetsBody({
                   <option value="">Choose a category…</option>
                   {addable.map((c) => (
                     <option key={c.category} value={c.category}>
-                      {c.displayName} · {formatMoney(c.outflowCents)} this month
+                      {c.displayName} · {formatMoney(c.outflowCents)} this {noun}
                     </option>
                   ))}
                 </select>
@@ -423,7 +495,7 @@ function BudgetsBody({
                   onChange={onAddAmount}
                   placeholder="Cap"
                   className="sm:w-[128px]"
-                  ariaLabel="Monthly cap for the new budget"
+                  ariaLabel={`${Adj} cap for the new budget`}
                 />
                 <button
                   type="button"
@@ -463,7 +535,7 @@ function BudgetsBody({
 
 // ---------------------------------------------------------------------------
 
-function OverallCard({ overall }: { overall: OverallBudgetProgress }) {
+function OverallCard({ overall, noun }: { overall: OverallBudgetProgress; noun: string }) {
   const meta = STATUS_META[overall.status];
   const pct = Math.min(overall.usedBasisPoints / 100, 100);
   return (
@@ -484,12 +556,12 @@ function OverallCard({ overall }: { overall: OverallBudgetProgress }) {
         </span>
       </div>
       <Bar pct={pct} color={meta.color} />
-      {overall.projection && <ProjectionNote projected={overall.projection.projectedSpendCents} status={overall.projection.projectedStatus} />}
+      {overall.projection && <ProjectionNote projected={overall.projection.projectedSpendCents} status={overall.projection.projectedStatus} noun={noun} />}
     </Card>
   );
 }
 
-function LineRow({ line, first }: { line: BudgetLine; first: boolean }) {
+function LineRow({ line, first, noun }: { line: BudgetLine; first: boolean; noun: string }) {
   const meta = STATUS_META[line.status];
   const pct = Math.min(line.usedBasisPoints / 100, 100);
   return (
@@ -521,18 +593,18 @@ function LineRow({ line, first }: { line: BudgetLine; first: boolean }) {
       <Bar pct={pct} color={meta.color} />
 
       {line.projection && (
-        <ProjectionNote projected={line.projection.projectedSpendCents} status={line.projection.projectedStatus} />
+        <ProjectionNote projected={line.projection.projectedSpendCents} status={line.projection.projectedStatus} noun={noun} />
       )}
     </div>
   );
 }
 
-/** The pace estimate for a partial month. Clearly marked an estimate (~), never
+/** The pace estimate for a partial window. Clearly marked an estimate (~), never
  *  used as the headline status (D-B3) — it warns early without crying wolf. */
-function ProjectionNote({ projected, status }: { projected: number; status: BudgetStatus }) {
+function ProjectionNote({ projected, status, noun }: { projected: number; status: BudgetStatus; noun: string }) {
   return (
     <p className="mt-2 text-meta text-ink-tertiary">
-      On pace for {formatMoney(projected, { estimated: true })} by month end
+      On pace for {formatMoney(projected, { estimated: true })} by {noun} end
       {status === "over" && (
         <span className="ml-1" style={{ color: STATUS_META.over.color }}>
           — over cap

@@ -328,14 +328,15 @@ describe("evaluateBudgets — status boundaries (D-B4)", () => {
   // holds one spend sized to sit exactly on a threshold. Status is read off the
   // *rounded* basis-point share — the same number the bar shows — so the word
   // and the bar can never disagree. These pin the exact comparison operators:
-  // `over` is strictly > 100%, `near` is >= 80%.
+  // `over` is strictly > 100%, `near` is >= 90% (the warn band was widened from
+  // 80% to 90% so the amber warning fires closer to the cap).
   const summary = summarizeSpending({
     transactions: [
       tx({ id: "b1", accountId: ACCT.id, amountCents: -10_000, category: "at_limit", flowType: "SPEND", postedDate: "2022-07-03" }),
       tx({ id: "b2", accountId: ACCT.id, amountCents: -10_001, category: "over_by_one_cent", flowType: "SPEND", postedDate: "2022-07-04" }),
-      tx({ id: "b3", accountId: ACCT.id, amountCents: -8_000, category: "at_near", flowType: "SPEND", postedDate: "2022-07-05" }),
-      tx({ id: "b4", accountId: ACCT.id, amountCents: -7_999, category: "just_under_near", flowType: "SPEND", postedDate: "2022-07-06" }),
-      tx({ id: "b5", accountId: ACCT.id, amountCents: -15_999, category: "rounds_up_to_near", flowType: "SPEND", postedDate: "2022-07-07" }),
+      tx({ id: "b3", accountId: ACCT.id, amountCents: -9_000, category: "at_near", flowType: "SPEND", postedDate: "2022-07-05" }),
+      tx({ id: "b4", accountId: ACCT.id, amountCents: -8_999, category: "just_under_near", flowType: "SPEND", postedDate: "2022-07-06" }),
+      tx({ id: "b5", accountId: ACCT.id, amountCents: -17_999, category: "rounds_up_to_near", flowType: "SPEND", postedDate: "2022-07-07" }),
     ],
     accounts: [ACCT],
     currency: "USD",
@@ -374,18 +375,18 @@ describe("evaluateBudgets — status boundaries (D-B4)", () => {
     });
   });
 
-  it("reads exactly the near threshold (80%) as near (the >= boundary)", () => {
-    expect(byCat.get("at_near")).toMatchObject({ usedBasisPoints: 8_000, status: "near" });
+  it("reads exactly the near threshold (90%) as near (the >= boundary)", () => {
+    expect(byCat.get("at_near")).toMatchObject({ usedBasisPoints: 9_000, status: "near" });
   });
 
   it("reads one cent below the near threshold as under", () => {
-    expect(byCat.get("just_under_near")).toMatchObject({ usedBasisPoints: 7_999, status: "under" });
+    expect(byCat.get("just_under_near")).toMatchObject({ usedBasisPoints: 8_999, status: "under" });
   });
 
-  it("rounds a half-basis-point share up, so 79.995% reads as near", () => {
-    // 15999/20000 = 79.995% → round(7999.5) = 8000 bp. Status reads off that same
-    // rounded share, so bar (80%) and word ("near") agree.
-    expect(byCat.get("rounds_up_to_near")).toMatchObject({ usedBasisPoints: 8_000, status: "near" });
+  it("rounds a half-basis-point share up, so 89.995% reads as near", () => {
+    // 17999/20000 = 89.995% → round(8999.5) = 9000 bp. Status reads off that same
+    // rounded share, so bar (90%) and word ("near") agree.
+    expect(byCat.get("rounds_up_to_near")).toMatchObject({ usedBasisPoints: 9_000, status: "near" });
   });
 });
 
@@ -443,5 +444,133 @@ describe("evaluateBudgets — projection on a short month (CD-012)", () => {
       elapsedDays: 14,
       totalDays: 28,
     });
+  });
+});
+
+describe("evaluateBudgets — weekly caps (D-B1: a cap governs one window)", () => {
+  // ISO-8601 weeks start Monday; 2022-08-01 is a Monday, so 2022-W31 runs
+  // Aug 1–7. Viewed from Aug 20 the week is closed, so status is final and
+  // nothing is projected — the mirror of the "complete month" case, one window
+  // narrower. `evaluateBudgets` reads the summary's period kind to decide which
+  // caps apply, so a week summary scores weekly caps and ignores monthly ones.
+  const weekSummary = summarizeSpending({
+    transactions: [
+      tx({ id: "w1", accountId: ACCT.id, amountCents: -9_000, category: "dining", flowType: "SPEND", postedDate: "2022-08-02" }),
+      tx({ id: "w2", accountId: ACCT.id, amountCents: -4_000, category: "groceries", flowType: "SPEND", postedDate: "2022-08-04" }),
+    ],
+    accounts: [ACCT],
+    currency: "USD",
+    asOfDate: "2022-08-20", // after the week → complete period
+    kind: "week",
+    key: "2022-W31",
+    categoryLabel: label,
+  });
+
+  it("sanity-checks it summarised a complete 7-day week", () => {
+    expect(weekSummary.period.kind).toBe("week");
+    expect(weekSummary.period.key).toBe("2022-W31");
+    expect(weekSummary.period.partial).toBe(false);
+    expect(weekSummary.period.totalDays).toBe(7);
+  });
+
+  it("scores only weekly caps against a week, ignoring a monthly cap on the same category", () => {
+    const progress = evaluateBudgets({
+      summary: weekSummary,
+      budgets: [
+        { category: "dining", limitCents: 10_000, period: "week" }, // 90% → near
+        { category: "dining", limitCents: 50_000 }, // monthly cap → ignored on a week
+        { category: "groceries", limitCents: 10_000, period: "week" }, // 40% → under
+      ],
+      overallLimitCents: 12_000, // weekly overall: $130 spent → over
+      categoryLabel: label,
+    });
+    expect(progress.period.kind).toBe("week");
+    const byCat = new Map(progress.lines.map((line) => [line.category, line]));
+    // The monthly dining cap ($500) never appears; only the weekly one is scored,
+    // so dining reads 90% of $100 — not 18% of $500.
+    expect(progress.budgetedCount).toBe(2);
+    expect(byCat.get("dining")).toMatchObject({
+      limitCents: 10_000,
+      spentCents: 9_000,
+      usedBasisPoints: 9_000,
+      status: "near",
+    });
+    expect(byCat.get("groceries")).toMatchObject({
+      limitCents: 10_000,
+      spentCents: 4_000,
+      status: "under",
+    });
+    // The overall cap is the weekly one the caller passed, checked against the
+    // week's total outflow ($130).
+    expect(progress.overall).toMatchObject({
+      limitCents: 12_000,
+      spentCents: 13_000,
+      overBudgetCents: 1_000,
+      status: "over",
+    });
+  });
+
+  it("projects a partial week over its own 7 days, status still on actual spend", () => {
+    // Same week viewed on Wed Aug 3: three of seven days gone. $60 spent, on pace
+    // for $140 — over a $100 cap — yet only 60% of the cap is actually gone.
+    const partial = summarizeSpending({
+      transactions: [
+        tx({ id: "pw1", accountId: ACCT.id, amountCents: -6_000, category: "dining", flowType: "SPEND", postedDate: "2022-08-02" }),
+      ],
+      accounts: [ACCT],
+      currency: "USD",
+      asOfDate: "2022-08-03",
+      kind: "week",
+      key: "2022-W31",
+      categoryLabel: label,
+    });
+    expect(partial.period.partial).toBe(true);
+    expect(partial.period.elapsedDays).toBe(3);
+    expect(partial.period.totalDays).toBe(7);
+
+    const progress = evaluateBudgets({
+      summary: partial,
+      budgets: [{ category: "dining", limitCents: 10_000, period: "week" }],
+    });
+    const dining = progress.lines[0]!;
+    expect(dining.usedBasisPoints).toBe(6_000); // 60% actually spent
+    expect(dining.status).toBe("under"); // …status stays on actual spend (D-B3)
+    expect(dining.projection).toEqual({
+      projectedSpendCents: 14_000, // round(6000 * 7 / 3)
+      projectedStatus: "over", // …but the pace warns early
+      elapsedDays: 3,
+      totalDays: 7,
+    });
+  });
+});
+
+describe("evaluateBudgets — a month summary scores only monthly caps", () => {
+  // The mirror of the basis filter: a weekly cap on a category must never be
+  // applied to a month, or a $50/week cap would read wildly over on a month of
+  // real spend. A category may hold both a weekly and a monthly cap; each is
+  // evaluated against its own window and they never collide.
+  const summary = summarizeSpending({
+    transactions: [
+      tx({ id: "mm1", accountId: ACCT.id, amountCents: -30_000, category: "dining", flowType: "SPEND", postedDate: "2022-07-05" }),
+    ],
+    accounts: [ACCT],
+    currency: "USD",
+    asOfDate: "2022-08-01",
+    kind: "month",
+    key: "2022-07",
+    categoryLabel: label,
+  });
+
+  it("drops a weekly cap on the same category, scoring the monthly one", () => {
+    const progress = evaluateBudgets({
+      summary,
+      budgets: [
+        { category: "dining", limitCents: 40_000 }, // monthly (implicit) → scored
+        { category: "dining", limitCents: 5_000, period: "week" }, // weekly → ignored on a month
+      ],
+    });
+    expect(progress.lines.map((line) => line.category)).toEqual(["dining"]);
+    expect(progress.lines[0]!.limitCents).toBe(40_000); // the $400 monthly cap, not the $50 weekly one
+    expect(progress.lines[0]!.status).toBe("under"); // 30000/40000 = 75%
   });
 });

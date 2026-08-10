@@ -8,13 +8,16 @@
  *     semantics (no partial-merge ambiguity). POST (not PUT) keeps this route on
  *     the same small verb set every other mutation in the API uses.
  *   - `/api/v1/budgets/progress` (GET) is *computed*, never stored: it summarises
- *     the user's transactions for a month and runs core `evaluateBudgets` over
- *     that. All arithmetic is in `@ai-fin-os/core`; this layer parses, calls the
- *     domain, and serialises (`CD-003`).
+ *     the user's transactions for one window (a week or a month, per `?period=`)
+ *     and runs core `evaluateBudgets` over that. All arithmetic is in
+ *     `@ai-fin-os/core`; this layer parses, calls the domain, and serialises
+ *     (`CD-003`).
  *
- * Budgets are monthly by design (`D-B2`), so progress is always a month period —
- * a monthly cap shown against a week would mislead. The route does not expose a
- * period kind.
+ * A cap governs one window (`D-B2`): progress for `?period=month` scores monthly
+ * caps against a month, `?period=week` scores weekly caps against an ISO week. A
+ * monthly cap shown against a week (or vice versa) would mislead, so core filters
+ * caps by the summary's period kind and the route passes the window-appropriate
+ * overall cap.
  */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -47,44 +50,66 @@ const LimitCentsSchema = z
   .positive()
   .max(1_000_000_000); // $10,000,000 — a monthly cap will never legitimately exceed this.
 
+/** Which window a cap governs. Omitted on input means `"month"` — the v1 default
+ *  — so a client that predates weekly caps keeps working unchanged. */
+const BudgetPeriodSchema = z.enum(["week", "month"]).default("month");
+
 const BudgetSchema = z.object({
   category: z.string().min(1).max(64),
   limitCents: LimitCentsSchema,
+  period: BudgetPeriodSchema,
 });
 
 const SaveBudgetsSchema = z
   .object({
     currency: z.string().length(3).default("USD"),
     overallLimitCents: LimitCentsSchema.nullable().default(null),
+    overallWeeklyLimitCents: LimitCentsSchema.nullable().default(null),
     budgets: z.array(BudgetSchema).max(100).default([]),
   })
   .strict()
   .superRefine((value, ctx) => {
-    // One cap per category. Silently collapsing duplicates would let the UI
-    // think it saved two limits when only one survived; reject so the mistake is
-    // visible.
+    // One cap per (window, category): a category may hold one weekly cap and one
+    // monthly cap, but not two of either. Silently collapsing duplicates would
+    // let the UI think it saved two limits when only one survived; reject so the
+    // mistake is visible.
     const seen = new Set<string>();
     value.budgets.forEach((budget, index) => {
-      if (seen.has(budget.category)) {
+      const key = `${budget.period}:${budget.category}`;
+      if (seen.has(key)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["budgets", index, "category"],
-          message: `Duplicate budget for category "${budget.category}".`,
+          message: `Duplicate ${budget.period} budget for category "${budget.category}".`,
         });
       }
-      seen.add(budget.category);
+      seen.add(key);
     });
   });
 
-const ProgressQuerySchema = z.object({
-  // Budgets are monthly (`D-B2`). `key` selects which month (e.g. 2026-08);
-  // omitted means the month of the latest transaction.
-  key: z
-    .string()
-    .regex(/^\d{4}-\d{2}$/, "Expected a month key YYYY-MM")
-    .optional(),
-  currency: z.string().length(3).default("USD"),
-});
+const ProgressQuerySchema = z
+  .object({
+    // Which window to score (`D-B2`). `key` selects which one: a month key
+    // (2026-08) for `period=month`, an ISO-week key (2026-W32) for `period=week`.
+    // Omitted `key` means the window containing the latest transaction.
+    period: BudgetPeriodSchema,
+    key: z.string().optional(),
+    currency: z.string().length(3).default("USD"),
+  })
+  .superRefine((value, ctx) => {
+    if (value.key === undefined) return;
+    const expected = value.period === "week" ? /^\d{4}-W\d{2}$/ : /^\d{4}-\d{2}$/;
+    if (!expected.test(value.key)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["key"],
+        message:
+          value.period === "week"
+            ? "Expected an ISO week key YYYY-Www"
+            : "Expected a month key YYYY-MM",
+      });
+    }
+  });
 
 function categoryLabel(id: string): string {
   return getCategoryMetadata(id)?.displayName ?? id;
@@ -137,6 +162,9 @@ export async function registerBudgetRoutes(
     const next: BudgetState = {
       currency: parsed.data.currency,
       overallLimitCents: parsed.data.overallLimitCents,
+      overallWeeklyLimitCents: parsed.data.overallWeeklyLimitCents,
+      // The store normalises: a monthly cap is stored without a `period` field
+      // (unchanged on-disk shape), a weekly cap keeps `period: "week"`.
       budgets: parsed.data.budgets,
     };
     return reply.send(await store.save(next));
@@ -160,16 +188,21 @@ export async function registerBudgetRoutes(
       accounts,
       currency: q.currency,
       asOfDate: asOfDateFor(transactions),
-      kind: "month",
+      kind: q.period,
       key: q.key,
       categoryLabel,
     });
+
+    // Core filters `budgets` to the summary's window, so weekly and monthly caps
+    // can coexist; the route only has to pick the overall cap for this window.
+    const overallLimitCents =
+      q.period === "week" ? budgetState.overallWeeklyLimitCents : budgetState.overallLimitCents;
 
     return reply.send(
       evaluateBudgets({
         summary,
         budgets: budgetState.budgets,
-        overallLimitCents: budgetState.overallLimitCents,
+        overallLimitCents,
         categoryLabel,
       }),
     );

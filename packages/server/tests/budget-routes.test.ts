@@ -25,6 +25,9 @@ import {
 
 const ACCOUNT_ID = "account_local_checking";
 const MONTH = "2022-07";
+// ISO week Jul 4–10 2022 (Mon-start). Of the fixture rows, 2022-07-05 and
+// 2022-07-08 fall inside it; 2022-07-12 and 2022-07-20 are later weeks.
+const WEEK = "2022-W27";
 
 async function serverWithSpending() {
   const app = await createServer({ statementImportStore: new InMemoryStatementImportStore() });
@@ -37,16 +40,22 @@ async function serverWithSpending() {
   return app;
 }
 
-async function summaryFor(app: Awaited<ReturnType<typeof createServer>>) {
+type Summary = {
+  totalOutflowCents: number;
+  categoryTotals: { category: string; outflowCents: number }[];
+};
+
+async function summaryFor(
+  app: Awaited<ReturnType<typeof createServer>>,
+  period: "month" | "week" = "month",
+  key: string = MONTH,
+): Promise<Summary> {
   const response = await app.inject({
     method: "GET",
-    url: `/api/v1/spending/summary?currency=USD&period=month&key=${MONTH}`,
+    url: `/api/v1/spending/summary?currency=USD&period=${period}&key=${key}`,
   });
   expect(response.statusCode).toBe(200);
-  return JSON.parse(response.body) as {
-    totalOutflowCents: number;
-    categoryTotals: { category: string; outflowCents: number }[];
-  };
+  return JSON.parse(response.body) as Summary;
 }
 
 describe("budget routes", () => {
@@ -55,7 +64,7 @@ describe("budget routes", () => {
     const response = await app.inject({ method: "GET", url: "/api/v1/budgets" });
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual({ currency: "USD", overallLimitCents: null, budgets: [] });
+    expect(JSON.parse(response.body)).toEqual({ currency: "USD", overallLimitCents: null, overallWeeklyLimitCents: null, budgets: [] });
     await app.close();
   });
 
@@ -86,6 +95,7 @@ describe("budget routes", () => {
     expect(JSON.parse(get.body)).toEqual({
       currency: "USD",
       overallLimitCents: 500_000,
+      overallWeeklyLimitCents: null,
       budgets: [
         { category: "groceries", limitCents: 40_000 },
         { category: "shopping", limitCents: 20_000 },
@@ -176,7 +186,7 @@ describe("budget routes", () => {
     const app = await serverWithSpending();
     const response = await app.inject({ method: "POST", url: "/api/v1/budgets", payload: {} });
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual({ currency: "USD", overallLimitCents: null, budgets: [] });
+    expect(JSON.parse(response.body)).toEqual({ currency: "USD", overallLimitCents: null, overallWeeklyLimitCents: null, budgets: [] });
     await app.close();
   });
 
@@ -277,6 +287,141 @@ describe("budget routes", () => {
   });
 });
 
+describe("budget routes — weekly caps (D-B1)", () => {
+  it("saves weekly and monthly caps on one category, echoing period only on the weekly one", async () => {
+    const app = await serverWithSpending();
+    const save = await app.inject({
+      method: "POST",
+      url: "/api/v1/budgets",
+      payload: {
+        currency: "USD",
+        overallLimitCents: 500_000,
+        overallWeeklyLimitCents: 120_000,
+        budgets: [
+          { category: "groceries", limitCents: 40_000 }, // monthly (implicit)
+          { category: "groceries", limitCents: 12_000, period: "week" }, // weekly
+        ],
+      },
+    });
+    expect(save.statusCode).toBe(200);
+
+    const get = await app.inject({ method: "GET", url: "/api/v1/budgets" });
+    // A category may hold one cap per window; the monthly cap serialises without a
+    // `period` field (unchanged on-disk shape), the weekly one keeps it.
+    expect(JSON.parse(get.body)).toEqual({
+      currency: "USD",
+      overallLimitCents: 500_000,
+      overallWeeklyLimitCents: 120_000,
+      budgets: [
+        { category: "groceries", limitCents: 40_000 },
+        { category: "groceries", limitCents: 12_000, period: "week" },
+      ],
+    });
+    await app.close();
+  });
+
+  it("rejects two caps for the same (window, category)", async () => {
+    const app = await serverWithSpending();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/budgets",
+      payload: {
+        budgets: [
+          { category: "groceries", limitCents: 12_000, period: "week" },
+          { category: "groceries", limitCents: 9_000, period: "week" },
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).error.code).toBe("INVALID_BUDGETS");
+    await app.close();
+  });
+
+  it("scores a weekly window against the matching weekly spending summary", async () => {
+    const app = await serverWithSpending();
+    // The week's spend, straight from the Spending screen's own weekly summary.
+    const week = await summaryFor(app, "week", WEEK);
+    const top = week.categoryTotals[0]!;
+    const limitCents = Math.max(1, Math.floor(top.outflowCents / 2)); // forces over
+
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/budgets",
+      payload: {
+        currency: "USD",
+        overallWeeklyLimitCents: week.totalOutflowCents + 100_000, // comfortably under
+        budgets: [
+          { category: top.category, limitCents, period: "week" },
+          // A monthly cap on the same category must NOT bleed into the weekly view.
+          { category: top.category, limitCents: 10_000_000 },
+        ],
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/budgets/progress?currency=USD&period=week&key=${WEEK}`,
+    });
+    expect(response.statusCode).toBe(200);
+    const progress = JSON.parse(response.body);
+
+    expect(progress.period).toMatchObject({ kind: "week", key: WEEK });
+    // Only the weekly cap is scored — one line, not two.
+    expect(progress.budgetedCount).toBe(1);
+    const line = progress.lines.find((l: { category: string }) => l.category === top.category);
+    expect(line.limitCents).toBe(limitCents); // the weekly cap, not the $100k monthly one
+    expect(line.spentCents).toBe(top.outflowCents); // budget spent IS the weekly summary total
+    expect(line.status).toBe("over");
+    // The overall cap in scope is the weekly one, checked against the week's outflow.
+    expect(progress.overall).toMatchObject({ spentCents: week.totalOutflowCents, status: "under" });
+    await app.close();
+  });
+
+  it("warns at 90% of a weekly cap (near threshold widened from 80%)", async () => {
+    const app = await serverWithSpending();
+    const week = await summaryFor(app, "week", WEEK);
+    const top = week.categoryTotals[0]!;
+    // Size the cap so actual spend is ~90% of it: near, not yet over.
+    const limitCents = Math.round(top.outflowCents / 0.9);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/budgets",
+      payload: { currency: "USD", budgets: [{ category: top.category, limitCents, period: "week" }] },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/budgets/progress?currency=USD&period=week&key=${WEEK}`,
+    });
+    const progress = JSON.parse(response.body);
+    const line = progress.lines.find((l: { category: string }) => l.category === top.category);
+    expect(line.usedBasisPoints).toBe(9_000);
+    expect(line.status).toBe("near");
+    await app.close();
+  });
+
+  it("defaults the weekly window to the week of the latest transaction", async () => {
+    const app = await serverWithSpending();
+    const response = await app.inject({ method: "GET", url: "/api/v1/budgets/progress?currency=USD&period=week" });
+    expect(response.statusCode).toBe(200);
+    // Latest fixture transaction is 2022-07-20, which lands in ISO week 2022-W29.
+    expect(JSON.parse(response.body).period).toMatchObject({ kind: "week", key: "2022-W29" });
+    await app.close();
+  });
+
+  it("rejects a month-shaped key when asking for a weekly window", async () => {
+    const app = await serverWithSpending();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/budgets/progress?currency=USD&period=week&key=2022-07",
+    });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).error.code).toBe("INVALID_BUDGETS_PROGRESS_QUERY");
+    await app.close();
+  });
+});
+
 describe("FileBudgetStore encryption at rest", () => {
   let dir: string;
   let filePath: string;
@@ -337,7 +482,7 @@ describe("FileBudgetStore persistence & migration", () => {
     try {
       const filePath = join(dir, "budgets.json");
       const store = new FileBudgetStore(filePath);
-      expect(await store.load()).toEqual({ currency: "USD", overallLimitCents: null, budgets: [] });
+      expect(await store.load()).toEqual({ currency: "USD", overallLimitCents: null, overallWeeklyLimitCents: null, budgets: [] });
       // A read must never materialise the file — that's a write's job.
       await expect(stat(filePath)).rejects.toThrow();
     } finally {
@@ -425,7 +570,7 @@ describe("budget store normalization", () => {
     expect(normalizeState({ overallLimitCents: 0 as number }).overallLimitCents).toBeNull();
     expect(normalizeState({ overallLimitCents: 250_000 }).overallLimitCents).toBe(250_000);
     // A missing or null file must degrade to the empty default, never throw.
-    expect(normalizeState(null)).toEqual({ currency: "USD", overallLimitCents: null, budgets: [] });
+    expect(normalizeState(null)).toEqual({ currency: "USD", overallLimitCents: null, overallWeeklyLimitCents: null, budgets: [] });
     expect(normalizeState(undefined).currency).toBe("USD");
   });
 });
@@ -553,7 +698,7 @@ describe("budget routes — per-user isolation over HTTP", () => {
 
     // Bob sees only his own (empty) set, never Alice's.
     const bobGet = await app.inject({ method: "GET", url: "/api/v1/budgets", headers: auth(bob) });
-    expect(JSON.parse(bobGet.body)).toEqual({ currency: "USD", overallLimitCents: null, budgets: [] });
+    expect(JSON.parse(bobGet.body)).toEqual({ currency: "USD", overallLimitCents: null, overallWeeklyLimitCents: null, budgets: [] });
 
     // Alice still sees hers — isolation, not deletion.
     const aliceGet = await app.inject({ method: "GET", url: "/api/v1/budgets", headers: auth(alice) });
