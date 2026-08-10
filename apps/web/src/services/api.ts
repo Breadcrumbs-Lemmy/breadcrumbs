@@ -27,6 +27,8 @@ import type {
   AffordabilityRequest,
   AffordabilityRequestValidationIssue,
   AffordabilityResponse,
+  Budget,
+  BudgetProgress,
   FinancialSnapshot,
   InsightsResult,
   SpendingSummary,
@@ -323,6 +325,40 @@ export function fetchSpendingSeries(params: {
   currency?: string;
 }): Promise<ApiOutcome<unknown>> {
   return request(`/api/v1/spending/series${qs({ currency: "USD", ...params })}`);
+}
+
+// ---- Budgets --------------------------------------------------------------
+
+/** A user's configured budget set: per-category monthly caps plus one optional
+ *  overall cap. Mirrors the server's `BudgetState`; the browser never computes
+ *  from it — it edits it and hands it back. */
+export type BudgetConfig = {
+  currency: string;
+  overallLimitCents: number | null;
+  budgets: Budget[];
+};
+
+/** `GET /api/v1/budgets` — the raw configured caps (no progress). */
+export function fetchBudgets(): Promise<ApiOutcome<BudgetConfig>> {
+  return request("/api/v1/budgets");
+}
+
+/** `POST /api/v1/budgets` — replace the whole set. Returns the saved (sorted) set.
+ *  Whole-set replace is deliberate: the screen edits a small set as one object,
+ *  so there is no partial-merge ambiguity. POST (not PUT) keeps this on the same
+ *  verb set every other mutation uses (the server's CORS allowlist is scoped to
+ *  exactly those verbs). */
+export function saveBudgets(config: BudgetConfig): Promise<ApiOutcome<BudgetConfig>> {
+  return post("/api/v1/budgets", config);
+}
+
+/** `GET /api/v1/budgets/progress` — spent-vs-limit for a month, computed
+ *  server-side by core `evaluateBudgets` (`CD-011` — no browser arithmetic).
+ *  `key` selects the month (e.g. `2026-08`); omitted = the latest data month. */
+export function fetchBudgetProgress(params: {
+  key?: string;
+}): Promise<ApiOutcome<BudgetProgress>> {
+  return request(`/api/v1/budgets/progress${qs({ currency: "USD", ...params })}`);
 }
 
 // ---- Transactions ---------------------------------------------------------

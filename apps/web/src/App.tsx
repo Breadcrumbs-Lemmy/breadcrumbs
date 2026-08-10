@@ -27,6 +27,7 @@ import { AssistantScopeProvider } from "./services/assistant-scope";
 import { AppShell, type NavItem } from "./components/AppShell";
 import { CheckScreen } from "./screens/CheckScreen";
 import { SpendingScreen } from "./screens/SpendingScreen";
+import { BudgetsScreen } from "./screens/BudgetsScreen";
 import { TransactionsScreen } from "./screens/TransactionsScreen";
 import { InsightsScreen } from "./screens/InsightsScreen";
 import { AccountsScreen } from "./screens/AccountsScreen";
@@ -58,6 +59,7 @@ const ScenarioAside = import.meta.env.DEV ? lazy(() => import("./dev/ScenarioAsi
 
 type Route =
   | "spending"
+  | "budgets"
   | "transactions"
   | "insights"
   | "accounts"
@@ -284,6 +286,17 @@ function AppContent() {
           <SpendingScreen
             onCheckPurchase={() => setRoute("check")}
             onImport={() => setRoute("import")}
+            onOpenBudgets={() => setRoute("budgets")}
+          />
+        )}
+
+        {route === "budgets" && (
+          <BudgetsScreen
+            onBack={() => setRoute("spending")}
+            onImport={() => {
+              setImportOrigin("budgets");
+              setRoute("import");
+            }}
           />
         )}
 

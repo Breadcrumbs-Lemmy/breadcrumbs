@@ -35,7 +35,7 @@ Use this file for structured requests between backend, UI, and the user. Keep re
 
 Update this table whenever a handoff is opened or its status changes. Read it immediately before allocating a new id.
 
-Id allocation follows `CD-009`: `[Backend: Codex]` opens **odd** ids, `[UI: Claude]` opens **even** ids. Next free: `H-025` for Codex, `H-082` for Claude (`H-038`, `H-040`, `H-042`, `H-044`, `H-046`, `H-048`, `H-050`, `H-052`, `H-054`, `H-056`, `H-058`, `H-060`, `H-062`, `H-064`, `H-066`, `H-068`, `H-070`, `H-072`, `H-074`, `H-076`, `H-078`, `H-080` used below). NOTE (2026-08-07): Codex is no longer active on this project; backend files are now edited by Claude directly, still coordinated here to avoid collisions between concurrent Claude sessions.
+Id allocation follows `CD-009`: `[Backend: Codex]` opens **odd** ids, `[UI: Claude]` opens **even** ids. Next free: `H-025` for Codex, `H-084` for Claude (`H-082` in use — Category Budgets, see below; `H-038`, `H-040`, `H-042`, `H-044`, `H-046`, `H-048`, `H-050`, `H-052`, `H-054`, `H-056`, `H-058`, `H-060`, `H-062`, `H-064`, `H-066`, `H-068`, `H-070`, `H-072`, `H-074`, `H-076`, `H-078`, `H-080` used below). NOTE (2026-08-07): Codex is no longer active on this project; backend files are now edited by Claude directly, still coordinated here to avoid collisions between concurrent Claude sessions.
 
 **Validation pass (2026-08-08).** Every handoff H-001–H-054 was audited against the actual codebase. Finding: **no handoff describes work that was never built — every claim is backed by real code.** The staleness is in the *labels*, not the work:
 
@@ -1426,3 +1426,20 @@ Entries below are in the order they were written, not id order. The index above 
     Fixed by removing all figures from the headline. It now states the verdict; the primary reason carries the numbers. Recorded in `docs/ui-copy-map.md` under "The headline carries no figures". Worth flagging to `[Backend: Codex]` as evidence that fixture variety catches presentation bugs that neither typing nor the deterministic tests can: both wrong headlines were composed from correct backend data.
   - Runtime reason-code coverage is unchanged at 10/14. The three new scenarios exercise already-covered codes. `H-010` still stands for the remaining four.
 - Date closed: 2026-08-03
+
+### H-082 Category Budgets — full-stack feature (autonomous session)
+
+- Status: Done (pending user re-approval of design decisions D-B1..D-B10 on return)
+- Requester: `[UI: Claude]`
+- Owner: `[UI: Claude]` (autonomous session 2026-08-09 while the user is away ~2h)
+- Date opened: 2026-08-09
+- Dependencies: `docs/budgets.md` (design + decisions D-B1..D-B10), `coordination/FEATURE-IDEAS.md`
+- Request: Building the first queued feature — Category Budgets — end to end. **Claimed these files to avoid collisions with any concurrent Claude session touching `apps/web`:**
+  - Core (done, tests green): `packages/core/src/domain/budgets.ts`, `packages/core/src/index.ts` (added exports), `packages/core/tests/budgets.test.ts`.
+  - Server (done, tests green): `packages/server/src/local/budget-store.ts`, `packages/server/src/local/budget-store-provider.ts`, `packages/server/src/http/budget-routes.ts`, `packages/server/src/http/server.ts` (wired routes + eraseUserData + budgetStores option), `packages/server/tests/budget-routes.test.ts`.
+  - Web (done): `apps/web/src/services/api.ts` (budget client fns — additive), `apps/web/src/screens/BudgetsScreen.tsx` (new), `apps/web/src/screens/SpendingScreen.tsx` (entry-point card), `apps/web/src/App.tsx` (route wiring).
+- Acceptance criteria: `GET/POST /api/v1/budgets` and `GET /api/v1/budgets/progress` live; a Budgets screen reachable from Spending (Pulse), not the nav (preserves the `C·A·P·I·T·A·L` acrostic); all arithmetic in core; deterministic; read-only.
+- Response: **Shipped and verified.** All layers done; core 202/202 + server 230/230 tests green; server & web typecheck clean; web production build clean. Browser-verified the full editor round-trip (POST → persist → reload → core recompute → word-first render) against an isolated 2022-08 seed. **Two design changes made during the build, both logged in `docs/budgets.md` for the user's review:**
+  - **D-B10** — the Spending-screen integration is an **entry-point card only**, NOT inline per-row cap markers as originally sketched in the acceptance criteria / D-B2/D-B8. Reason: the Spending list is multi-period, and a monthly cap shown against a week/year/statement misleads (the exact failure D-B2 guards against); the dedicated Budgets screen already shows the same list with backend status. This revises the "inline cap markers on the month category list" acceptance line above.
+  - **Verb: PUT → POST.** Browser verification caught that the shared CORS allowlist in `server.ts` advertises only `GET,POST,PATCH,DELETE,OPTIONS` — the exact verb set every existing route uses — so the browser's `PUT` preflight was rejected and saves silently failed (network `net::ERR_FAILED`; server-side inject tests didn't exercise CORS, so they stayed green). Rather than widen shared security-relevant CORS for one route, switched the budget write to `POST` (matching every other full-state write, e.g. `statement-imports/commit`). Semantics unchanged. **Heads-up for other sessions: do not add `PUT`/other verbs expecting them to work from the browser without also updating the CORS allowlist at `packages/server/src/http/server.ts`.**
+- Date closed: 2026-08-09
