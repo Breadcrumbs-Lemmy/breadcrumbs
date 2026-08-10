@@ -53,6 +53,18 @@ export type {
 } from "./domain/cashflow-calendar";
 export { buildAccountsView } from "./domain/accounts-view";
 export {
+  buildNetWorthTrend,
+  currentNetWorthObservation,
+  DEFAULT_NET_WORTH_MONTHS,
+} from "./domain/net-worth-trend";
+export type {
+  NetWorthBasis,
+  NetWorthPoint,
+  NetWorthSnapshot,
+  NetWorthTrend,
+  NetWorthTrendOptions,
+} from "./domain/net-worth-trend";
+export {
   DEFAULT_RECURRING_SPENDING_CONFIG,
   PATTERN_RULES_VERSION,
   detectRecurringSpending,

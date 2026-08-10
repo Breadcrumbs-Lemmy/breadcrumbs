@@ -28,6 +28,11 @@ import {
   InMemoryGoalStoreProvider,
 } from "../local/goal-store-provider";
 import type { GoalStoreProvider } from "../local/goal-store-provider";
+import {
+  FileNetWorthSnapshotProvider,
+  InMemoryNetWorthSnapshotProvider,
+} from "../local/net-worth-store-provider";
+import type { NetWorthSnapshotStoreProvider } from "../local/net-worth-store-provider";
 import { FileAgentMemoryProvider, InMemoryAgentMemoryProvider } from "../agent/memory/provider";
 import type { AgentMemoryProvider } from "../agent/memory/provider";
 import { buildAuthService } from "../auth/build";
@@ -45,6 +50,7 @@ import { registerSpendingRoutes } from "./spending-routes";
 import { registerBudgetRoutes } from "./budget-routes";
 import { registerGoalRoutes } from "./goal-routes";
 import { registerCashflowRoutes } from "./cashflow-routes";
+import { registerNetWorthRoutes } from "./net-worth-routes";
 import { registerPlaidRoutes } from "./plaid-routes";
 
 export type CreateServerOptions = {
@@ -66,6 +72,9 @@ export type CreateServerOptions = {
   /** Per-user assistant memory. Injected in tests; otherwise built to match the
    *  same ephemeral/persistent choice the stores use. */
   agentMemory?: AgentMemoryProvider;
+  /** Per-user net-worth snapshots (the recorded half of the trend). Injected in
+   *  tests; otherwise built to match the same ephemeral/persistent choice. */
+  netWorthSnapshots?: NetWorthSnapshotStoreProvider;
   /** Identity service. Inject one in tests or from `main` so the boot sequence
    *  can seed the owner; otherwise it is built from `authConfig`. */
   authService?: AuthService;
@@ -172,6 +181,14 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // server whose memory stays in RAM; a bare `createServer()` persists memory to
   // disk under the user's data directory, next to their imported statements.
   const agentMemory = options.agentMemory ?? (ephemeral ? new InMemoryAgentMemoryProvider() : new FileAgentMemoryProvider());
+  // Recorded net-worth snapshots follow the same isolation seam and the same
+  // ephemeral/persistent choice: RAM for a test-shaped server, one per-user file
+  // under the data directory (encrypted with the same key) for a real one. Their
+  // file lives inside `users/<id>/`, so the statement store's eraser removes them
+  // too, but the provider is still erased explicitly below.
+  const netWorthSnapshots =
+    options.netWorthSnapshots ??
+    (ephemeral ? new InMemoryNetWorthSnapshotProvider() : new FileNetWorthSnapshotProvider(defaultLocalDataDir(), fieldCipher));
 
   // Bank connections persist to disk for a real server (so a restart doesn't
   // un-link every user's bank) and stay in RAM for an ephemeral/test server.
@@ -194,6 +211,7 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
     await agentMemory.eraseForUser?.(userId);
     await budgetStores.eraseForUser?.(userId);
     await goalStores.eraseForUser?.(userId);
+    await netWorthSnapshots.eraseForUser?.(userId);
     await stores.eraseForUser?.(userId);
     await plaidTokenStore?.deleteAllForUser(userId);
   };
@@ -205,6 +223,7 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   await registerBudgetRoutes(app, { budgets: budgetStores, stores });
   await registerGoalRoutes(app, { goals: goalStores, stores });
   await registerCashflowRoutes(app, { stores });
+  await registerNetWorthRoutes(app, { stores, snapshots: netWorthSnapshots });
   await registerAgentRoutes(app, { stores, memory: agentMemory });
 
   if (options.plaidConfig && plaidTokenStore) {

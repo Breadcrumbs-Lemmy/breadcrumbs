@@ -33,6 +33,7 @@ import { CashflowScreen } from "./screens/CashflowScreen";
 import { TransactionsScreen } from "./screens/TransactionsScreen";
 import { InsightsScreen } from "./screens/InsightsScreen";
 import { AccountsScreen } from "./screens/AccountsScreen";
+import { NetWorthScreen } from "./screens/NetWorthScreen";
 import { ImportScreen } from "./screens/ImportScreen";
 import { AssistantScreen } from "./screens/AssistantScreen";
 import { ResultScreen } from "./screens/ResultScreen";
@@ -67,6 +68,7 @@ type Route =
   | "transactions"
   | "insights"
   | "accounts"
+  | "networth"
   | "assistant"
   | "import"
   | "check"
@@ -351,8 +353,11 @@ function AppContent() {
               setImportOrigin("accounts");
               setRoute("import");
             }}
+            onOpenNetWorth={() => setRoute("networth")}
           />
         )}
+
+        {route === "networth" && <NetWorthScreen onBack={() => setRoute("accounts")} />}
 
         {route === "assistant" && (
           <AssistantScreen
