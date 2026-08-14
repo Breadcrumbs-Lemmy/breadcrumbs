@@ -133,9 +133,13 @@ about being truthful about which points are measured and which are inferred.
   spoil it (same rule as Budgets/Goals/Settings). **Word-first (`D-006`):** the
   headline is the current cash net worth and its change over the covered window
   ("up $2,400 since March"); colour is a restrained accent only and never the sole
-  signal — up → `--accent`, down → `--alert`. Single-currency like the rest of
-  MVP 0; a point carries the request currency and mixed currencies are not
-  normalised (matches the affordability engine's own guard).
+  signal — up → `--accent`, down → `--alert`. The chart's **zero baseline is a
+  neutral structural line** (`--border-strong`), deliberately *not* the alert red
+  the shared `--data-zero` token resolves to: crossing zero is a fact to mark
+  quietly, not an alarm to raise, and the alert colour is reserved for the
+  direction signal. Single-currency like the rest of MVP 0; a point carries the
+  request currency and mixed currencies are not normalised (matches the
+  affordability engine's own guard).
 
 ## Files (planned)
 

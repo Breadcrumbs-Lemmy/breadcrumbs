@@ -210,9 +210,11 @@ function TrendChart({ points }: { points: NetWorthPoint[] }) {
         true,
       )}, currently ${formatMoney(last.netWorthCents)}`}
     >
-      {/* Zero line, only when the axis includes it. */}
+      {/* Zero line, only when the axis includes it. A neutral structural
+          reference (`--border-strong`), not the alert red — crossing zero is a
+          fact to mark quietly, not an alarm to raise. */}
       {includeZero && (
-        <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="var(--data-zero)" strokeWidth={1} />
+        <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="var(--border-strong)" strokeWidth={1} />
       )}
 
       {/* One segment per adjacent pair. A segment reads as recorded only when both
