@@ -21,6 +21,27 @@ export type Role = "user" | "admin";
 /** The one implicit account in single-user mode, and the seed admin otherwise. */
 export const OWNER_USER_ID = "usr_owner";
 
+/**
+ * The version of the Privacy Policy and Terms a user consents to at sign-up.
+ * Both documents share this "Effective date"; bump it when either changes
+ * materially so a future flow can require re-consent. This value is the anchor
+ * the consent record points at, so we can always say *what* was agreed to.
+ */
+export const CURRENT_POLICY_VERSION = "2026-08-09";
+
+/**
+ * An affirmative, recorded agreement to the Privacy Policy and Terms of Service,
+ * captured the instant an account is created. Its presence — with a version and
+ * a timestamp — is the evidence that consent for data collection, processing,
+ * and storage was obtained, rather than assumed from mere use of the app.
+ */
+export type ConsentRecord = {
+  /** The {@link CURRENT_POLICY_VERSION} in force when the user agreed. */
+  policyVersion: string;
+  /** ISO timestamp the user ticked the box and submitted registration. */
+  agreedAt: string;
+};
+
 export type MfaState = {
   enabled: boolean;
   method: "totp" | null;
@@ -46,6 +67,10 @@ export type User = {
   updatedAt: string;
   lastLoginAt?: string;
   mfa: MfaState;
+  /** The user's recorded agreement to the Privacy Policy and Terms, captured at
+   *  registration. `null` for accounts provisioned outside the sign-up flow (the
+   *  single-user owner, admin-created users) that never saw the consent step. */
+  consent?: ConsentRecord | null;
 };
 
 /** What leaves the server. Never carries the password hash. */
@@ -59,6 +84,10 @@ export type PublicUser = {
   lastLoginAt?: string;
   /** `pending` = enrollment started (secret issued) but no code verified yet. */
   mfa: { enabled: boolean; method: "totp" | null; pending: boolean };
+  /** The recorded Privacy Policy / Terms agreement, or `null` if this account
+   *  never went through the consent step. Surfaced so `/auth/me` and the admin
+   *  view can show whether (and to which version) a user consented. */
+  consent?: ConsentRecord | null;
 };
 
 export type Session = {
@@ -107,6 +136,7 @@ export function toPublicUser(user: User): PublicUser {
       method: user.mfa.method,
       pending: !user.mfa.enabled && user.mfa.totpSecret !== null,
     },
+    consent: user.consent ?? null,
   };
 }
 

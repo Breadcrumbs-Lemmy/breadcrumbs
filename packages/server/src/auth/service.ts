@@ -13,8 +13,8 @@ import { authErrors } from "./errors";
 import { hashPassword, verifyPassword } from "./password";
 import type { SessionStore } from "./session-store";
 import { buildOtpauthUri, generateTotpSecret, verifyTotp } from "./totp";
-import { OWNER_USER_ID, normalizeEmail } from "./types";
-import type { MfaState, Principal, Role, User } from "./types";
+import { CURRENT_POLICY_VERSION, OWNER_USER_ID, normalizeEmail } from "./types";
+import type { ConsentRecord, MfaState, Principal, Role, User } from "./types";
 import type { UserStore } from "./user-store";
 import type { FieldCipher } from "../crypto/field-cipher";
 
@@ -49,7 +49,17 @@ export type AuthServiceDeps = {
   cipher?: FieldCipher;
 };
 
-export type Credentials = { email: string; password: string; displayName?: string; userAgent?: string };
+export type Credentials = {
+  email: string;
+  password: string;
+  displayName?: string;
+  userAgent?: string;
+  /** Set true when the user affirmatively agreed to the Privacy Policy and Terms
+   *  at sign-up. When present, a {@link ConsentRecord} is stamped on the new
+   *  account. The public register route requires it; internal callers (admin
+   *  provisioning) may omit it, leaving `consent` null. */
+  acceptedPolicies?: boolean;
+};
 
 export class AuthService {
   readonly config: AuthConfig;
@@ -91,6 +101,8 @@ export class AuthService {
       createdAt: now,
       updatedAt: now,
       mfa: { ...EMPTY_MFA },
+      // The owner is provisioned by the operator, not through the consent UI.
+      consent: null,
     };
     return this.users.create(owner);
   }
@@ -118,6 +130,12 @@ export class AuthService {
     const firstEver = (await this.users.count()) === 0;
     const role: Role = firstEver || email === this.config.ownerEmail ? "admin" : "user";
     const now = new Date().toISOString();
+    // Record consent the moment the account is created, so an account never
+    // exists without a stamped agreement. Callers that don't pass the flag
+    // (admin provisioning) leave it null rather than a false claim of consent.
+    const consent: ConsentRecord | null = input.acceptedPolicies
+      ? { policyVersion: CURRENT_POLICY_VERSION, agreedAt: now }
+      : null;
     const user = await this.users.create({
       id: `usr_${randomUUID()}`,
       email,
@@ -128,6 +146,7 @@ export class AuthService {
       createdAt: now,
       updatedAt: now,
       mfa: { ...EMPTY_MFA },
+      consent,
     });
     const { token } = await this.sessions.create({ userId: user.id, ttlMs: this.config.sessionTtlMs, userAgent: input.userAgent });
     return { user, token };

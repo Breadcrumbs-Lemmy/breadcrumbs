@@ -22,6 +22,14 @@ const CredentialsSchema = z.object({
   displayName: z.string().min(1).max(120).optional(),
 });
 
+/** Registration additionally carries the consumer's affirmative agreement to
+ *  the Privacy Policy and Terms. The flag is validated as a boolean here and
+ *  enforced (must be true) in the handler, so consent is both required and
+ *  recorded before any account — and therefore any Plaid data flow — exists. */
+const RegisterSchema = CredentialsSchema.extend({
+  acceptedPolicies: z.boolean().optional(),
+});
+
 const ChangePasswordSchema = z.object({
   currentPassword: z.string().max(1024).default(""),
   newPassword: z.string().min(1).max(1024),
@@ -63,7 +71,10 @@ export async function registerAuthRoutes(app: FastifyInstance, options: Register
   }));
 
   app.post("/api/v1/auth/register", async (request, reply) => {
-    const body = CredentialsSchema.parse(request.body);
+    const body = RegisterSchema.parse(request.body);
+    // Consent is a hard precondition, not a checkbox the client can skip: no
+    // agreement, no account. Recorded on the user by the service below.
+    if (!body.acceptedPolicies) throw authErrors.consentRequired();
     const { user, token } = await service.register({ ...body, userAgent: request.headers["user-agent"] });
     return sendSession(reply, token, { user: toPublicUser(user), token });
   });

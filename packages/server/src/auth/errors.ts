@@ -26,6 +26,15 @@ export const authErrors = {
   weakPassword: (min: number) =>
     new AuthError("WEAK_PASSWORD", 400, `Password must be at least ${min} characters.`),
   invalidEmail: () => new AuthError("INVALID_EMAIL", 400, "Enter a valid email address."),
+  /** Registration was attempted without agreeing to the Privacy Policy and
+   *  Terms. Consent is required and recorded, so an account can never come into
+   *  existence without it. */
+  consentRequired: () =>
+    new AuthError(
+      "CONSENT_REQUIRED",
+      400,
+      "You must agree to the Privacy Policy and Terms of Service to create an account.",
+    ),
   registrationClosed: () => new AuthError("REGISTRATION_CLOSED", 403, "Registration is closed."),
   accountDisabled: () => new AuthError("ACCOUNT_DISABLED", 403, "This account has been disabled."),
   unauthenticated: () => new AuthError("UNAUTHENTICATED", 401, "Sign in to continue."),

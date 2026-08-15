@@ -209,13 +209,16 @@ export function login(email: string, password: string): Promise<ApiOutcome<{ use
   return post("/api/v1/auth/login", { email, password }, { raw401: true });
 }
 
-/** `POST /api/v1/auth/register` */
+/** `POST /api/v1/auth/register`. `acceptedPolicies` carries the user's
+ *  affirmative agreement to the Privacy Policy and Terms; the server refuses to
+ *  create an account (CONSENT_REQUIRED) without it and records it on success. */
 export function register(
   email: string,
   password: string,
   displayName?: string,
+  acceptedPolicies?: boolean,
 ): Promise<ApiOutcome<{ user: PublicUser; token: string }>> {
-  return post("/api/v1/auth/register", { email, password, displayName });
+  return post("/api/v1/auth/register", { email, password, displayName, acceptedPolicies });
 }
 
 /** `POST /api/v1/auth/logout` */
@@ -242,6 +245,9 @@ export type PublicUser = {
   lastLoginAt?: string;
   /** `pending` = enrollment started but no code verified yet. */
   mfa: { enabled: boolean; method: "totp" | null; pending: boolean };
+  /** The recorded Privacy Policy / Terms agreement, or `null` if the account
+   *  never went through the consent step. */
+  consent?: { policyVersion: string; agreedAt: string } | null;
 };
 
 // ---- Multi-factor (TOTP) ---------------------------------------------------

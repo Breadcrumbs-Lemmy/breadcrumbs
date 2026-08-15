@@ -125,14 +125,22 @@ function RegisterForm({
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
+  // Affirmative consent to the Privacy Policy and Terms. The account cannot be
+  // created until this is ticked — the button stays disabled, and the server
+  // independently refuses a registration without it.
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!acceptedPolicies) {
+      setError("Please agree to the Privacy Policy and Terms of Service to continue.");
+      return;
+    }
     setBusy(true);
     setError(null);
-    const result = await apiRegister(email, password, displayName || undefined);
+    const result = await apiRegister(email, password, displayName || undefined, acceptedPolicies);
     setBusy(false);
     if (result.kind === "ok") {
       setBearerToken(result.data.token);
@@ -179,11 +187,46 @@ function RegisterForm({
           />
         </Field>
 
+        {/* Consent gate: the user actively agrees before an account — and
+            therefore any Plaid data flow — comes into existence. The links open
+            the served policy documents in a new tab. */}
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+            checked={acceptedPolicies}
+            onChange={(e) => setAcceptedPolicies(e.target.checked)}
+            required
+          />
+          <span className="text-label leading-snug text-ink-secondary">
+            I agree to the{" "}
+            <a
+              href="/legal/privacy-policy.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline underline-offset-2"
+            >
+              Privacy Policy
+            </a>{" "}
+            and{" "}
+            <a
+              href="/legal/terms-of-service.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline underline-offset-2"
+            >
+              Terms of Service
+            </a>
+            , including the collection, processing, and storage of my financial
+            data as described there.
+          </span>
+        </label>
+
         {error && <p className="text-body text-alert">{error}</p>}
 
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || !acceptedPolicies}
           className="min-h-[44px] w-full rounded-md bg-accent text-body font-medium text-ink-inverse shadow-sm transition-colors hover:bg-accent-hover disabled:opacity-50"
         >
           {busy ? "Creating account…" : "Create account"}
