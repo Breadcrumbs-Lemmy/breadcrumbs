@@ -1,7 +1,7 @@
 # Handoffs
 
 Status: Living  
-Last updated: 2026-08-08
+Last updated: 2026-08-15
 
 Use this file for structured requests between backend, UI, and the user. Keep requests short, concrete, and easy to close.
 
@@ -43,6 +43,21 @@ Id allocation follows `CD-009`: `[Backend: Codex]` opens **odd** ids, `[UI: Clau
 - `H-018`, `H-020`, `H-022` are correctly `Delivered, pending review` in this table, but their **body sections still say "Status: Open / Response: Pending"** — that body text is stale; the code (week/month/year/statement periods, `spendingSeries`, all five UI-contract endpoints) is fully present.
 - `H-032`, `H-034`, `H-036` are implemented in code; what remains is *runtime* re-measurement (a live re-link+sync; a live "Unknown"-share re-measure), not missing code.
 - `H-013` was `Deferred` but is **actually built** — corrected below.
+
+> **⚠ COORDINATION NOTE (2026-08-15) — this branch (PR #10) recovers stranded agent-error / assistant-UI WIP; Group E compliance PDFs moved to Trash.**
+> This branch, **`feat/agent-effort-fallback`** (off `main` `b6c0d9d`), recovers uncommitted agent + assistant-UI work that was trapped in the parallel `feat/cashflow-calendar` worktree, re-homed here via `git apply --3way` and shipped as **PR #10**. Three commits — `4eb9775` → `3186788` → `191b747` (tip):
+> - **`4eb9775` fix(agent)** — per-model 400 **self-heal** (`createBetaMessage` capability-strip retry loop in `agent/provider.ts`, used by both chat and `statement-extraction.ts`) **+ error sanitization** (`describe*Error` genericizes raw provider errors while keeping the safe HTTP status and `console.warn`-ing the detail; client-side `safeAssistantError` in `apps/web/src/services/agent.ts` caps anything that still looks raw). Closes the raw `…does not support the effort parameter` **400 that was leaking onto the assistant page**. Tests: `agent-effort-fallback.test.ts` (9) + sanitizer regressions in `agent-provider.test.ts`.
+> - **`3186788` feat(assistant)** — mascot auto-peeks decoupled from the idle-motion pref (peeks resume on tab refocus independently of the rAF loop); declined replies sanitized.
+> - **`191b747` feat(insights)** — Insights period persists across the Transactions drill-down; Logo `spill` now defaults **off**.
+> Verified: `pnpm test` **320 pass** + web/server `tsc --noEmit` + `pnpm build` + live browser (assistant answers, no 400) + a server-log self-heal trace (effort→retry→fallbacks→retry→answer).
+>
+> **De-dup note for whoever reconciles `feat/cashflow-calendar`:** the *same* edits were left uncommitted in that worktree — `apps/web/src/{App.tsx, components/AssistantMascot.tsx, components/Logo.tsx, screens/AssistantScreen.tsx, screens/InsightsScreen.tsx, services/agent.ts}`, `packages/server/src/agent/{provider.ts, statement-extraction.ts}`, and `packages/server/tests/agent-effort-fallback.test.ts`. Once PR #10 merges they are **redundant** — `git checkout -- …` them there rather than landing a divergent second copy. That branch's `feat(auth): require and record consumer consent at registration` (`33b1342`) is genuinely new and is **not** in PR #10. Its remote was force-rebased clean onto `main` on 2026-08-14 — **do not force-push over it**.
+>
+> **Branch / PR landscape (2026-08-15):** `main` = `b6c0d9d` (PRs #3–#7 merged: Category Budgets, Savings Goals, Cash-Flow Calendar, Net-Worth Trend, Monthly Report). Open PRs: **#10** (this branch) and **#9** (`test/close-coverage-gaps`, +27 branch-coverage tests).
+>
+> **Group E compliance docs (`docs/`):** at the user's request (only needed for the Plaid questionnaire) the **5 generated PDFs** (`Breadcrumbs-Privacy-Policy`, `-Terms-of-Service`, `-Data-Deletion-Retention-Attestation`, `-Data-Retention-and-Disposal-Policy`, `-Plaid-Data-Deletion-Retention-Attestation`) and **`docs/plaid-evidence/`** (4 login/MFA screenshots) were moved to `~/.Trash` (reversible via Finder → Put Back). The Markdown / Python **sources stay in `docs/`** (`build-legal-pdf.py`, `build-privacy-pdf.py`, `data-deletion-retention-attestation.md`, `plaid-data-deletion-retention-attestation.md`) so every PDF regenerates on demand.
+>
+> *This is the committed copy of this note — its durable home on PR #10 → `main`. An uncommitted mirror also sits in the `feat/cashflow-calendar` working tree for the owning session.*
 
 | Id | Owner | Status | Subject |
 | --- | --- | --- | --- |

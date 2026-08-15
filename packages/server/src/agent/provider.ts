@@ -120,6 +120,116 @@ export function isLoopbackHost(hostname: string): boolean {
 
 const ANTHROPIC_SYSTEM_MAX_TOKENS = 8000;
 
+// We send a few near-future request features by default — `output_config.effort`
+// and the server-side `fallbacks` parameter — but they are per-model capabilities.
+// Operators can point the agent at any model (BREADCRUMBS_AGENT_MODEL /
+// _EXTRACTION_MODEL), including ones that reject a given feature with a 400 that
+// used to surface on the assistant page. Rather than maintain a model→capability
+// allowlist (which rots the moment a new model ships), we send the feature, and if
+// the model rejects it we strip it, retry, and remember not to send it to that
+// model again. One wasted round-trip per (model, capability) the first time; zero
+// after. The API reports unsupported features one 400 at a time, so a request that
+// carries two of them heals across successive retries — not in a single shot.
+type BetaCreateParams = Parameters<Anthropic["beta"]["messages"]["create"]>[0];
+type AnthropicAPIError = InstanceType<typeof Anthropic.APIError>;
+
+/** Return a copy of `params` with `output_config.effort` removed, dropping
+ *  `output_config` entirely only if `effort` was its sole field (so structured-
+ *  output `format` and any other config survive). */
+function withoutEffort(params: BetaCreateParams): BetaCreateParams {
+  const oc = (params as { output_config?: Record<string, unknown> }).output_config;
+  if (!oc || !("effort" in oc)) return params;
+  const { effort: _dropped, ...restOfConfig } = oc;
+  const next = { ...params } as BetaCreateParams & { output_config?: Record<string, unknown> };
+  if (Object.keys(restOfConfig).length > 0) next.output_config = restOfConfig;
+  else delete next.output_config;
+  return next;
+}
+
+/** Return a copy of `params` with the server-side `fallbacks` parameter removed,
+ *  along with the now-purposeless `server-side-fallback-*` beta that enabled it. */
+function withoutFallbacks(params: BetaCreateParams): BetaCreateParams {
+  const next = { ...params } as BetaCreateParams & { fallbacks?: unknown; betas?: unknown };
+  delete next.fallbacks;
+  if (Array.isArray(next.betas)) {
+    const kept = next.betas.filter((b) => !/server-side-fallback/i.test(String(b)));
+    if (kept.length > 0) next.betas = kept;
+    else delete next.betas;
+  }
+  return next;
+}
+
+/** A request feature some models don't accept. Each knows how to spot itself in
+ *  the params, recognise the 400 that rejects it, and strip itself back out. */
+type ModelCapability = {
+  label: string;
+  /** Models known to reject this feature — filled in as we learn, so later calls
+   *  to the same model omit it up front. */
+  rejectedBy: Set<string>;
+  present: (params: BetaCreateParams) => boolean;
+  rejects: (error: AnthropicAPIError) => boolean;
+  strip: (params: BetaCreateParams) => BetaCreateParams;
+};
+
+const CAPABILITIES: ModelCapability[] = [
+  {
+    label: "output_config.effort",
+    rejectedBy: new Set<string>(),
+    present: (p) => {
+      const oc = (p as { output_config?: Record<string, unknown> }).output_config;
+      return Boolean(oc && "effort" in oc);
+    },
+    rejects: (e) => /effort/i.test(e.message),
+    strip: withoutEffort,
+  },
+  {
+    label: "the fallbacks parameter",
+    rejectedBy: new Set<string>(),
+    present: (p) => (p as { fallbacks?: unknown }).fallbacks !== undefined,
+    rejects: (e) => /fallbacks/i.test(e.message),
+    strip: withoutFallbacks,
+  },
+];
+
+/** `client.beta.messages.create`, but resilient to a model that doesn't support a
+ *  near-future feature we send by default (`output_config.effort`, server-side
+ *  `fallbacks`). Strips features the model is already known to reject up front, and
+ *  self-heals the first time a new model 400s on one: strip it, retry, and
+ *  remember. Multiple unsupported features heal across successive retries, since
+ *  the API reports them one 400 at a time. Any 400 we don't recognise — or a repeat
+ *  rejection of something already stripped — propagates unchanged. */
+export async function createBetaMessage(
+  client: Anthropic,
+  params: BetaCreateParams,
+): Promise<Anthropic.Beta.BetaMessage> {
+  const model = params.model;
+  // Pre-strip everything this model is already known to reject.
+  let attempt = CAPABILITIES.reduce(
+    (p, cap) => (cap.rejectedBy.has(model) && cap.present(p) ? cap.strip(p) : p),
+    params,
+  );
+
+  // At most one heal per capability, so the loop is bounded by CAPABILITIES.length.
+  for (let i = 0; i <= CAPABILITIES.length; i += 1) {
+    try {
+      return (await client.beta.messages.create(attempt)) as Anthropic.Beta.BetaMessage;
+    } catch (error) {
+      if (!(error instanceof Anthropic.APIError) || error.status !== 400) throw error;
+      // `present` guards against re-stripping (and thus an infinite loop): once a
+      // feature is gone it can't match again, so an unchanged repeat 400 rethrows.
+      const cap = CAPABILITIES.find((c) => c.present(attempt) && c.rejects(error));
+      if (!cap) throw error;
+      cap.rejectedBy.add(model);
+      console.warn(
+        `[agent] model "${model}" rejected ${cap.label} — retrying without it and omitting it for future calls.`,
+      );
+      attempt = cap.strip(attempt);
+    }
+  }
+  // Exhausted the known capabilities; a final attempt lets the real error surface.
+  return (await client.beta.messages.create(attempt)) as Anthropic.Beta.BetaMessage;
+}
+
 export class AnthropicChatProvider implements ChatProvider {
   readonly id = "anthropic" as const;
   readonly offline = false;
@@ -141,7 +251,7 @@ export class AnthropicChatProvider implements ChatProvider {
 
     try {
       for (let iteration = 0; iteration < input.maxIterations; iteration += 1) {
-        const response = await this.client.beta.messages.create({
+        const response = await createBetaMessage(this.client, {
           model: this.model,
           max_tokens: input.maxTokens || ANTHROPIC_SYSTEM_MAX_TOKENS,
           system: input.system,
@@ -337,17 +447,28 @@ function safeParseArgs(raw: string): Record<string, unknown> {
 }
 
 export function describeAnthropicError(error: unknown): string {
+  // Our own config guards (e.g. loopback enforcement) are hand-authored and
+  // actionable — pass them through; only raw/unknown errors get genericized.
+  if (error instanceof AgentConfigError) return error.message;
   if (error instanceof Anthropic.AuthenticationError) return "The Anthropic API key was rejected. Check ANTHROPIC_API_KEY.";
   if (error instanceof Anthropic.RateLimitError) return "Rate limited by the Anthropic API. Try again in a moment.";
   if (error instanceof Anthropic.APIConnectionError) return "Couldn't reach the Anthropic API.";
-  if (error instanceof Anthropic.APIError) return `Anthropic API error (${error.status ?? "unknown"}): ${error.message}`;
-  return error instanceof Error ? error.message : "The assistant failed.";
+  // The raw error.message can echo request internals (invalid params, the API key,
+  // prompt fragments). Log it for the operator; hand the user only the status code.
+  if (error instanceof Anthropic.APIError) {
+    console.warn(`[agent] Anthropic API error (${error.status ?? "unknown"}):`, error.message);
+    return `The assistant hit an API error (${error.status ?? "unknown"}). Please try again.`;
+  }
+  console.warn("[agent] assistant failure:", error);
+  return "The assistant failed. Please try again.";
 }
 
 function describeLocalError(error: unknown, endpoint: string): string {
+  if (error instanceof AgentConfigError) return error.message;
   if (error instanceof Error && error.name === "AbortError") return "The local model timed out. Is it running and responsive?";
   if (error instanceof Error && /fetch failed|ECONNREFUSED/i.test(error.message)) {
     return `Couldn't reach the local model at ${endpoint}. Is it running?`;
   }
-  return error instanceof Error ? error.message : "The local assistant failed.";
+  console.warn("[agent] local model failure:", error);
+  return "The local assistant failed. Please try again.";
 }

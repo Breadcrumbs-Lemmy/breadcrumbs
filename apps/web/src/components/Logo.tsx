@@ -32,9 +32,9 @@ type LogoProps = {
   /** Hero/brand moments: adds the always-on "you are here" beacon pulse (and,
    *  unless `spill` says otherwise, the hover coin-spill). */
   beacon?: boolean;
-  /** Spill coins on hover. Defaults to `beacon`, but can be set on its own so a
-   *  calm placement (e.g. the sidebar) gets the playful spill without the
-   *  always-on beacon pulse. */
+  /** Spill coins on hover. Off by default (independent of `beacon`); opt in
+   *  where the play is wanted — currently just the sidebar mark, which sets it
+   *  on its own to get the spill without the always-on beacon pulse. */
   spill?: boolean;
   /** Ambient gold glitter: at random intervals a light sweeps once around the
    *  coin's rim, trailing sparkles — as if a lamp moved past a struck coin's
@@ -138,7 +138,7 @@ export function LogoMark({
   size = 28,
   animated = true,
   beacon = false,
-  spill = beacon,
+  spill = false,
   spillCount = 6,
   sparkle = beacon,
 }: Pick<LogoProps, "size" | "animated" | "beacon" | "spill" | "spillCount" | "sparkle">) {
@@ -279,7 +279,7 @@ export function Logo({
   size = 28,
   animated = true,
   beacon = false,
-  spill = beacon,
+  spill = false,
   spillCount = 6,
   sparkle = beacon,
   className = "",

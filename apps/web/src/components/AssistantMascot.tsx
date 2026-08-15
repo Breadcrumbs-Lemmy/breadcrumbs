@@ -35,6 +35,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   fetchAgentStatus,
+  safeAssistantError,
   sendAgentTurn,
   TOOL_LABELS,
   type AgentStatus,
@@ -367,9 +368,12 @@ export function AssistantMascot({
     const alwaysGuy = prefs.character === "always";
     // Never force motion on a reduced-motion user, whatever the pref asks for.
     const motionAllowed = () => prefs.movement && !prefersReducedMotion();
-    // Occasional peeks only in "auto", and only when motion is allowed — a peek
-    // is itself an animation, so a still coin (movement off / reduced) stays still.
-    const wantAutoPeeks = () => prefs.character === "auto" && motionAllowed();
+    // Occasional peeks in "auto". A peek is the b-guy's *character*, not the coin's
+    // idle roll, so it's independent of `movement` — a still coin (idle movement
+    // off) can still let the guy peek now and then, which is what the pref model
+    // calls orthogonal. Reduced-motion stays a hard floor (a peek is animation),
+    // matching peekBlocked(), which already gates on reduced-motion, not movement.
+    const wantAutoPeeks = () => prefs.character === "auto" && !prefersReducedMotion();
 
     const measure = () => {
       scale = parseFloat(getComputedStyle(root).getPropertyValue("--coin-scale")) || 1;
@@ -657,7 +661,13 @@ export function AssistantMascot({
         start();
         if (wantAutoPeeks()) schedulePeek();
       } else {
+        // Idle movement off (or reduced-motion): the coin stays still — no rAF
+        // loop. But "auto" still lets the guy peek: park the coin statically, then
+        // run just the peek timer (peeks are CSS transitions + timers, not the rAF
+        // loop, so they need no rolling coin). restStatic clears any old peek timer
+        // first, so scheduling after it is a clean (re)start, not a double.
         restStatic("down");
+        if (wantAutoPeeks()) schedulePeek();
       }
     };
 
@@ -703,10 +713,12 @@ export function AssistantMascot({
       if (document.hidden) {
         stop();
         window.clearTimeout(peekTimer);
-      } else if (motionAllowed()) {
-        // Resume the idle loop (and peeks, in "auto"). "always" needs no resume —
-        // the guy's static pose is CSS, not the loop; movement-off stays parked.
-        start();
+      } else {
+        // Resume whatever the prefs imply. The idle loop resumes only when motion
+        // is allowed; auto-peeks resume independently, so a still coin (movement
+        // off) keeps peeking after the tab is refocused. "always" needs no resume —
+        // the guy's static pose is CSS, not the loop.
+        if (motionAllowed()) start();
         if (wantAutoPeeks()) schedulePeek();
       }
     };
@@ -1090,7 +1102,7 @@ function MascotPanel({
         sources: sourcesLine(res.data.toolCalls),
       };
     } else {
-      reply = { role: "assistant", content: res.data.message, tone: "declined" };
+      reply = { role: "assistant", content: safeAssistantError(res.data.message), tone: "declined" };
     }
     setMessages((prev) => [...prev, reply]);
     setBusy(false);
