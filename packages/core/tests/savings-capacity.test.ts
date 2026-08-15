@@ -145,7 +145,7 @@ describe("suggestSavingsCapacity — partial months are excluded", () => {
 });
 
 describe("suggestSavingsCapacity — transfers to savings stay surplus", () => {
-  const SAVINGS = account({ id: "acct_savings", type: "savings", role: "reserved_savings", displayName: "Savings" });
+  const SAVINGS = account({ id: "acct_savings", type: "savings", role: "reserve_cash", displayName: "Savings" });
   // Two identical months: income 300000, housing 100000, and a 150000 transfer to
   // savings. Money moved to savings is not spending, so surplus is 300000 − 100000
   // = 200000, never 50000. This pins that the transfer is excluded, not subtracted.
