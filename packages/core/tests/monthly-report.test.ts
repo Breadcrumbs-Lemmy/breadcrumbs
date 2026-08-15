@@ -110,6 +110,14 @@ describe("buildMonthlyReport — month resolution (D-R2)", () => {
     expect(report.fromLatestComplete).toBe(true);
     expect(report.summary.period.key).toBe("2022-04");
   });
+
+  it("treats an empty-string key the same as an omitted key (fromLatestComplete, default month)", () => {
+    // '' is falsy, so `options.key && MONTH_KEY.test(options.key)` short-circuits to null.
+    const report = buildMonthlyReport({ ...base, asOfDate: "2022-05-14", key: "" });
+    expect(report.requestedKey).toBeNull();
+    expect(report.fromLatestComplete).toBe(true);
+    expect(report.summary.period.key).toBe("2022-04");
+  });
 });
 
 describe("buildMonthlyReport — composition equivalence (D-R1, CD-003)", () => {
@@ -170,6 +178,45 @@ describe("toReportCsv — shape, escaping, rounding (D-R6, D-R7)", () => {
     expect(toReportCsv(quiet)).toBe(
       "Category,Spent,Refunds,Net,Share %,Transactions\r\nTotal,0.00,0.00,0.00,0.00,0\r\n",
     );
+  });
+
+  it("double-quote in displayName is RFC-4180 escaped: inner quotes doubled and field wrapped", () => {
+    // displayName = 'The "Best" Food' → csvField wraps in quotes and doubles interior quotes
+    // → "The ""Best"" Food"
+    const report = buildMonthlyReport({
+      transactions: [
+        tx({ id: "q1", accountId: "chk", amountCents: -100, category: "fancy", flowType: "SPEND", postedDate: "2022-04-05" }),
+      ],
+      accounts: [CHK],
+      currency: "USD",
+      asOfDate: "2022-05-14",
+      key: "2022-04",
+      categoryLabel: () => 'The "Best" Food',
+    });
+    expect(toReportCsv(report)).toBe(
+      "Category,Spent,Refunds,Net,Share %,Transactions\r\n" +
+        '"The ""Best"" Food",1.00,0.00,1.00,100.00,1\r\n' +
+        "Total,1.00,0.00,1.00,100.00,1\r\n",
+    );
+  });
+
+  it("hundredths: negative value where abs % 100 < 10 renders '-0.05' (padStart on negative branch)", () => {
+    // grossOutflowCents=1, refundCents=6 → outflowCents=-5
+    // hundredths(-5): abs=5, Math.floor(5/100)=0, (5%100).padStart(2,'0')='05' → '-0.05'
+    // shareBasisPoints=0 because totalOutflow=-5 ≤ 0
+    const report = buildMonthlyReport({
+      transactions: [
+        tx({ id: "n1", accountId: "chk", amountCents: -1, category: "tiny", flowType: "SPEND", postedDate: "2022-04-05" }),
+        tx({ id: "n2", accountId: "chk", amountCents: 6, category: "tiny", flowType: "REFUND", postedDate: "2022-04-06" }),
+      ],
+      accounts: [CHK],
+      currency: "USD",
+      asOfDate: "2022-05-14",
+      key: "2022-04",
+    });
+    const csv = toReportCsv(report);
+    expect(csv).toContain("tiny,0.01,0.06,-0.05,0.00,1\r\n");
+    expect(csv).toContain("Total,0.01,0.06,-0.05,0.00,1\r\n");
   });
 
   it("keeps the sign on a category whose refunds exceed its spend", () => {

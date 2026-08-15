@@ -239,6 +239,19 @@ describe("budget routes", () => {
     await app.close();
   });
 
+  it("returns 200 with today's month as the period key when no transactions exist", async () => {
+    // A bare server with no committed statements — asOfDateFor([]) falls back to
+    // new Date() so the period key must equal the current calendar month.
+    const app = await createServer({ statementImportStore: new InMemoryStatementImportStore() });
+    // Capture today's month immediately before the request so both sides of the
+    // assertion share the same wall-clock instant (never hard-code this date).
+    const todayMonth = new Date().toISOString().slice(0, 7);
+    const response = await app.inject({ method: "GET", url: "/api/v1/budgets/progress?currency=USD" });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).period.key).toBe(todayMonth);
+    await app.close();
+  });
+
   it("rejects a malformed progress month key", async () => {
     const app = await serverWithSpending();
     const response = await app.inject({ method: "GET", url: "/api/v1/budgets/progress?key=2022-7" });
@@ -546,6 +559,17 @@ describe("FileBudgetStore persistence & migration", () => {
 });
 
 describe("budget store normalization", () => {
+  it("coerces bad overallWeeklyLimitCents the same way as overallLimitCents", () => {
+    // 0: not > 0 → null
+    expect(normalizeState({ overallWeeklyLimitCents: 0 as number }).overallWeeklyLimitCents).toBeNull();
+    // Infinity: not finite → null
+    expect(normalizeState({ overallWeeklyLimitCents: Infinity as number }).overallWeeklyLimitCents).toBeNull();
+    // 12.5: not integer → null
+    expect(normalizeState({ overallWeeklyLimitCents: 12.5 as number }).overallWeeklyLimitCents).toBeNull();
+    // 120_000: positive integer → passes through unchanged
+    expect(normalizeState({ overallWeeklyLimitCents: 120_000 }).overallWeeklyLimitCents).toBe(120_000);
+  });
+
   it("drops malformed budgets and coerces a bad overall cap to none", () => {
     const state = normalizeState({
       currency: "usd",

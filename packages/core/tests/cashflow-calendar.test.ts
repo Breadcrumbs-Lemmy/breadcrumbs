@@ -114,6 +114,12 @@ describe("buildCashFlowCalendar — horizon window", () => {
     expect(build({ horizonDays: 999 }).horizonDays).toBe(60);
     expect(build({ horizonDays: -5 }).horizonDays).toBe(7);
   });
+
+  it("falls back to 45 days when horizonDays is non-finite (NaN, Infinity, -Infinity)", () => {
+    expect(build({ horizonDays: NaN }).horizonDays).toBe(45);
+    expect(build({ horizonDays: Infinity }).horizonDays).toBe(45);
+    expect(build({ horizonDays: -Infinity }).horizonDays).toBe(45);
+  });
 });
 
 describe("buildCashFlowCalendar — event projection", () => {
@@ -292,6 +298,20 @@ describe("buildCashFlowCalendar — unknown balance keeps the schedule (D-C8)", 
     expect(calendar.notes.balanceKnown).toBe(false);
     expect(calendar.notes.accountsMissingBalance).toEqual(["Checking"]);
   });
+
+  it("treats an 'estimated' balance as unknown, suppressing projection (D-C8, hasKnownBalance estimated branch)", () => {
+    // freshness.status === "estimated" is not a known balance — hasKnownBalance returns false for
+    // both "estimated" and "missing". A sole cash account with an estimated balance must produce the
+    // same no-projection outcome as a missing-balance account.
+    const calendar = build({
+      accounts: [account({ displayName: "Main Checking", freshness: { status: "estimated", source: "inferred", warnings: [] } })],
+    });
+    expect(calendar.openingBalanceCents).toBeNull();
+    expect(calendar.notes.balanceKnown).toBe(false);
+    expect(calendar.notes.accountsMissingBalance).toEqual(["Main Checking"]);
+    expect(calendar.dailyBalances).toEqual([]);
+    expect(calendar.outlook.status).toBe("unknown");
+  });
 });
 
 describe("buildCashFlowCalendar — outlook status (D-C11)", () => {
@@ -314,6 +334,15 @@ describe("buildCashFlowCalendar — outlook status (D-C11)", () => {
     const calendar = openingWithRent(80_000, 100_000);
     expect(calendar.outlook.status).toBe("shortfall");
     expect(calendar.lowestBalance!.balanceCents).toBe(-20_000);
+  });
+
+  it("is 'clear' (not 'tight') at the exact buffer boundary — strict-less-than gate (D-C11)", () => {
+    // opening 175000 − obligation 150000 = lowest 25000; buffer = 25000
+    // Check: 25000 < 25000 → false → "clear" (the < boundary is strict)
+    const calendar = openingWithRent(175_000, 150_000);
+    expect(calendar.lowestBalance!.balanceCents).toBe(25_000);
+    expect(calendar.outlook.status).toBe("clear");
+    expect(calendar.outlook.minimumCashBufferCents).toBe(25_000);
   });
 });
 
@@ -352,6 +381,18 @@ describe("buildCashFlowCalendar — event status and metadata", () => {
     });
   });
 
+  it("labels 'confirmed' income as 'scheduled' and 'uncertain' income as 'estimated'", () => {
+    const calendar = build({
+      incomeSources: [
+        income({ id: "inc_confirmed", nextExpectedDate: "2022-09-20", cadence: { kind: "once" }, reliability: "confirmed" }),
+        income({ id: "inc_uncertain", nextExpectedDate: "2022-09-25", cadence: { kind: "once" }, reliability: "uncertain" }),
+      ],
+    });
+    const byId = Object.fromEntries(calendar.events.map((e) => [e.sourceEntityId, e.status]));
+    expect(byId["inc_confirmed"]).toBe("scheduled");
+    expect(byId["inc_uncertain"]).toBe("estimated");
+  });
+
   it("marks inferred obligations estimated and preserves the required flag", () => {
     const calendar = build({
       recurringObligations: [
@@ -363,6 +404,20 @@ describe("buildCashFlowCalendar — event status and metadata", () => {
       ["ob_rent", "estimated", true, true],
       ["ob_netflix", "estimated", false, true],
     ]);
+  });
+
+  it("marks non-inferred obligations 'scheduled' regardless of required flag", () => {
+    // obligationStatus: source !== "inferred" → "scheduled"
+    const calendar = build({
+      recurringObligations: [
+        obligation({ id: "ob_explicit", label: "Mortgage", nextDueDate: "2022-09-20", cadence: { kind: "once" }, source: "manual", required: true }),
+      ],
+    });
+    expect(calendar.events[0]).toMatchObject({
+      sourceEntityId: "ob_explicit",
+      status: "scheduled",
+      required: true,
+    });
   });
 });
 
