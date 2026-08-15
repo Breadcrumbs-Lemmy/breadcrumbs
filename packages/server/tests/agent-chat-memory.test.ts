@@ -53,7 +53,8 @@ function scripted(calls: ToolInvocation[], text: string) {
   return async (input: RunChatInput): Promise<ChatProviderResult> => {
     const toolCalls: AgentToolCallRecord[] = [];
     for (const call of calls) {
-      const outcome = await input.executeTool(call);
+      // One response batch, so every call is the model's first reply to the user.
+      const outcome = await input.executeTool(call, { iteration: 0 });
       toolCalls.push({ tool: call.name, input: call.input, ok: outcome.ok, error: outcome.ok ? undefined : outcome.error });
     }
     return { kind: "reply", text, toolCalls, stopReason: "stop" };
