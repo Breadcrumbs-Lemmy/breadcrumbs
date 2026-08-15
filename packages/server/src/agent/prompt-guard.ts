@@ -52,17 +52,32 @@ const INSTRUCTION_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Fold text to a canonical form before matching so a keyword can't be hidden
+ * from the patterns. Two folds, both inert in a real merchant name or question:
+ *
+ *   - NFKC collapses homoglyph / full-width variants, so "ＳＹＳＴＥＭ" becomes
+ *     "SYSTEM" and a full-width colon becomes ":";
+ *   - stripping Unicode format characters (category Cf — zero-width space, the
+ *     zero-width joiners, word joiner, BOM, bidi controls, and the soft hyphen)
+ *     removes invisible separators wedged between letters, which NFKC leaves in
+ *     place: a "SYSTEM:" split by a zero-width space, or an "ignore" broken by a
+ *     soft hyphen, would otherwise read straight past the anchors.
+ */
+function normalizeForMatch(text: string): string {
+  return text.normalize("NFKC").replace(/\p{Cf}/gu, "");
+}
+
+/**
  * True when `text` reads as an instruction aimed at the model — a faked role
  * turn, a jailbreak lead-in, a redefinition of the assistant, or an imperative
  * to reveal or change its configuration.
  *
- * Normalised NFKC first so a homoglyph or full-width variant can't slip a
- * keyword past the patterns.
+ * Matched against the normalised form (see `normalizeForMatch`) so neither a
+ * homoglyph nor an invisible character can slip a keyword past the patterns.
  */
 export function looksLikeInjection(text: string): boolean {
   if (!text) return false;
-  const normalized = text.normalize("NFKC");
-  return INSTRUCTION_PATTERNS.some((re) => re.test(normalized));
+  return INSTRUCTION_PATTERNS.some((re) => re.test(normalizeForMatch(text)));
 }
 
 /** What a genuinely instruction-shaped title collapses to — a neutral label is
