@@ -24,7 +24,7 @@ import { checkAffordability, fetchAffordabilitySnapshot, changePassword, type Sn
 import type { AffordabilityOutcome } from "./services/outcome";
 import { SessionProvider, useSession } from "./services/session";
 import { AssistantScopeProvider } from "./services/assistant-scope";
-import { AppShell, type NavItem } from "./components/AppShell";
+import { AppShell, type NavItem, type NavSection } from "./components/AppShell";
 import { CheckScreen } from "./screens/CheckScreen";
 import { SpendingScreen } from "./screens/SpendingScreen";
 import { BudgetsScreen } from "./screens/BudgetsScreen";
@@ -219,28 +219,60 @@ function AppContent() {
     setRoute("spending");
   }, [logout]);
 
-  // Retracted, the rail shows each item's first letter — so the order and these
-  // labels are chosen to spell C·A·P·I·T·A·L top-to-bottom, a small wink for a
-  // money app. Reordering or relabelling an item breaks the word, so the `hint`
-  // carries the plainer name where the acrostic label is terse (Pulse, Last).
-  // Import is intentionally absent: it's reached from Accounts and the Spending
-  // empty state, so a dedicated nav item was redundant. Admin is a trailing
-  // utility item that sits *after* the acrostic (like a footer), so it doesn't
-  // have to fit the word. Settings is deliberately NOT a nav item — it lives on
-  // a gear at the very bottom of the sidebar (see AppShell's onOpenSettings), so
-  // adding it here would tack an "S" onto CAPITAL and spoil the acrostic.
-  const nav: NavItem<Route>[] = [
-    { id: "check", label: "Check", hint: "Can I afford it?" },
-    { id: "accounts", label: "Accounts" },
-    { id: "spending", label: "Pulse", hint: "Spending" },
-    { id: "insights", label: "Insights" },
-    { id: "transactions", label: "Transactions" },
-    { id: "assistant", label: "Assistant" },
-    { id: "result", label: "Last", hint: "Latest check", disabled: !outcome },
-    // Admin only renders for admins. The condition lives here rather than in
-    // AppShell so AppShell stays generic.
-    ...(user?.role === "admin" ? [{ id: "admin" as Route, label: "Admin" }] : []),
+  // The nav is grouped into four sections whose headers — Pulse · Ledger ·
+  // Ahead · Next — spell P·L·A·N down the retracted rail, a small wink for a
+  // planning app. The word is a by-product of honest grouping, not the driver:
+  // every feature sits in the section it belongs to (retrospective / accounts +
+  // records / forward-looking / decide), each with a plain name. Reordering the
+  // sections changes the word but not where anything lives.
+  //
+  // Result isn't its own section — it's the output of a Check, so it appears in
+  // "Next" as "Last check" only once a check has produced one. Settings stays
+  // off the nav entirely (a gear at the sidebar foot); adding it here would tack
+  // a stray letter onto PLAN. Admin is a trailing utility, outside the acrostic.
+  //
+  // Monthly report and Net worth keep their in-screen entry points (from
+  // Spending and Accounts) and stay off the sidebar, exactly as before — folding
+  // them into a section is a later IA call, not part of this nav change.
+  const sections: NavSection<Route>[] = [
+    {
+      header: "Pulse",
+      items: [
+        { id: "spending", label: "Spending" },
+        { id: "insights", label: "Insights" },
+      ],
+    },
+    {
+      header: "Ledger",
+      items: [
+        { id: "accounts", label: "Accounts" },
+        { id: "transactions", label: "Transactions" },
+        { id: "import", label: "Import" },
+      ],
+    },
+    {
+      header: "Ahead",
+      items: [
+        { id: "cashflow", label: "Cash-flow" },
+        { id: "budgets", label: "Budgets" },
+        { id: "goals", label: "Goals" },
+      ],
+    },
+    {
+      header: "Next",
+      items: [
+        { id: "check", label: "Check", hint: "Can I afford it?" },
+        // Only reachable once a check has run — it's that check's verdict.
+        ...(outcome ? [{ id: "result" as Route, label: "Last check", hint: "Latest verdict" }] : []),
+        { id: "assistant", label: "Assistant" },
+      ],
+    },
   ];
+
+  // Admin only renders for admins. The condition lives here rather than in
+  // AppShell so AppShell stays generic.
+  const trailing: NavItem<Route>[] =
+    user?.role === "admin" ? [{ id: "admin", label: "Admin" }] : [];
 
   return (
     /* The scope provider spans the screens (which publish their current
@@ -255,7 +287,8 @@ function AppContent() {
       )}
 
       <AppShell
-        nav={nav}
+        sections={sections}
+        trailing={trailing}
         current={route}
         onNavigate={(next) => {
           // Reaching Transactions from the nav (rather than from an insight)
