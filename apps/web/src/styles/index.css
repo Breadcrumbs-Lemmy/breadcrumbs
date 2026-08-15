@@ -694,6 +694,61 @@
 }
 
 /* =====================================================================
+   Print — the Monthly report (screens/MonthlyReportScreen.tsx)
+   "PDF" is the browser's own Print → Save as PDF (D-R5), so a print must be
+   the report SHEET alone on white paper — no sidebar, no ambient glows, no
+   mascot, no on-screen controls. The canonical technique: hide every element,
+   re-show only the `.report-print` subtree, and lift it to the page origin so
+   the hidden-but-still-laid-out app chrome cannot push it down or add blank
+   pages. On-screen controls (Back / Download / Print / month chips) opt out
+   with `.no-print`.
+   Declared outside @layer so it reliably overrides component styles.
+   ===================================================================== */
+@media print {
+  /* A clean white sheet with readable ink whatever the on-screen theme. */
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* Blank everything… */
+  body * {
+    visibility: hidden;
+  }
+  /* …then reveal the report and everything inside it. `visibility` (not
+     `display`) keeps the sheet's own layout intact while hiding the rest. */
+  .report-print,
+  .report-print * {
+    visibility: visible;
+  }
+  .report-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    /* Keep the category bars and accent figures in their real colours on paper. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* The fixed background layers, the mascot, and anything opted out. */
+  .app-ambient,
+  .app-pulse,
+  .mascot-root,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Don't guillotine a card across a page break where it can be avoided. */
+  .card {
+    break-inside: avoid;
+  }
+}
+
+/* =====================================================================
    Theme-switch reveal (View Transitions API)
    A radial wipe of the new theme out from the toggle. Progressive
    enhancement: browsers without startViewTransition just swap instantly,
