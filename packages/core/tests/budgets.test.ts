@@ -544,6 +544,57 @@ describe("evaluateBudgets — weekly caps (D-B1: a cap governs one window)", () 
   });
 });
 
+describe("evaluateBudgets — projectionFor guards: elapsedDays edge cases", () => {
+  // These two tests exercise the two additional early-exit branches inside
+  // projectionFor beyond the `!period.partial` guard already covered above.
+  // The approach: build a real partial SpendingSummary, then override only the
+  // period counters via object spread — evaluateBudgets reads nothing else from
+  // summary.period that this harms. July 2022 has 31 days so the real period's
+  // totalDays matches the totalDays: 31 values used in the overrides.
+  const baseSummary = summarizeSpending({
+    transactions: [
+      tx({ id: "eg1", accountId: ACCT.id, amountCents: -18_000, category: "dining", flowType: "SPEND", postedDate: "2022-07-15" }),
+    ],
+    accounts: [ACCT],
+    currency: "USD",
+    asOfDate: "2022-07-20", // partial July: elapsedDays will be 20, totalDays 31
+    kind: "month",
+    key: "2022-07",
+    categoryLabel: label,
+  });
+
+  it("skips projection when elapsedDays is 0 — avoids division-by-zero", () => {
+    // A period marked partial but with zero elapsed days would produce Infinity or
+    // NaN if the pace formula ran (spentCents * totalDays / 0).  The guard must
+    // short-circuit and return no projection at all.
+    const summary = {
+      ...baseSummary,
+      period: { ...baseSummary.period, partial: true, elapsedDays: 0, totalDays: 31 },
+    };
+    const progress = evaluateBudgets({
+      summary,
+      budgets: [{ category: "dining", limitCents: 40_000 }],
+    });
+    expect(progress.lines[0]!.projection).toBeUndefined();
+  });
+
+  it("skips projection when elapsedDays >= totalDays even if partial is true", () => {
+    // A period that has run its full length (elapsedDays === totalDays) is
+    // logically complete; projecting it would just echo the actual spend with no
+    // forward-looking signal.  The guard must treat it as complete and suppress
+    // the projection regardless of the partial flag.
+    const summary = {
+      ...baseSummary,
+      period: { ...baseSummary.period, partial: true, elapsedDays: 31, totalDays: 31 },
+    };
+    const progress = evaluateBudgets({
+      summary,
+      budgets: [{ category: "dining", limitCents: 40_000 }],
+    });
+    expect(progress.lines[0]!.projection).toBeUndefined();
+  });
+});
+
 describe("evaluateBudgets — a month summary scores only monthly caps", () => {
   // The mirror of the basis filter: a weekly cap on a category must never be
   // applied to a month, or a $50/week cap would read wildly over on a month of

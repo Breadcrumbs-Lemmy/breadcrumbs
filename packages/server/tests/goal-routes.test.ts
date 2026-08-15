@@ -341,6 +341,46 @@ describe("goal routes", () => {
     expect(JSON.parse(response.body).error.code).toBe("INVALID_GOALS_PROGRESS_QUERY");
     await app.close();
   });
+
+  it("uses wall-clock today as asOf and produces a valid nextContributionDate when no statements are committed", async () => {
+    // Fresh install: no spending data seeded. asOfDateFor falls back to wall-clock today
+    // (the sentinel "1970-01-01" stays unchanged when the transaction list is empty).
+    const app = await createServer({ statementImportStore: new InMemoryStatementImportStore() });
+
+    // Compute the expected values using the same clock expression the source uses,
+    // so the assertion stays stable regardless of when the test runs.
+    const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+    const [todayYear, todayMonth] = todayStr.slice(0, 7).split("-").map(Number);
+    const nextYear = todayMonth === 12 ? todayYear + 1 : todayYear;
+    const nextMonthNum = todayMonth === 12 ? 1 : todayMonth + 1;
+    const expectedNextContributionDate = `${nextYear}-${String(nextMonthNum).padStart(2, "0")}-01`;
+
+    // POST a valid goal — the route calls asOfDateFor with no transactions, which
+    // falls back to today; buildSavingsGoal then computes nextContributionDate as
+    // the 1st of the following month.
+    const save = await app.inject({
+      method: "POST",
+      url: "/api/v1/goals",
+      payload: {
+        goals: [{ label: "Emergency fund", targetAmountCents: 100_000, currentAmountCents: 40_000, monthlyContributionCents: 20_000 }],
+      },
+    });
+    expect(save.statusCode).toBe(200);
+    const saved = JSON.parse(save.body);
+    expect(saved.goals[0].nextContributionDate).toBe(expectedNextContributionDate);
+
+    // GET progress — same fallback path; must not error. The asOfDate in the
+    // response confirms the wall-clock branch was taken, not the 1970 sentinel.
+    const progress = await app.inject({ method: "GET", url: "/api/v1/goals/progress?currency=USD" });
+    expect(progress.statusCode).toBe(200);
+    const progressBody = JSON.parse(progress.body);
+    expect(progressBody.asOfDate).toBe(todayStr);
+    // The projection is present (goal is funded and unmet) and its completion
+    // date is a valid ISO date — confirms no throw from the wall-clock asOf path.
+    expect(progressBody.goals[0].projection?.projectedCompletionDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    await app.close();
+  });
 });
 
 describe("goal savings-capacity suggestion (D-G11)", () => {

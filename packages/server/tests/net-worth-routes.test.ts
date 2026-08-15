@@ -175,6 +175,22 @@ describe("net-worth trend route", () => {
     await app.close();
   });
 
+  it("rejects months=1 (below minimum of 2)", async () => {
+    const { app } = await serverWithChecking();
+    const response = await app.inject({ method: "GET", url: "/api/v1/net-worth/trend?currency=USD&months=1" });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).error.code).toBe("INVALID_NET_WORTH_QUERY");
+    await app.close();
+  });
+
+  it("rejects months=121 (above maximum of 120)", async () => {
+    const { app } = await serverWithChecking();
+    const response = await app.inject({ method: "GET", url: "/api/v1/net-worth/trend?currency=USD&months=121" });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).error.code).toBe("INVALID_NET_WORTH_QUERY");
+    await app.close();
+  });
+
   it("reports no data when nothing has been imported", async () => {
     const app = await createServer({
       statementImportStore: new InMemoryStatementImportStore(),

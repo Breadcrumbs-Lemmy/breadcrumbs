@@ -13,6 +13,7 @@ export {
   containsDate,
   baselineLabel,
 } from "./domain/periods";
+export { addMonths } from "./domain/dates";
 export { queryTransactions } from "./domain/transactions-query";
 export { detectInsights, DEFAULT_INSIGHTS_CONFIG } from "./domain/insights";
 export { evaluateBudgets, DEFAULT_BUDGET_CONFIG } from "./domain/budgets";

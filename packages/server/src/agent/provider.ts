@@ -28,6 +28,18 @@ export type ToolInvocation = { name: string; input: Record<string, unknown> };
 
 export type ToolOutcome = { ok: true; output: unknown } | { ok: false; error: string };
 
+/**
+ * Per-call context the tool runner needs to make provenance decisions.
+ *
+ * `iteration` is the model's loop index for this call: 0 is its first response
+ * to the user's own message this turn — no tool result has been fed back yet —
+ * while ≥1 means the model has already read at least one tool result, so the
+ * call is a *continuation* driven by tool output (which may carry
+ * instruction-shaped text). Memory writes are gated on this (see chat.ts). Every
+ * `ChatProvider` must supply it so the gate cannot be bypassed.
+ */
+export type ToolCallMeta = { iteration: number };
+
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export type AgentToolCallRecord = {
@@ -46,7 +58,7 @@ export type RunChatInput = {
   system: string;
   messages: ChatMessage[];
   tools: NormalizedTool[];
-  executeTool: (call: ToolInvocation) => Promise<ToolOutcome>;
+  executeTool: (call: ToolInvocation, meta: ToolCallMeta) => Promise<ToolOutcome>;
   effort: Effort;
   maxIterations: number;
   maxTokens: number;
@@ -274,7 +286,7 @@ export class AnthropicChatProvider implements ChatProvider {
         const results: Anthropic.Beta.BetaContentBlockParam[] = [];
         for (const toolUse of toolUses) {
           const call = { name: toolUse.name, input: (toolUse.input ?? {}) as Record<string, unknown> };
-          const outcome = await input.executeTool(call);
+          const outcome = await input.executeTool(call, { iteration });
           toolCalls.push({ tool: call.name, input: call.input, ok: outcome.ok, error: outcome.ok ? undefined : outcome.error });
           results.push({
             type: "tool_result",
@@ -348,7 +360,7 @@ export class LocalChatProvider implements ChatProvider {
         for (const toolCall of requested) {
           const parsed = safeParseArgs(toolCall.function.arguments);
           const call = { name: toolCall.function.name, input: parsed };
-          const outcome = await input.executeTool(call);
+          const outcome = await input.executeTool(call, { iteration });
           toolCalls.push({ tool: call.name, input: parsed, ok: outcome.ok, error: outcome.ok ? undefined : outcome.error });
           messages.push({
             role: "tool",

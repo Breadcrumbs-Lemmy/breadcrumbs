@@ -179,6 +179,75 @@ describe("buildNetWorthTrend — back-casting", () => {
     expect(trend.coverageStartMonth).toBe("2022-04"); // Jun, back three months
     expect(trend.points.map((p) => p.month)).toEqual(["2022-04", "2022-05", "2022-06"]);
   });
+
+  it("REFUND direction is +1: back-cast before the refund shows current minus refundAmount", () => {
+    // Checking ends at $1,000 after a $200 refund in June.
+    // The May point should unwind the refund → current − refundAmount.
+    const REFUND_CENTS = 20_000;
+    const trend = buildNetWorthTrend({
+      accounts: [account({ id: "chk", currentBalanceCents: 100_000 })],
+      transactions: [
+        // Anchor tx in May so coverage starts there (direction 0 for the anchor doesn't matter here;
+        // we use INCOME to establish the first-transaction month for "chk" as 2022-05).
+        tx({ id: "anchor", accountId: "chk", flowType: "INCOME", amountCents: 10_000, postedDate: "2022-05-01" }),
+        tx({ id: "r1", accountId: "chk", flowType: "REFUND", amountCents: REFUND_CENTS, postedDate: "2022-06-10" }),
+      ],
+      snapshots: [],
+      currency: "USD",
+      asOfDate: "2022-06-10",
+    });
+
+    // May back-cast: only the REFUND (posted 2022-06-10 > 2022-05-31) is unwound.
+    //   assetAfter = cashDirection("REFUND") × 20_000 = +1 × 20_000 = 20_000
+    //   cash = 100_000 − 20_000 = 80_000
+    expect(trend.points.find((p) => p.month === "2022-05")!.netWorthCents).toBe(100_000 - REFUND_CENTS);
+    // June is asOfMonth: live balances, nothing to unwind.
+    expect(trend.points.find((p) => p.month === "2022-06")!.netWorthCents).toBe(100_000);
+  });
+
+  it("FEE direction is -1: the month before a fee shows higher net worth because the fee had not yet been charged", () => {
+    // Checking ends at $1,000 after a $50 bank fee in June.
+    // Unwinding the fee for May means adding it back → current + feeAmount.
+    const FEE_CENTS = 5_000;
+    const trend = buildNetWorthTrend({
+      accounts: [account({ id: "chk", currentBalanceCents: 100_000 })],
+      transactions: [
+        tx({ id: "anchor", accountId: "chk", flowType: "INCOME", amountCents: 10_000, postedDate: "2022-05-01" }),
+        tx({ id: "fee1", accountId: "chk", flowType: "FEE", amountCents: FEE_CENTS, postedDate: "2022-06-10" }),
+      ],
+      snapshots: [],
+      currency: "USD",
+      asOfDate: "2022-06-10",
+    });
+
+    // May back-cast: FEE (2022-06-10 > 2022-05-31) is unwound.
+    //   delta = cashDirection("FEE") × 5_000 = −1 × 5_000 = −5_000
+    //   assetAfter = −5_000
+    //   cash = 100_000 − (−5_000) = 105_000
+    expect(trend.points.find((p) => p.month === "2022-05")!.netWorthCents).toBe(100_000 + FEE_CENTS);
+    // June (current): $50 fee already charged.
+    expect(trend.points.find((p) => p.month === "2022-06")!.netWorthCents).toBe(100_000);
+  });
+
+  it("UNCLASSIFIED direction is 0: the tx contributes nothing — both reconstructed points equal current net worth", () => {
+    // An UNCLASSIFIED transaction should leave every back-cast point unchanged.
+    const trend = buildNetWorthTrend({
+      accounts: [account({ id: "chk", currentBalanceCents: 100_000 })],
+      transactions: [
+        tx({ id: "anchor", accountId: "chk", flowType: "INCOME", amountCents: 10_000, postedDate: "2022-05-01" }),
+        tx({ id: "unk", accountId: "chk", flowType: "UNCLASSIFIED", amountCents: 9_999, postedDate: "2022-06-10" }),
+      ],
+      snapshots: [],
+      currency: "USD",
+      asOfDate: "2022-06-10",
+    });
+
+    // May back-cast: UNCLASSIFIED (2022-06-10 > 2022-05-31) is unwound, but delta = 0 × 9_999 = 0.
+    //   assetAfter = 0 → cash = 100_000 − 0 = 100_000
+    expect(trend.points.find((p) => p.month === "2022-05")!.netWorthCents).toBe(100_000);
+    // June (current): UNCLASSIFIED changed nothing.
+    expect(trend.points.find((p) => p.month === "2022-06")!.netWorthCents).toBe(100_000);
+  });
 });
 
 describe("buildNetWorthTrend — recorded snapshots", () => {
@@ -273,6 +342,34 @@ describe("buildNetWorthTrend — scope & edges", () => {
     const trend = buildNetWorthTrend({ accounts, transactions: [], snapshots: [], currency: "USD", asOfDate: "2022-06-10" });
     expect(trend.currentNetWorthCents).toBe(headline.netPositionCents);
     expect(trend.currentNetWorthCents).toBe(140_000);
+  });
+
+  it("contributionOf uses Math.abs: a liability balance stored as negative (-30000) counts the same as positive (+30000)", () => {
+    // Some card providers report the owed balance as a negative number. The role=liability
+    // path in contributionOf calls Math.abs before negating, so both representations
+    // produce the same cash net worth — here $700 (1000 cash − 300 owed).
+    const common = { transactions: [] as Transaction[], snapshots: [] as NetWorthSnapshot[], currency: "USD", asOfDate: "2022-06-10" };
+
+    const withPositive = buildNetWorthTrend({
+      ...common,
+      accounts: [
+        account({ id: "chk", currentBalanceCents: 100_000 }),
+        account({ id: "card", type: "credit_card", role: "liability", currentBalanceCents: 30_000 }),
+      ],
+    });
+
+    const withNegative = buildNetWorthTrend({
+      ...common,
+      accounts: [
+        account({ id: "chk", currentBalanceCents: 100_000 }),
+        account({ id: "card", type: "credit_card", role: "liability", currentBalanceCents: -30_000 }),
+      ],
+    });
+
+    // Math.abs(−30_000) = 30_000, so debt = 30_000 regardless of stored sign.
+    // currentNetWorthCents = 100_000 (cash) − 30_000 (debt) = 70_000.
+    expect(withNegative.currentNetWorthCents).toBe(70_000);
+    expect(withNegative.currentNetWorthCents).toBe(withPositive.currentNetWorthCents);
   });
 });
 
