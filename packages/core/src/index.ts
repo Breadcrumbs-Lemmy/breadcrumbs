@@ -42,6 +42,15 @@ export type {
   SavingsCapacityOptions,
   SavingsCapacitySuggestion,
 } from "./domain/savings-capacity";
+export { buildCashFlowCalendar } from "./domain/cashflow-calendar";
+export type {
+  CashFlowCalendar,
+  CashFlowEvent,
+  CashFlowEventKind,
+  CashFlowEventStatus,
+  CashFlowOutlookStatus,
+  BuildCashFlowCalendarOptions,
+} from "./domain/cashflow-calendar";
 export { buildAccountsView } from "./domain/accounts-view";
 export {
   DEFAULT_RECURRING_SPENDING_CONFIG,

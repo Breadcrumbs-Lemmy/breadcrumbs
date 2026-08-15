@@ -29,6 +29,7 @@ import type {
   AffordabilityResponse,
   Budget,
   BudgetProgress,
+  CashFlowCalendar,
   FinancialSnapshot,
   Goal,
   GoalsEvaluation,
@@ -416,6 +417,20 @@ export function fetchGoalProgress(): Promise<ApiOutcome<GoalsEvaluation>> {
  *  to pre-fill a monthly target; it is never advice (`D-G11`). */
 export function fetchSavingsSuggestion(): Promise<ApiOutcome<SavingsCapacitySuggestion>> {
   return request(`/api/v1/goals/suggestion${qs({ currency: "USD" })}`);
+}
+
+// ---- Cash-flow calendar ----------------------------------------------------
+
+/** `GET /api/v1/cashflow/upcoming` — the forward-looking calendar of expected
+ *  income and recurring obligations with a projected running balance, computed
+ *  server-side (`CD-011` — no browser arithmetic) and never stored (`D-C1`).
+ *  `horizon` is the forward window in days; omitted defaults to 45 (`D-C3`). A
+ *  404 (`NO_IMPORTED_HISTORY`) surfaces as `{ kind: "error", code }`, which the
+ *  cashflow service maps to its import-first empty state. */
+export function fetchCashflow(params?: {
+  horizon?: number;
+}): Promise<ApiOutcome<CashFlowCalendar>> {
+  return request(`/api/v1/cashflow/upcoming${qs({ currency: "USD", horizon: params?.horizon })}`);
 }
 
 // ---- Transactions ---------------------------------------------------------

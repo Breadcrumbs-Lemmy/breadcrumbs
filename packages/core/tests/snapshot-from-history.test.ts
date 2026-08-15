@@ -155,6 +155,52 @@ describe("buildSnapshotFromHistory", () => {
     expect(notes.skippedForInsufficientHistory).toContain("Birthday Transfer");
   });
 
+  it("collapses one subscription billed across several accounts into a single obligation (D-C13)", () => {
+    // The subscription detector groups per (merchant, account), so a single
+    // merchant charged from three imported accounts surfaces as three per-account
+    // insights — all reducing to the same merchant-derived obligation id. That is
+    // one recurring bill seen from three accounts, not three bills; leaving all
+    // three in the snapshot would carry a duplicate key and make every downstream
+    // consumer (the affordability gate, the cash-flow calendar) count it thrice.
+    const accounts: Account[] = ["acct_a", "acct_b", "acct_c"].map((id) => ({
+      ...ACCOUNT,
+      id,
+      displayName: id,
+    }));
+    const charges: Transaction[] = [];
+    for (const account of accounts) {
+      for (const [index, date] of ["2026-05-06", "2026-06-06", "2026-07-06"].entries()) {
+        charges.push(
+          tx({
+            id: `gym_${account.id}_${index}`,
+            accountId: account.id,
+            postedDate: date,
+            merchantName: "GymCo",
+            normalizedMerchantId: "gymco",
+            amountCents: -2_500,
+            category: "streaming",
+          }),
+        );
+      }
+    }
+
+    const { snapshot, notes } = buildSnapshotFromHistory({
+      accounts,
+      transactions: charges,
+      currency: "USD",
+    });
+
+    const gymObligations = snapshot.recurringObligations.filter(
+      (obligation) => obligation.id === "obligation_inferred_gymco",
+    );
+    expect(gymObligations).toHaveLength(1);
+    expect(gymObligations[0]!.amountCents).toBe(2_500); // the single bill, not 3×
+    // The id is a unique key across the whole obligation set.
+    const ids = snapshot.recurringObligations.map((obligation) => obligation.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(notes.recurringObligationCount).toBe(snapshot.recurringObligations.length);
+  });
+
   it("skips deposits that repeat at no recognisable interval", () => {
     const irregular = [
       tx({ id: "f1", postedDate: "2026-05-02", merchantName: "Freelance", normalizedMerchantId: "freelance", amountCents: 50_000, category: "income", flowType: "INCOME" }),

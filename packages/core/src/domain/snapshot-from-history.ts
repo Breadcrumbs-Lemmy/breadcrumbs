@@ -302,7 +302,7 @@ function deriveRecurringObligations(
     });
   }
 
-  return { obligations: obligations.sort(byId), skipped };
+  return { obligations: dedupeById(obligations.sort(byId)), skipped };
 }
 
 /**
@@ -491,4 +491,35 @@ function today(): string {
 
 function byId(left: { id: string }, right: { id: string }): number {
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+/**
+ * Collapses entries that share an `id`, keeping the first.
+ *
+ * An `id` is a unique key by contract, and one path can break that: the
+ * subscription detector groups per `(merchant, account)`, so a single merchant
+ * billed from several imported accounts yields several per-account insights that
+ * all reduce to the *same* merchant-derived obligation id
+ * (`obligation_inferred_<merchant>`). They describe one recurring bill seen from
+ * several accounts, not several bills — so without this collapse the snapshot
+ * would carry duplicate keys and every downstream consumer (the affordability
+ * engine's solvency gate, the cash-flow calendar's running balance) would count
+ * that bill once per account and read pessimistically low.
+ *
+ * Deterministic: callers pass an already id-sorted list, so "first wins" is
+ * stable. This is the conservative reading (one bill, not N). The narrow case it
+ * can't tell apart — one merchant with two genuinely distinct recurring charges,
+ * which share a merchant id and so collide regardless — is a limitation of the
+ * merchant-only id scheme, flagged in `docs/cashflow.md` (D-C13), not something
+ * this collapse introduces.
+ */
+function dedupeById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    result.push(item);
+  }
+  return result;
 }

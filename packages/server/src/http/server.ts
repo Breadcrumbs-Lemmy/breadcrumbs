@@ -44,6 +44,7 @@ import { registerLocalRoutes } from "./local-routes";
 import { registerSpendingRoutes } from "./spending-routes";
 import { registerBudgetRoutes } from "./budget-routes";
 import { registerGoalRoutes } from "./goal-routes";
+import { registerCashflowRoutes } from "./cashflow-routes";
 import { registerPlaidRoutes } from "./plaid-routes";
 
 export type CreateServerOptions = {
@@ -203,6 +204,7 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   await registerSpendingRoutes(app, { stores });
   await registerBudgetRoutes(app, { budgets: budgetStores, stores });
   await registerGoalRoutes(app, { goals: goalStores, stores });
+  await registerCashflowRoutes(app, { stores });
   await registerAgentRoutes(app, { stores, memory: agentMemory });
 
   if (options.plaidConfig && plaidTokenStore) {
