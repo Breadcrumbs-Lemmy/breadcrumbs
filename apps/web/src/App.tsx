@@ -352,7 +352,6 @@ function AppContent() {
 
         {route === "goals" && (
           <GoalsScreen
-            onBack={() => setRoute("check")}
             onImport={() => {
               setImportOrigin("goals");
               setRoute("import");
@@ -362,9 +361,8 @@ function AppContent() {
 
         {route === "cashflow" && (
           <CashflowScreen
-            onBack={() => setRoute("spending")}
             onImport={() => {
-              setImportOrigin("spending");
+              setImportOrigin("cashflow");
               setRoute("import");
             }}
           />
