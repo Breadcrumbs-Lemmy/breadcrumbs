@@ -18,6 +18,7 @@ import type { PlaidConfig } from "../src/plaid/config";
 import { InMemoryPlaidTokenStore } from "../src/plaid/token-store";
 import { InMemoryStatementImportStoreProvider } from "../src/local/store-provider";
 import { InMemoryBudgetStoreProvider } from "../src/local/budget-store-provider";
+import { InMemoryGoalStoreProvider } from "../src/local/goal-store-provider";
 import { InMemoryAgentMemoryProvider } from "../src/agent/memory/provider";
 import { totpCode } from "../src/auth/totp";
 
@@ -59,17 +60,19 @@ async function harness() {
   const stores = new InMemoryStatementImportStoreProvider();
   const agentMemory = new InMemoryAgentMemoryProvider();
   const budgetStores = new InMemoryBudgetStoreProvider();
+  const goalStores = new InMemoryGoalStoreProvider();
   const app = await createServer({
     authConfig: multiUserConfig(),
     authPersistence: "memory",
     stores,
     agentMemory,
     budgetStores,
+    goalStores,
     plaidConfig,
     plaidClient: mockClient(),
     plaidTokenStore,
   });
-  return { app, plaidTokenStore, stores, agentMemory, budgetStores };
+  return { app, plaidTokenStore, stores, agentMemory, budgetStores, goalStores };
 }
 
 function auth(token: string) {
@@ -113,10 +116,11 @@ async function connectBank(app: Awaited<ReturnType<typeof createServer>>, token:
 
 describe("account deletion (multi_user)", () => {
   it("erases a user's identity and all their data, and clears the session", async () => {
-    const { app, plaidTokenStore, stores, agentMemory, budgetStores } = await harness();
+    const { app, plaidTokenStore, stores, agentMemory, budgetStores, goalStores } = await harness();
     const erasedStores = vi.spyOn(stores, "eraseForUser");
     const erasedMemory = vi.spyOn(agentMemory, "eraseForUser");
     const erasedBudgets = vi.spyOn(budgetStores, "eraseForUser");
+    const erasedGoals = vi.spyOn(goalStores, "eraseForUser");
 
     // First registrant is the bootstrap admin; the account under test is a
     // normal user so the last-admin guard doesn't apply.
@@ -132,6 +136,15 @@ describe("account deletion (multi_user)", () => {
       payload: { currency: "USD", overallLimitCents: null, budgets: [{ category: "groceries", limitCents: 40_000 }] },
     });
     expect(savedBudget.statusCode).toBe(200);
+
+    // Alice declares a savings goal, so there is a goals file to erase.
+    const savedGoal = await app.inject({
+      method: "POST",
+      url: "/api/v1/goals",
+      headers: auth(alice.token),
+      payload: { goals: [{ label: "Emergency fund", targetAmountCents: 100_000, monthlyContributionCents: 20_000 }] },
+    });
+    expect(savedGoal.statusCode).toBe(200);
 
     // Precondition: Alice owns exactly one bank connection.
     expect(await plaidTokenStore.listForUser(alice.id)).toHaveLength(1);
@@ -162,6 +175,7 @@ describe("account deletion (multi_user)", () => {
     expect(erasedStores).toHaveBeenCalledWith(alice.id);
     expect(erasedMemory).toHaveBeenCalledWith(alice.id);
     expect(erasedBudgets).toHaveBeenCalledWith(alice.id);
+    expect(erasedGoals).toHaveBeenCalledWith(alice.id);
 
     await app.close();
   });

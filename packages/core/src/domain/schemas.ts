@@ -185,7 +185,7 @@ const RecurringObligationSchema = z.object({
   currency: z.string().length(3).optional(),
 });
 
-const GoalSchema = z.object({
+export const GoalSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
   goalType: z.enum(["monthly_savings_target"]),

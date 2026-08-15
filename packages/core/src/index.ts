@@ -1,6 +1,6 @@
 export { evaluateAffordability } from "./domain/evaluate-affordability";
 export { expandCadence } from "./domain/recurrence";
-export { AffordabilityRequestSchema, FinancialSnapshotSchema } from "./domain/schemas";
+export { AffordabilityRequestSchema, FinancialSnapshotSchema, GoalSchema } from "./domain/schemas";
 export { annotateTransferPairs, summarizeMonthlySpending } from "./domain/monthly-spending";
 export { summarizeSpending, spendingSeries } from "./domain/spending-summary";
 export {
@@ -25,6 +25,23 @@ export type {
   BudgetProgress,
   EvaluateBudgetsOptions,
 } from "./domain/budgets";
+export { buildSavingsGoal, buildSavingsGoals, evaluateGoals } from "./domain/goals";
+export type {
+  SavingsGoalInput,
+  BuildSavingsGoalOptions,
+  GoalPriority,
+  GoalProtection,
+  GoalStatus,
+  GoalPace,
+  GoalProgress,
+  EvaluateGoalsOptions,
+  GoalsEvaluation,
+} from "./domain/goals";
+export { suggestSavingsCapacity, ESSENTIAL_CATEGORIES } from "./domain/savings-capacity";
+export type {
+  SavingsCapacityOptions,
+  SavingsCapacitySuggestion,
+} from "./domain/savings-capacity";
 export { buildAccountsView } from "./domain/accounts-view";
 export {
   DEFAULT_RECURRING_SPENDING_CONFIG,

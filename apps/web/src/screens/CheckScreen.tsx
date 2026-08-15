@@ -31,6 +31,9 @@ type Props = {
    *  statement can set it — only a person knows what wasn't imported. */
   obligationsConfirmed?: boolean;
   onConfirmObligations?: (confirmed: boolean) => void;
+  /** Opens the Goals screen. Savings goals feed into this verdict (a protected
+   *  goal is treated as a commitment), so the two live next to each other. */
+  onOpenGoals?: () => void;
 };
 
 const CATEGORIES = [
@@ -54,6 +57,7 @@ export function CheckScreen({
   obligations,
   obligationsConfirmed,
   onConfirmObligations,
+  onOpenGoals,
 }: Props) {
   const ready = draftIsSubmittable(draft) && !blockedBy;
   const set = <K extends keyof PurchaseDraft>(key: K, value: PurchaseDraft[K]) =>
@@ -182,6 +186,20 @@ export function CheckScreen({
           Necessity and timing are recorded with the purchase. They don't change the projection.
         </p>
       </form>
+
+      {onOpenGoals && (
+        <p className="mt-6 text-center text-meta text-ink-tertiary">
+          Saving toward something?{" "}
+          <button
+            type="button"
+            onClick={onOpenGoals}
+            className="text-accent underline underline-offset-4 hover:text-accent-hover"
+          >
+            Set a savings goal
+          </button>{" "}
+          — a protected goal is weighed as a commitment here.
+        </p>
+      )}
     </div>
   );
 }
