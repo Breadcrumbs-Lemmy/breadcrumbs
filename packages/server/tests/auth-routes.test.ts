@@ -36,7 +36,7 @@ async function register(app: Awaited<ReturnType<typeof createServer>>, email: st
   const response = await app.inject({
     method: "POST",
     url: "/api/v1/auth/register",
-    payload: { email, password: "password123" },
+    payload: { email, password: "password123", acceptedPolicies: true },
   });
   const body = JSON.parse(response.body) as { user: { id: string; role: string }; token: string };
   return { status: response.statusCode, ...body };
@@ -102,6 +102,41 @@ describe("auth gate (multi_user)", () => {
       headers: { authorization: "Bearer not-a-real-token" },
     });
     expect(forged.statusCode).toBe(401);
+    await app.close();
+  });
+});
+
+describe("consent at registration (multi_user)", () => {
+  it("refuses to create an account without agreement to the policies", async () => {
+    const app = await multiUserServer();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: { email: "noconsent@example.com", password: "password123" },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).error.code).toBe("CONSENT_REQUIRED");
+
+    // And nothing was created: the same email can still register cleanly after.
+    const retry = await register(app, "noconsent@example.com");
+    expect(retry.status).toBe(200);
+    await app.close();
+  });
+
+  it("records the consent version and timestamp on the new account", async () => {
+    const app = await multiUserServer();
+    const before = Date.now();
+    const a = await register(app, "a@example.com");
+
+    const me = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { authorization: `Bearer ${a.token}` },
+    });
+    const consent = JSON.parse(me.body).user.consent as { policyVersion: string; agreedAt: string } | null;
+    expect(consent).not.toBeNull();
+    expect(consent!.policyVersion).toBe("2026-08-09");
+    expect(Date.parse(consent!.agreedAt)).toBeGreaterThanOrEqual(before - 1000);
     await app.close();
   });
 });

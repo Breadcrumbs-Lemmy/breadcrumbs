@@ -163,15 +163,11 @@ accept the revised Terms.
 
 ## 14. Governing law
 
-These Terms are governed by the laws of **[your jurisdiction — e.g. your state and
-country of residence]**, without regard to its conflict-of-laws rules. You agree
-that the courts located in that jurisdiction will have exclusive jurisdiction over
+These Terms are governed by the laws of the **State of Texas, United States**,
+without regard to its conflict-of-laws rules. You agree that the state and federal
+courts located in **Dallas County, Texas** will have exclusive jurisdiction over
 any dispute arising out of these Terms, except where applicable law provides
 otherwise.
-
-> *Fill in the governing-law jurisdiction before publishing. This depends on where
-> you are legally established; it is the one field in this document you must set
-> yourself.*
 
 ---
 

@@ -33,7 +33,7 @@ async function register(app: Awaited<ReturnType<typeof createServer>>, email: st
   const response = await app.inject({
     method: "POST",
     url: "/api/v1/auth/register",
-    payload: { email, password: "password123" },
+    payload: { email, password: "password123", acceptedPolicies: true },
   });
   return (JSON.parse(response.body) as { token: string }).token;
 }

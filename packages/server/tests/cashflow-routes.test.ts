@@ -226,7 +226,7 @@ describe("cash-flow calendar routes — per-user isolation over HTTP", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/v1/auth/register",
-      payload: { email, password: "password123" },
+      payload: { email, password: "password123", acceptedPolicies: true },
     });
     const token = JSON.parse(res.body).token as string;
     expect(typeof token).toBe("string");

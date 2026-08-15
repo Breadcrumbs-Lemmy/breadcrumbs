@@ -58,7 +58,7 @@ function auth(token: string) {
 }
 
 async function register(app: Awaited<ReturnType<typeof createServer>>, email: string): Promise<string> {
-  const res = await app.inject({ method: "POST", url: "/api/v1/auth/register", payload: { email, password: "password123" } });
+  const res = await app.inject({ method: "POST", url: "/api/v1/auth/register", payload: { email, password: "password123", acceptedPolicies: true } });
   return (JSON.parse(res.body) as { token: string }).token;
 }
 

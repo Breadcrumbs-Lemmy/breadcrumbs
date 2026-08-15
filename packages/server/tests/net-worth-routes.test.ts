@@ -207,7 +207,7 @@ describe("net-worth snapshots — erasure on account deletion", () => {
   const multiUser = (): AuthConfig => ({ mode: "multi_user", sessionTtlMs: 30 * DAY_MS, registrationOpen: true, passwordMinLength: 8 });
 
   async function register(app: Awaited<ReturnType<typeof createServer>>, email: string) {
-    const res = await app.inject({ method: "POST", url: "/api/v1/auth/register", payload: { email, password: "password123" } });
+    const res = await app.inject({ method: "POST", url: "/api/v1/auth/register", payload: { email, password: "password123", acceptedPolicies: true } });
     return JSON.parse(res.body) as { token: string; user: { id: string } };
   }
 

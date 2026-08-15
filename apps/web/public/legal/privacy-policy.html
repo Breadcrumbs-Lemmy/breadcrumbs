@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Breadcrumbs Privacy Policy</title>
+<style>
+  @page { size: Letter; margin: 22mm 20mm; }
+  /* Pin a light document regardless of the reader's OS/browser dark mode: the
+     text colour is dark, so without an explicit light canvas these render
+     dark-on-dark when served in a dark-themed browser. */
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          color-scheme: light; background: #ffffff; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.5; color: #1a1a1a; margin: 0;
+  }
+  h1 { font-size: 22pt; margin: 0 0 4px; color: #0b1f3a; }
+  h2 { font-size: 13pt; margin: 22px 0 6px; color: #0b1f3a;
+        border-bottom: 1.5px solid #d9dee6; padding-bottom: 4px; }
+  h3 { font-size: 11.5pt; margin: 16px 0 4px; color: #0b1f3a; }
+  p { margin: 6px 0; }
+  strong { color: #0b1f3a; }
+  ul, ol { margin: 6px 0 6px 0; padding-left: 20px; }
+  li { margin: 3px 0; }
+  a { color: #1a56db; word-break: break-word; }
+  hr { border: none; border-top: 1px solid #e5e8ee; margin: 18px 0; }
+  blockquote {
+    margin: 12px 0; padding: 10px 14px; background: #f5f7fa;
+    border-left: 3px solid #1a56db; border-radius: 4px; color: #33415c;
+  }
+  blockquote p { margin: 4px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0;
+           font-size: 9.5pt; }
+  th, td { border: 1px solid #cdd3dd; padding: 7px 9px; text-align: left;
+            vertical-align: top; }
+  th { background: #0b1f3a; color: #fff; font-weight: 600; }
+  tr:nth-child(even) td { background: #f7f9fc; }
+  h2, h3, table, blockquote { page-break-inside: avoid; }
+  /* Screen-only: the print layout leans on @page margins, so on a screen the
+     text would otherwise run edge to edge. Centre it in a readable column. */
+  @media screen {
+    body { max-width: 46rem; margin: 0 auto; padding: 40px 24px 64px; }
+  }
+</style>
+</head>
+<body>
+<h1>Privacy Policy</h1>
+<p><strong>Effective date: 9 August 2026</strong>
+<strong>Last updated: 9 August 2026</strong></p>
+<p>This Privacy Policy explains how <strong>Breadcrumbs</strong> ("Breadcrumbs", "we", "us")
+collects, uses, protects, shares, and deletes your information when you use the
+Breadcrumbs personal-finance application and related services (the "Service").</p>
+<p>Breadcrumbs is a <strong>read-only</strong> personal-finance app: it helps you view and
+understand your own financial accounts. <strong>It never moves money</strong> — no payments,
+transfers, trades, or withdrawals.</p>
+<p>The Service is operated by <strong>Lemuel Mutah</strong> (the "Operator"). You can reach us
+about privacy at <strong>lemuelmutah@gmail.com</strong>.</p>
+<blockquote>
+<p><strong>Self-hosted deployments.</strong> Breadcrumbs can also be run ("self-hosted") by a
+third party on their own infrastructure. If you are using an instance operated
+by someone other than us, <strong>that operator</strong> is the party responsible for your
+data, and this Policy describes the software's behavior rather than that
+operator's practices. Direct data requests to whoever operates the instance you
+use.</p>
+</blockquote>
+<hr />
+<h2>1. Information we collect</h2>
+<p>We collect only what the product needs to work.</p>
+<p><strong>a. Account and identity information you give us.</strong>
+- Email address, display name, and a password. Your password is never stored in
+  readable form — it is stored only as a one-way cryptographic hash.
+- If you enable multi-factor authentication (MFA), a secret used to verify your
+  authenticator-app codes. It is stored encrypted.</p>
+<p><strong>b. Financial account information, obtained through Plaid.</strong>
+When you link a bank or financial account, you do so through <strong>Plaid Inc.</strong>
+("Plaid"). You enter your bank credentials <strong>directly into Plaid Link</strong> — <strong>we
+never see, receive, or store your bank username, password, or PIN.</strong> Plaid then
+provides us, on your behalf, with:
+- account metadata (account names, types, and balances),
+- transaction history,
+- financial-institution names, and
+- a per-connection access token that lets us retrieve the above from Plaid.</p>
+<p>Your use of Plaid is also governed by <strong>Plaid's End User Privacy Policy</strong>
+(https://plaid.com/legal/#end-user-privacy-policy). We encourage you to read it.</p>
+<p><strong>c. Assistant information.</strong>
+If you use the optional AI assistant, we process the messages you send it and any
+facts, notes, or files you choose to give it, so it can answer your questions.</p>
+<p><strong>d. Technical information.</strong>
+Breadcrumbs does <strong>not</strong> use third-party analytics, advertising, tracking, or
+marketing tools. The server that runs the Service may keep basic operational logs
+(for example, error and request-status records) to keep the Service secure and
+working; these logs are designed to <strong>exclude secrets</strong> such as tokens and
+passwords.</p>
+<p>We do <strong>not</strong> knowingly collect information from anyone under 18. The Service is
+not directed to children.</p>
+<hr />
+<h2>2. How we use your information</h2>
+<p>We use your information solely to provide and secure the Service:
+- authenticate you and keep your account secure;
+- retrieve and display your linked accounts, balances, and transactions;
+- categorize transactions and generate spending summaries and informational
+  insights;
+- answer your questions through the optional AI assistant; and
+- detect, prevent, and respond to security incidents, fraud, and abuse.</p>
+<p>We do <strong>not</strong> use your information for advertising, and we do <strong>not</strong> sell or rent
+your personal or financial information to anyone.</p>
+<p>The insights the Service generates are <strong>informational only</strong> and are not
+financial, investment, tax, or legal advice.</p>
+<hr />
+<h2>3. How we share your information</h2>
+<p>We share your data only with the service providers ("subprocessors") strictly
+necessary to run the Service:</p>
+<table>
+<thead>
+<tr>
+<th>Who</th>
+<th>What they receive</th>
+<th>Why</th>
+<th>Can you avoid it?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Plaid Inc.</strong></td>
+<td>Your bank credentials pass <strong>through</strong> Plaid (never to us); Plaid provides us your account metadata, balances, transactions, and institution names</td>
+<td>Read-only financial-account aggregation</td>
+<td>No — Plaid is the account-connection provider</td>
+</tr>
+<tr>
+<td><strong>Anthropic PBC</strong></td>
+<td>Only the portion of your financial data that is within the scope of a question you ask the AI assistant</td>
+<td>To generate the assistant's answer</td>
+<td><strong>Yes</strong> — a local, on-device model option keeps this data on the machine and sends nothing to Anthropic</td>
+</tr>
+</tbody>
+</table>
+<p>We use <strong>no</strong> other subprocessors — no analytics, error-tracking, advertising, or
+email-marketing vendors. If we ever add a subprocessor, we will update this Policy
+before that change takes effect and disclose it to users whose data flows would
+change.</p>
+<p>We may also disclose information if required by law, to comply with valid legal
+process, or to protect the rights, safety, and security of users, the public, or
+the Service.</p>
+<hr />
+<h2>4. How we protect your information</h2>
+<p>We apply layered technical safeguards, including:
+- <strong>Encryption in transit</strong> — TLS 1.2 or better for connections between your
+  browser, the Service, Plaid, and Anthropic.
+- <strong>Encryption at rest</strong> — Plaid access tokens, your account/transaction data, and
+  MFA secrets are encrypted with AES-256-GCM; the encryption key is held in the
+  server environment, separate from the data it protects.
+- <strong>Strong authentication</strong> — passwords hashed with a memory-hard algorithm
+  (scrypt); optional TOTP multi-factor authentication, required as a step-up
+  before you can link a bank.
+- <strong>Access controls</strong> — access is denied by default, and each account's data is
+  isolated so one user can never access another's.
+- <strong>Abuse protection</strong> — rate limiting and account lockout to resist password
+  guessing.</p>
+<p>No method of transmission or storage is 100% secure, and we cannot guarantee
+absolute security. Where the Service is self-hosted, some protections (for
+example, server disk encryption, network firewalls, and backups) are the
+responsibility of the operator running that instance.</p>
+<hr />
+<h2>5. How long we keep your information</h2>
+<p>We keep your information only while your account is active, and delete it when you
+delete the relevant data or your account:</p>
+<table>
+<thead>
+<tr>
+<th>Data</th>
+<th>Kept</th>
+<th>Deleted when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linked-account data and Plaid access token</td>
+<td>While the connection is linked</td>
+<td>You remove the connection, or delete your account</td>
+</tr>
+<tr>
+<td>Account/transaction data and assistant data</td>
+<td>While your account is active</td>
+<td>You delete your account</td>
+</tr>
+<tr>
+<td>Identity (email, name, password hash)</td>
+<td>While your account exists</td>
+<td>You delete your account</td>
+</tr>
+<tr>
+<td>Session tokens</td>
+<td>Until they expire, you change your password, or you delete/disable the account</td>
+<td>Any of those events</td>
+</tr>
+<tr>
+<td>MFA secret</td>
+<td>While MFA is enabled</td>
+<td>You disable MFA, or delete your account</td>
+</tr>
+</tbody>
+</table>
+<p>Deletion removes data from the live datastore immediately. Copies in any operator
+backups age out on that operator's backup rotation.</p>
+<hr />
+<h2>6. Your choices and rights</h2>
+<p>You can, at any time:
+- <strong>Access and review</strong> your linked accounts, transactions, and profile within the
+  app.
+- <strong>Unlink a connection</strong> — remove a single linked institution and its stored
+  access token.
+- <strong>Delete your account</strong> — permanently erase your identity and all data your
+  account owns (Plaid tokens, transaction data, and assistant data). Account
+  deletion is available in-app and requires re-entering your password.
+- <strong>Avoid off-device AI processing</strong> — use the local, on-device assistant model so
+  no financial data is sent to Anthropic.</p>
+<p>Depending on where you live, you may have additional rights — for example, to
+access, correct, delete, or receive a copy of your personal data, and to object to
+or restrict certain processing (as under the GDPR), or to know what we collect and
+request its deletion (as under the CCPA/CPRA). <strong>We do not sell your personal
+information.</strong> To exercise any right, contact us at <strong>lemuelmutah@gmail.com</strong>. If
+you use a self-hosted instance, direct your request to the operator of that
+instance.</p>
+<hr />
+<h2>7. Deleting data at Plaid</h2>
+<p>Deleting a connection or your account removes the access token we hold. If you
+want your linked item fully removed at Plaid as well, or you are exercising a
+formal erasure request, contact us and we will confirm removal on the Plaid side
+in accordance with Plaid's requirements.</p>
+<hr />
+<h2>8. Data location and international transfers</h2>
+<p>Our subprocessors (Plaid and Anthropic) are based in the United States, and your
+data may be processed there. If you access the Service from outside the United
+States, you understand your information may be transferred to and processed in the
+United States.</p>
+<hr />
+<h2>9. Changes to this Policy</h2>
+<p>We may update this Policy from time to time. When we do, we will revise the
+"Last updated" date above, and for material changes we will provide a more
+prominent notice. Your continued use of the Service after an update means you
+accept the revised Policy.</p>
+<hr />
+<h2>10. Contact us</h2>
+<p>Questions, concerns, or requests about this Policy or your data:</p>
+<p><strong>Lemuel Mutah</strong> — <strong>lemuelmutah@gmail.com</strong></p>
+</body>
+</html>
