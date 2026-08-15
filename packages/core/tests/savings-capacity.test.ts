@@ -172,6 +172,78 @@ describe("suggestSavingsCapacity — transfers to savings stay surplus", () => {
   });
 });
 
+describe("suggestSavingsCapacity — median even-count rounding direction", () => {
+  // Four complete months with DISTINCT surpluses whose middle pair averages to a
+  // .5 value, pinning that Math.round(0.5) rounds UP (i.e. to the higher integer).
+  //
+  // surpluses:     [100000, 200001, 300000, 400000]
+  // sorted middle: (200001 + 300000) / 2 = 250000.5 → Math.round → 250001
+  //
+  // The existing even-count tests use two identical months so their average is
+  // exact and the .5 rounding direction goes unexercised. Distinct values are
+  // required to expose it.
+  //
+  // Jan 2022: income 500000 − (housing 250000 + groceries 80000 + transport 50000 + dining 20000) = surplus 100000
+  // Feb 2022: income 500000 − (housing 150000 + groceries 50000 + transport 99999)              = surplus 200001
+  // Mar 2022: income 500000 − (housing 120000 + groceries 50000 + transport 30000)              = surplus 300000
+  // Apr 2022: income 500000 − (housing  60000 + groceries 25000 + transport 15000)              = surplus 400000
+  const transactions: Transaction[] = [
+    ...monthTxns("2022-01", {
+      income: 500_000,
+      housing: 250_000,
+      groceries: 80_000,
+      transportation: 50_000,
+      disc: [{ category: "dining", amountCents: 20_000 }],
+    }),
+    ...monthTxns("2022-02", {
+      income: 500_000,
+      housing: 150_000,
+      groceries: 50_000,
+      transportation: 99_999,
+      disc: [],
+    }),
+    ...monthTxns("2022-03", {
+      income: 500_000,
+      housing: 120_000,
+      groceries: 50_000,
+      transportation: 30_000,
+      disc: [],
+    }),
+    ...monthTxns("2022-04", {
+      income: 500_000,
+      housing: 60_000,
+      groceries: 25_000,
+      transportation: 15_000,
+      disc: [],
+    }),
+  ];
+
+  const result = suggestSavingsCapacity({
+    transactions,
+    accounts: [ACCT],
+    currency: "USD",
+    asOfDate: "2022-05-15", // May is partial (earliest is 2022-01-01); all four months are complete
+  });
+
+  it("counts all four complete months and has enough data", () => {
+    expect(result.monthsConsidered).toBe(4);
+    expect(result.hasEnoughData).toBe(true);
+  });
+
+  it("rounds the .5 median of the even-count surplus series up to 250001", () => {
+    // sorted surpluses: [100000, 200001, 300000, 400000]
+    // median = Math.round((200001 + 300000) / 2) = Math.round(250000.5) = 250001
+    expect(result.floorCents).toBe(250_001);
+  });
+
+  it("ceiling also rounds the .5 median of the even-count above-essentials series up to 250001", () => {
+    // dining in Jan is discretionary, so essentialOutflow(Jan) = 250000+80000+50000 = 380000
+    // aboveEssentials: [120000, 200001, 300000, 400000]
+    // sorted middle: (200001 + 300000) / 2 = 250000.5 → Math.round → 250001
+    expect(result.ceilingCents).toBe(250_001);
+  });
+});
+
 describe("suggestSavingsCapacity — thin and degenerate inputs", () => {
   it("returns zeros and hasEnoughData=false with no transactions", () => {
     const result = suggestSavingsCapacity({ transactions: [], accounts: [ACCT], currency: "USD" });

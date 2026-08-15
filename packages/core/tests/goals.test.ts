@@ -102,6 +102,28 @@ describe("buildSavingsGoal — shaping a declaration into a canonical Goal", () 
     const goal = buildSavingsGoal(input({ label: "Year end", targetAmountCents: 1 }), { asOfDate: "2022-12-15", currency: "USD" });
     expect(goal.nextContributionDate).toBe("2023-01-01");
   });
+
+  it("treats a whitespace-only id as absent and falls back to the label slug", () => {
+    // input.id?.trim() = '' (falsy) → falls through to `goal_${slugify(label)}`
+    const goal = buildSavingsGoal(input({ id: "   ", label: "Emergency fund", targetAmountCents: 500_000 }), OPTS);
+    expect(goal.id).toBe("goal_emergency-fund");
+  });
+
+  it("coerces NaN and Infinity amounts to 0 (toNonNegativeInt non-finite path — Zod rejects NaN upstream at the route)", () => {
+    // toNonNegativeInt: !Number.isFinite(NaN) → 0; !Number.isFinite(Infinity) → 0.
+    // With targetAmountCents === 0, evaluateGoals treats the goal as reached
+    // (the targetAmountCents <= 0 sentinel — no meaningful saving target).
+    const goal = buildSavingsGoal(
+      input({ label: "Bad input", targetAmountCents: NaN, currentAmountCents: Infinity }),
+      OPTS,
+    );
+    expect(goal.targetAmountCents).toBe(0);
+    expect(goal.currentAmountCents).toBe(0);
+
+    const [line] = evaluateGoals({ goals: [goal], asOfDate: ASOF, currency: "USD" }).goals;
+    // target <= 0 sentinel → reached regardless of savedCents (coerced-sentinel path)
+    expect(line!.status).toBe("reached");
+  });
 });
 
 describe("buildSavingsGoals — a whole set with unique ids", () => {
@@ -231,6 +253,55 @@ describe("evaluateGoals — progress, status and pace (D-G4)", () => {
     );
     const [line] = evaluateGoals({ goals: [goal], asOfDate: ASOF, currency: "USD" }).goals;
     expect(line!.progressBasisPoints).toBe(0);
+  });
+
+  it("projects a single-month completion (monthsToClose === 1) landing exactly on nextContributionDate", () => {
+    // remaining === monthlyContribution → ceil(20000/20000) = 1.
+    // The k-th contribution lands on anchor + (k-1) months, so the first (and
+    // only, k=1) contribution IS the completion: addMonths(anchor, 0) = anchor.
+    // anchor = nextContributionDate = 2022-08-01 (firstOfNextMonth("2022-07-20")).
+    const goal = buildSavingsGoal(
+      input({ label: "Almost there", targetAmountCents: 120_000, currentAmountCents: 100_000, monthlyContributionCents: 20_000 }),
+      OPTS,
+    );
+    const [line] = evaluateGoals({ goals: [goal], asOfDate: ASOF, currency: "USD" }).goals;
+    expect(line!.projection).toEqual({
+      monthsToClose: 1,
+      projectedCompletionDate: "2022-08-01", // addMonths(anchor, 0) = anchor
+      onPace: true,
+    });
+    expect(line!.status).toBe("on_track");
+  });
+
+  it("is behind when the targetDate is already before asOfDate", () => {
+    // Expired deadline: projectedCompletionDate (2023-05-01) > targetDate (2021-01-01)
+    // → compareDates > 0 → onPace = false → status 'behind'.
+    const goal = buildSavingsGoal(
+      input({
+        label: "Overdue",
+        targetAmountCents: 100_000,
+        currentAmountCents: 0,
+        monthlyContributionCents: 10_000,
+        targetDate: "2021-01-01",
+      }),
+      OPTS,
+    );
+    const [line] = evaluateGoals({ goals: [goal], asOfDate: ASOF, currency: "USD" }).goals;
+    expect(line!.status).toBe("behind");
+    expect(line!.projection!.onPace).toBe(false);
+  });
+
+  it("rounds 9999.9 basis-points to 10000 (full bar) while the goal remains unmet", () => {
+    // (99999 / 100000) * 10000 = 9999.9 → Math.round → 10000; the bar is full
+    // but savedCents < targetAmountCents so the goal is NOT reached (documents
+    // the full-bar-but-not-reached display case).
+    const goal = buildSavingsGoal(
+      input({ label: "Almost full bar", targetAmountCents: 100_000, currentAmountCents: 99_999, monthlyContributionCents: 50_000 }),
+      OPTS,
+    );
+    const [line] = evaluateGoals({ goals: [goal], asOfDate: ASOF, currency: "USD" }).goals;
+    expect(line!.status).not.toBe("reached");
+    expect(line!.progressBasisPoints).toBe(10_000);
   });
 });
 
