@@ -178,6 +178,15 @@ const PAGE_CONTEXT: Record<string, PageContext> = {
       "What are my recurring bills?",
     ],
   },
+  networth: {
+    label: "Net worth",
+    blurb: "how your cash net worth is trending",
+    suggestions: [
+      "Is my net worth going up or down?",
+      "How much have I moved since the start?",
+      "What's cash versus what I owe?",
+    ],
+  },
   import: {
     label: "Import",
     blurb: "bringing in a statement",

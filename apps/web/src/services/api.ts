@@ -34,6 +34,7 @@ import type {
   Goal,
   GoalsEvaluation,
   InsightsResult,
+  NetWorthTrend,
   SavingsCapacitySuggestion,
   SavingsGoalInput,
   SpendingSummary,
@@ -461,6 +462,22 @@ export function fetchInsights(params: {
 
 export function fetchAccounts(): Promise<ApiOutcome<AccountsResult>> {
   return request(`/api/v1/accounts${qs({ currency: "USD" })}`);
+}
+
+// ---- Net worth ------------------------------------------------------------
+
+/**
+ * `GET /api/v1/net-worth/trend` — the month-by-month cash net-worth line.
+ *
+ * A `GET`, deliberately: the server records today's figure as an idempotent
+ * side effect of the read (D-N4), so no write verb and no CORS change. The
+ * browser only formats what comes back; every cent is computed in core.
+ */
+export function fetchNetWorthTrend(params?: {
+  currency?: string;
+  months?: number;
+}): Promise<ApiOutcome<NetWorthTrend>> {
+  return request(`/api/v1/net-worth/trend${qs({ currency: "USD", ...params })}`);
 }
 
 // ---- Plaid ----------------------------------------------------------------

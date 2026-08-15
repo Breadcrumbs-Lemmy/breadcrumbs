@@ -97,7 +97,15 @@ type View =
 
 // ---------------------------------------------------------------------------
 
-export function AccountsScreen({ onConnect }: { onConnect?: () => void }) {
+export function AccountsScreen({
+  onConnect,
+  onOpenNetWorth,
+}: {
+  onConnect?: () => void;
+  /** Opens the net-worth trend screen (reached from here, never a nav tab —
+   *  net worth is the sum of the accounts, so it belongs with them). */
+  onOpenNetWorth?: () => void;
+}) {
   const [outcome, setOutcome] = useState<ApiOutcome<AccountsResult> | null>(null);
   const [summary, setSummary] = useState<SpendingSummary | null>(null);
   const [period, setPeriod] = useState<FlowPeriod>("month");
@@ -379,6 +387,28 @@ export function AccountsScreen({ onConnect }: { onConnect?: () => void }) {
           </button>
         </div>
       </div>
+
+      {/* Net-worth trend entry point — reached from here, never a nav tab (D-N9).
+          Net worth is the sum of these accounts, so it belongs with them. */}
+      {hasAccounts && onOpenNetWorth && (
+        <button
+          type="button"
+          onClick={onOpenNetWorth}
+          className="group mt-6 flex w-full items-center justify-between gap-4 rounded-lg border border-line-subtle bg-surface-raised px-5 py-4 text-left transition-colors hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base"
+        >
+          <span className="min-w-0">
+            <span className="block text-body font-medium text-ink group-hover:underline">
+              Net worth over time
+            </span>
+            <span className="mt-0.5 block text-meta text-ink-tertiary">
+              How your cash net worth — what you have, minus what you owe — has moved, month by month.
+            </span>
+          </span>
+          <span aria-hidden="true" className="shrink-0 text-ink-tertiary group-hover:text-ink">
+            →
+          </span>
+        </button>
+      )}
 
       {/* Combined money in/out across every account, for the chosen period. */}
       {hasAccounts && (
