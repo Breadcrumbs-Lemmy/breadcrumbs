@@ -71,7 +71,15 @@ const EVENT_STATUS_LABEL: Record<CashFlowEvent["status"], string> = {
   estimated: "Estimated",
 };
 
-export function CashflowScreen({ onBack, onImport }: { onBack: () => void; onImport?: () => void }) {
+export function CashflowScreen({
+  onBack,
+  onImport,
+}: {
+  /** Optional up-link. Cash-flow is a top-level nav destination, so no back link
+   *  is shown unless a caller supplies one. */
+  onBack?: () => void;
+  onImport?: () => void;
+}) {
   const [outcome, setOutcome] = useState<CashflowOutcome | null>(null);
   const [horizon, setHorizon] = useState<HorizonChoice>(DEFAULT_HORIZON);
 
@@ -87,13 +95,15 @@ export function CashflowScreen({ onBack, onImport }: { onBack: () => void; onImp
   return (
     <div className="mx-auto max-w-[760px]">
       <div className="mb-6">
-        <button
-          type="button"
-          onClick={onBack}
-          className="mb-1 text-label text-ink-secondary transition-colors hover:text-ink"
-        >
-          ‹ Pulse
-        </button>
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-1 text-label text-ink-secondary transition-colors hover:text-ink"
+          >
+            ‹ Back
+          </button>
+        )}
         <h1 className="font-display text-[1.6rem] font-medium text-ink">What's coming up</h1>
         <p className="mt-1 max-w-[56ch] text-body text-ink-secondary">
           The income and recurring bills expected over the next few weeks, with a running balance
