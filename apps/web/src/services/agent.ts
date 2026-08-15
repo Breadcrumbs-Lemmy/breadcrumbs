@@ -55,6 +55,27 @@ export type AgentReply =
     }
   | { kind: "declined"; message: string; category?: string };
 
+/** Defense-in-depth for the assistant surfaces. The server already sanitizes
+ *  model/provider errors (see the `describe*Error` helpers), returning short,
+ *  intended one-liners. But the assistant screen renders error text verbatim, so
+ *  a stale server binary, a proxy, or a future regression could still hand the
+ *  client a raw dump (an API error body, a leaked key) that would land in the DOM.
+ *  Gate it here: pass a server message through only when it reads like an intended
+ *  message; otherwise fall back to a generic line. Scoped to the assistant on
+ *  purpose — login and validation screens legitimately show verbatim server text. */
+const GENERIC_ASSISTANT_ERROR = "The assistant couldn't answer that. Please try again.";
+
+export function safeAssistantError(message?: string | null): string {
+  const trimmed = message?.trim();
+  if (!trimmed) return GENERIC_ASSISTANT_ERROR;
+  const looksRaw =
+    trimmed.length > 200 || // intended messages are short one-liners; a dump is long
+    /[\n\r]/.test(trimmed) || // multiple lines ⇒ a stack/body, not a sentence
+    /[{}]/.test(trimmed) || // JSON error body
+    /sk-[A-Za-z0-9-]{8,}/.test(trimmed); // a leaked API key
+  return looksRaw ? GENERIC_ASSISTANT_ERROR : trimmed;
+}
+
 export function fetchAgentStatus(): Promise<ApiOutcome<AgentStatus>> {
   return get("/api/v1/agent/status");
 }

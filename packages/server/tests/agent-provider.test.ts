@@ -7,6 +7,7 @@
  * a loopback address refuses to start, and a hosted provider is never mistaken
  * for an offline one. No network is touched — construction alone is the subject.
  */
+import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,6 +15,7 @@ import {
   AnthropicChatProvider,
   assertLoopbackUrl,
   createChatProvider,
+  describeAnthropicError,
   isLoopbackHost,
   LocalChatProvider,
 } from "../src/agent/provider";
@@ -98,6 +100,43 @@ describe("createChatProvider", () => {
     const provider = createChatProvider(anthropicConfig());
     expect(provider).toBeInstanceOf(AnthropicChatProvider);
     expect(provider.offline).toBe(false);
+  });
+});
+
+describe("describeAnthropicError never leaks the raw provider message to the UI", () => {
+  // The exact blob a user caught on the assistant page: a real model rejecting an
+  // unsupported request parameter. The raw provider message is operator-diagnostic
+  // (it can echo request internals — an unsupported param, a prompt fragment,
+  // potentially the key), so it must never be concatenated into what we show.
+  const RAW = "This model does not support the effort parameter.";
+
+  it("genericises an Anthropic APIError (400) but keeps the safe status code", () => {
+    const apiError = new Anthropic.APIError(400, undefined, RAW, undefined);
+    const shown = describeAnthropicError(apiError);
+    expect(shown).not.toContain(RAW);
+    expect(shown).not.toMatch(/effort/i);
+    // The status code is safe and useful for triage, so it survives.
+    expect(shown).toContain("400");
+  });
+
+  it("genericises an unknown Error rather than echoing its message", () => {
+    const shown = describeAnthropicError(new Error(RAW));
+    expect(shown).not.toContain(RAW);
+    expect(shown).not.toMatch(/effort/i);
+    expect(shown.length).toBeGreaterThan(0);
+  });
+
+  it("passes our own actionable AgentConfigError through unchanged", () => {
+    // Hand-authored, safe, and the fix is in the message — do not genericise it.
+    const message = "Anthropic agent requires ANTHROPIC_API_KEY.";
+    expect(describeAnthropicError(new AgentConfigError(message))).toBe(message);
+  });
+
+  it("keeps the specific auth and rate-limit hints", () => {
+    const auth = new Anthropic.AuthenticationError(401, undefined, "raw auth detail", new Headers());
+    expect(describeAnthropicError(auth)).toMatch(/ANTHROPIC_API_KEY/);
+    const rate = new Anthropic.RateLimitError(429, undefined, "raw rate detail", new Headers());
+    expect(describeAnthropicError(rate)).toMatch(/rate limited/i);
   });
 });
 

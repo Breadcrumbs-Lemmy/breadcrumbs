@@ -18,6 +18,7 @@ import {
   getConversation,
   listAgentFiles,
   listConversations,
+  safeAssistantError,
   sendAgentTurn,
   uploadAgentFile,
   TOOL_LABELS,
@@ -91,12 +92,14 @@ export function AssistantScreen({ onImport }: { onImport?: () => void }) {
 
       if (outcome.kind !== "ok") {
         setError(
-          outcome.kind === "error" ? outcome.message : "The assistant couldn't answer that.",
+          outcome.kind === "error"
+            ? safeAssistantError(outcome.message)
+            : "The assistant couldn't answer that.",
         );
         return;
       }
       if (outcome.data.kind === "declined") {
-        setError(outcome.data.message);
+        setError(safeAssistantError(outcome.data.message));
         return;
       }
 
@@ -125,7 +128,7 @@ export function AssistantScreen({ onImport }: { onImport?: () => void }) {
     const outcome = await getConversation(id);
     setLoadingConversation(false);
     if (outcome.kind !== "ok") {
-      setError(outcome.kind === "error" ? outcome.message : "That conversation couldn't be opened.");
+      setError(outcome.kind === "error" ? safeAssistantError(outcome.message) : "That conversation couldn't be opened.");
       return;
     }
     // Stored turns carry only role/content — tool-call provenance isn't persisted,
@@ -422,7 +425,7 @@ function MemoryPanel() {
     const outcome = await uploadAgentFile(file.name, text, file.type || "text/plain");
     setBusy(false);
     if (outcome.kind !== "ok") {
-      setNote(outcome.kind === "error" ? outcome.message : "That file couldn't be saved.");
+      setNote(outcome.kind === "error" ? safeAssistantError(outcome.message) : "That file couldn't be saved.");
       return;
     }
     setFiles((current) => [outcome.data.file, ...(current ?? [])]);

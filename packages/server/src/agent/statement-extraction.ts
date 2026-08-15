@@ -32,7 +32,7 @@ import { extractText, getDocumentProxy } from "unpdf";
 
 import type { AgentConfig } from "./config";
 import { describeError } from "./chat";
-import { assertLoopbackUrl } from "./provider";
+import { AgentConfigError, assertLoopbackUrl, createBetaMessage } from "./provider";
 
 /** One row as the model is asked to return it — deliberately the same shape a
  *  bank CSV would have, so the downstream path is identical. */
@@ -148,7 +148,7 @@ async function extractWithAnthropic(
       : { type: "text", text: `Statement text:\n\n${document.text}` };
 
   try {
-    const response = await client.beta.messages.create({
+    const response = await createBetaMessage(client, {
       model: config.extractionModel ?? config.model,
       // A year of statement lines is a lot of rows; streaming would be better
       // for very large documents, but a single statement fits comfortably.
@@ -443,13 +443,15 @@ async function callLocalModel(
 }
 
 function describeLocalExtractionError(error: unknown, config: AgentConfig): string {
+  if (error instanceof AgentConfigError) return error.message;
   if (error instanceof Error && error.name === "AbortError") {
     return "The local model timed out reading the statement. Is it running and responsive?";
   }
   if (error instanceof Error && /fetch failed|ECONNREFUSED/i.test(error.message)) {
     return `Couldn't reach the local model at ${config.extractionLocalBaseUrl ?? config.localBaseUrl}. Is it running?`;
   }
-  return error instanceof Error ? error.message : "The local assistant failed to read the statement.";
+  console.warn("[agent] local extraction failure:", error);
+  return "The local assistant failed to read the statement. Please try again.";
 }
 
 // ---- Shared: parsing and CSV assembly ---------------------------------------
