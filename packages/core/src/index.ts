@@ -13,6 +13,18 @@ export {
 } from "./domain/periods";
 export { queryTransactions } from "./domain/transactions-query";
 export { detectInsights, DEFAULT_INSIGHTS_CONFIG } from "./domain/insights";
+export { evaluateBudgets, DEFAULT_BUDGET_CONFIG } from "./domain/budgets";
+export type {
+  Budget,
+  BudgetPeriodBasis,
+  BudgetStatus,
+  BudgetConfig,
+  BudgetProjection,
+  BudgetLine,
+  OverallBudgetProgress,
+  BudgetProgress,
+  EvaluateBudgetsOptions,
+} from "./domain/budgets";
 export { buildAccountsView } from "./domain/accounts-view";
 export {
   DEFAULT_RECURRING_SPENDING_CONFIG,

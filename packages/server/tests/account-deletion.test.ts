@@ -17,6 +17,7 @@ import type { PlaidClientLike } from "../src/plaid/adapter";
 import type { PlaidConfig } from "../src/plaid/config";
 import { InMemoryPlaidTokenStore } from "../src/plaid/token-store";
 import { InMemoryStatementImportStoreProvider } from "../src/local/store-provider";
+import { InMemoryBudgetStoreProvider } from "../src/local/budget-store-provider";
 import { InMemoryAgentMemoryProvider } from "../src/agent/memory/provider";
 import { totpCode } from "../src/auth/totp";
 
@@ -57,16 +58,18 @@ async function harness() {
   const plaidTokenStore = new InMemoryPlaidTokenStore();
   const stores = new InMemoryStatementImportStoreProvider();
   const agentMemory = new InMemoryAgentMemoryProvider();
+  const budgetStores = new InMemoryBudgetStoreProvider();
   const app = await createServer({
     authConfig: multiUserConfig(),
     authPersistence: "memory",
     stores,
     agentMemory,
+    budgetStores,
     plaidConfig,
     plaidClient: mockClient(),
     plaidTokenStore,
   });
-  return { app, plaidTokenStore, stores, agentMemory };
+  return { app, plaidTokenStore, stores, agentMemory, budgetStores };
 }
 
 function auth(token: string) {
@@ -110,15 +113,25 @@ async function connectBank(app: Awaited<ReturnType<typeof createServer>>, token:
 
 describe("account deletion (multi_user)", () => {
   it("erases a user's identity and all their data, and clears the session", async () => {
-    const { app, plaidTokenStore, stores, agentMemory } = await harness();
+    const { app, plaidTokenStore, stores, agentMemory, budgetStores } = await harness();
     const erasedStores = vi.spyOn(stores, "eraseForUser");
     const erasedMemory = vi.spyOn(agentMemory, "eraseForUser");
+    const erasedBudgets = vi.spyOn(budgetStores, "eraseForUser");
 
     // First registrant is the bootstrap admin; the account under test is a
     // normal user so the last-admin guard doesn't apply.
     await register(app, "admin@example.com");
     const alice = await register(app, "alice@example.com");
     await connectBank(app, alice.token);
+
+    // Alice configures a budget, so there is a budgets file to erase.
+    const savedBudget = await app.inject({
+      method: "POST",
+      url: "/api/v1/budgets",
+      headers: auth(alice.token),
+      payload: { currency: "USD", overallLimitCents: null, budgets: [{ category: "groceries", limitCents: 40_000 }] },
+    });
+    expect(savedBudget.statusCode).toBe(200);
 
     // Precondition: Alice owns exactly one bank connection.
     expect(await plaidTokenStore.listForUser(alice.id)).toHaveLength(1);
@@ -144,10 +157,11 @@ describe("account deletion (multi_user)", () => {
     expect(relogin.statusCode).toBe(401);
     expect(JSON.parse(relogin.body).error.code).toBe("INVALID_CREDENTIALS");
 
-    // Data gone: bank tokens removed, and both other stores were told to erase.
+    // Data gone: bank tokens removed, and every owning store was told to erase.
     expect(await plaidTokenStore.listForUser(alice.id)).toHaveLength(0);
     expect(erasedStores).toHaveBeenCalledWith(alice.id);
     expect(erasedMemory).toHaveBeenCalledWith(alice.id);
+    expect(erasedBudgets).toHaveBeenCalledWith(alice.id);
 
     await app.close();
   });

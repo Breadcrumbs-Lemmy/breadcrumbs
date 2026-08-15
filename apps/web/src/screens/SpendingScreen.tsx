@@ -33,9 +33,11 @@ const PERIODS: PeriodKind[] = ["week", "month", "year", "statement"];
 export function SpendingScreen({
   onCheckPurchase,
   onImport,
+  onOpenBudgets,
 }: {
   onCheckPurchase?: () => void;
   onImport?: () => void;
+  onOpenBudgets?: () => void;
 }) {
   const [period, setPeriod] = useState<PeriodKind>("month");
   const [outcome, setOutcome] = useState<SpendingOutcome | null>(null);
@@ -326,6 +328,29 @@ export function SpendingScreen({
                 ›
               </span>
             </button>
+
+            {/* Budgets live on their own screen, reached from here rather than a
+                nav tab (the rail spells C·A·P·I·T·A·L). Caps aren't shown inline
+                because this screen is multi-period and a cap for one window shown
+                against another would mislead — see docs/budgets.md D-B10. */}
+            {onOpenBudgets && (
+              <button
+                type="button"
+                onClick={onOpenBudgets}
+                className="card flex w-full items-center justify-between px-5 py-4 text-left hover:shadow-md"
+                style={{ transition: "box-shadow var(--dur-base) var(--ease-out)" }}
+              >
+                <span>
+                  <span className="block text-body text-ink">Budgets</span>
+                  <span className="mt-0.5 block text-meta text-ink-tertiary">
+                    Set weekly or monthly caps and track them
+                  </span>
+                </span>
+                <span aria-hidden="true" className="text-ink-tertiary">
+                  ›
+                </span>
+              </button>
+            )}
           </div>
         </div>
       )}

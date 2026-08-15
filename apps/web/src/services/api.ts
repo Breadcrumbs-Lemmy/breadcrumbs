@@ -27,6 +27,8 @@ import type {
   AffordabilityRequest,
   AffordabilityRequestValidationIssue,
   AffordabilityResponse,
+  Budget,
+  BudgetProgress,
   FinancialSnapshot,
   InsightsResult,
   SpendingSummary,
@@ -323,6 +325,46 @@ export function fetchSpendingSeries(params: {
   currency?: string;
 }): Promise<ApiOutcome<unknown>> {
   return request(`/api/v1/spending/series${qs({ currency: "USD", ...params })}`);
+}
+
+// ---- Budgets --------------------------------------------------------------
+
+/** A user's configured budget set: per-category caps (each governing a week or a
+ *  month) plus an optional overall cap per window. Mirrors the server's
+ *  `BudgetState`; the browser never computes from it — it edits it and hands it
+ *  back. A monthly cap carries no `period` field; a weekly cap has
+ *  `period: "week"`. */
+export type BudgetConfig = {
+  currency: string;
+  overallLimitCents: number | null;
+  overallWeeklyLimitCents: number | null;
+  budgets: Budget[];
+};
+
+/** `GET /api/v1/budgets` — the raw configured caps (no progress). */
+export function fetchBudgets(): Promise<ApiOutcome<BudgetConfig>> {
+  return request("/api/v1/budgets");
+}
+
+/** `POST /api/v1/budgets` — replace the whole set. Returns the saved (sorted) set.
+ *  Whole-set replace is deliberate: the screen edits a small set as one object,
+ *  so there is no partial-merge ambiguity. POST (not PUT) keeps this on the same
+ *  verb set every other mutation uses (the server's CORS allowlist is scoped to
+ *  exactly those verbs). */
+export function saveBudgets(config: BudgetConfig): Promise<ApiOutcome<BudgetConfig>> {
+  return post("/api/v1/budgets", config);
+}
+
+/** `GET /api/v1/budgets/progress` — spent-vs-limit for one window, computed
+ *  server-side by core `evaluateBudgets` (`CD-011` — no browser arithmetic).
+ *  `period` picks the window (`week` | `month`, default month); `key` picks which
+ *  one — a month key (`2026-08`) or an ISO week key (`2026-W32`) — and omitted
+ *  means the window containing the latest data. */
+export function fetchBudgetProgress(params: {
+  period?: "week" | "month";
+  key?: string;
+}): Promise<ApiOutcome<BudgetProgress>> {
+  return request(`/api/v1/budgets/progress${qs({ currency: "USD", ...params })}`);
 }
 
 // ---- Transactions ---------------------------------------------------------

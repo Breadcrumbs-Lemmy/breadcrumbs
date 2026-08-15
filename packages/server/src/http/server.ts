@@ -18,6 +18,11 @@ import {
   defaultLocalDataDir,
 } from "../local/store-provider";
 import type { StatementImportStoreProvider } from "../local/store-provider";
+import {
+  FileBudgetStoreProvider,
+  InMemoryBudgetStoreProvider,
+} from "../local/budget-store-provider";
+import type { BudgetStoreProvider } from "../local/budget-store-provider";
 import { FileAgentMemoryProvider, InMemoryAgentMemoryProvider } from "../agent/memory/provider";
 import type { AgentMemoryProvider } from "../agent/memory/provider";
 import { buildAuthService } from "../auth/build";
@@ -32,6 +37,7 @@ import { registerAgentRoutes } from "./agent-routes";
 import { registerAuthRoutes } from "./auth-routes";
 import { registerLocalRoutes } from "./local-routes";
 import { registerSpendingRoutes } from "./spending-routes";
+import { registerBudgetRoutes } from "./budget-routes";
 import { registerPlaidRoutes } from "./plaid-routes";
 
 export type CreateServerOptions = {
@@ -44,6 +50,9 @@ export type CreateServerOptions = {
   statementImportStore?: StatementImportStore;
   /** Per-user store isolation. When present, wins over `statementImportStore`. */
   stores?: StatementImportStoreProvider;
+  /** Per-user budget caps. Injected in tests; otherwise built to match the same
+   *  ephemeral/persistent choice the stores use. */
+  budgetStores?: BudgetStoreProvider;
   /** Per-user assistant memory. Injected in tests; otherwise built to match the
    *  same ephemeral/persistent choice the stores use. */
   agentMemory?: AgentMemoryProvider;
@@ -138,6 +147,11 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // the same user, so the screens and the importer can never disagree. The same
   // `fieldCipher` loaded above encrypts the transaction store and Plaid tokens.
   const stores = resolveStoreProvider(options, fieldCipher);
+  // Budgets follow the same isolation seam and the same ephemeral/persistent
+  // choice as the stores: an injected concrete store means a test-shaped server
+  // whose budgets stay in RAM; a bare `createServer()` persists them to disk next
+  // to the user's statements, encrypted with the same key when one is set.
+  const budgetStores = resolveBudgetStoreProvider(options, ephemeral, fieldCipher);
   // The assistant's memory follows the same isolation seam as the stores, and
   // the same ephemeral/persistent choice: an injected store means a test-shaped
   // server whose memory stays in RAM; a bare `createServer()` persists memory to
@@ -163,6 +177,7 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // latter removes the whole `users/<id>/` directory the memory lives under.
   const eraseUserData = async (userId: string): Promise<void> => {
     await agentMemory.eraseForUser?.(userId);
+    await budgetStores.eraseForUser?.(userId);
     await stores.eraseForUser?.(userId);
     await plaidTokenStore?.deleteAllForUser(userId);
   };
@@ -171,6 +186,7 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   await registerAffordabilityRoutes(app, { stores });
   await registerLocalRoutes(app, { stores });
   await registerSpendingRoutes(app, { stores });
+  await registerBudgetRoutes(app, { budgets: budgetStores, stores });
   await registerAgentRoutes(app, { stores, memory: agentMemory });
 
   if (options.plaidConfig && plaidTokenStore) {
@@ -192,6 +208,18 @@ function resolveStoreProvider(
   if (options.stores) return options.stores;
   if (options.statementImportStore) return new SingleStatementImportStoreProvider(options.statementImportStore);
   return new FileStatementImportStoreProvider(defaultLocalDataDir(), cipher);
+}
+
+function resolveBudgetStoreProvider(
+  options: CreateServerOptions,
+  ephemeral: boolean,
+  cipher?: FieldCipher,
+): BudgetStoreProvider {
+  if (options.budgetStores) return options.budgetStores;
+  // Match the stores' ephemeral/persistent choice: an injected concrete store
+  // (the test-shaped server) keeps budgets in RAM; a bare server persists them.
+  if (ephemeral) return new InMemoryBudgetStoreProvider();
+  return new FileBudgetStoreProvider(defaultLocalDataDir(), cipher);
 }
 
 function normalizeCreateServerOptions(configOrOptions: PlaidConfig | CreateServerOptions): CreateServerOptions {
