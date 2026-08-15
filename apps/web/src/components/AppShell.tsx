@@ -12,7 +12,7 @@
  *   768–1023  single column, wider gutters    (tablet)
  *   ≥ 1024px  sidebar + two-column content    (desktop, primary target)
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import { Logo } from "./Logo";
 
@@ -26,6 +26,19 @@ export type NavItem<T extends string> = {
   disabled?: boolean;
 };
 
+/**
+ * A titled group of nav items. Sections are the unit of the sidebar's structure:
+ * each renders as a labelled cluster when the rail is expanded, and collapses to
+ * a single letter — its header's initial — in the rail. Ordering the sections so
+ * those initials read top-to-bottom is what lets the retracted rail spell a word
+ * (here P·L·A·N: Pulse · Ledger · Ahead · Next), a small wink that costs nothing
+ * because every feature keeps a plainly-named home inside its section.
+ */
+export type NavSection<T extends string> = {
+  header: string;
+  items: NavItem<T>[];
+};
+
 /** Minimal shape of the signed-in user exposed to the shell. */
 export type ShellUser = {
   displayName?: string;
@@ -34,7 +47,8 @@ export type ShellUser = {
 };
 
 export function AppShell<T extends string>({
-  nav,
+  sections,
+  trailing,
   current,
   onNavigate,
   onHome,
@@ -47,15 +61,20 @@ export function AppShell<T extends string>({
   onChangePassword,
   children,
 }: {
-  nav: NavItem<T>[];
+  /** The grouped nav. Section order sets the collapsed-rail acrostic. */
+  sections: NavSection<T>[];
+  /** Utility items shown after the sections — outside the acrostic, so adding
+   *  one (e.g. Admin) never disturbs the word. In the rail they render as plain
+   *  letter tiles below a divider; on mobile as trailing pills. */
+  trailing?: NavItem<T>[];
   current: T;
   onNavigate: (id: T) => void;
   /** Clicking the brand lockup goes "home" (the accounts overview). When
    *  omitted the logo is inert decoration. */
   onHome?: () => void;
-  /** Settings deliberately isn't a nav item (it would spoil the CAPITAL
-   *  acrostic). Instead a gear sits at the very bottom of the sidebar and in the
-   *  mobile top bar. When omitted, no gear renders. */
+  /** Settings deliberately isn't a nav item (it would tack an odd letter onto
+   *  the PLAN acrostic). Instead a gear sits at the very bottom of the sidebar
+   *  and in the mobile top bar. When omitted, no gear renders. */
   onOpenSettings?: () => void;
   /** Whether Settings is the current route, so the gear reflects the active
    *  page like the nav items do. */
@@ -104,6 +123,29 @@ export function AppShell<T extends string>({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // The mobile bar is two rows: row 1 keeps all four section names on screen,
+  // row 2 shows the pages of whichever section owns the current route. Settings
+  // sits outside the sections, so there `activeSection` is undefined and row 2
+  // simply doesn't render.
+  const activeSection = sections.find((s) =>
+    s.items.some((item) => item.id === current),
+  );
+
+  // Both mobile rows normally fit without scrolling (four short section pills;
+  // a section's two-to-four pages). These refs are a defensive net: if a row
+  // ever overflows, keep its active pill centred in view when the route changes.
+  const sectionNavRef = useRef<HTMLElement | null>(null);
+  const pageNavRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    for (const el of [sectionNavRef.current, pageNavRef.current]) {
+      el?.querySelector<HTMLElement>("[aria-current]")?.scrollIntoView({
+        block: "nearest",
+        inline: "center",
+        behavior: "smooth",
+      });
+    }
+  }, [current]);
+
   return (
     <div className="min-h-screen lg:flex">
       {/* ---- Desktop sidebar ------------------------------------------- */}
@@ -149,18 +191,59 @@ export function AppShell<T extends string>({
           </button>
         </div>
 
-        <nav className={`flex flex-col gap-0.5 ${collapsed ? "px-2" : "px-3"}`} aria-label="Main">
-          {nav.map((item) => (
-            <SideLink
-              key={item.id}
-              collapsed={collapsed}
-              active={item.id === current}
-              disabled={item.disabled}
-              onClick={() => onNavigate(item.id)}
-              hint={item.hint}
-              label={item.label}
-            />
-          ))}
+        {/* Grouped nav. Expanded: each section is a labelled cluster. Collapsed:
+            each section is one letter (the acrostic), its pages tucked into a
+            hover/focus flyout so the rail stays a clean four-letter word. */}
+        <nav
+          className={`flex flex-col ${collapsed ? "gap-1.5 px-2" : "gap-5 px-3"}`}
+          aria-label="Main"
+        >
+          {sections.map((section) =>
+            collapsed ? (
+              <CollapsedSection
+                key={section.header}
+                section={section}
+                current={current}
+                onNavigate={onNavigate}
+              />
+            ) : (
+              <div key={section.header} className="flex flex-col gap-0.5">
+                <SectionHeader>{section.header}</SectionHeader>
+                {section.items.map((item) => (
+                  <SideLink
+                    key={item.id}
+                    collapsed={false}
+                    active={item.id === current}
+                    disabled={item.disabled}
+                    onClick={() => onNavigate(item.id)}
+                    hint={item.hint}
+                    label={item.label}
+                  />
+                ))}
+              </div>
+            ),
+          )}
+
+          {/* Trailing utilities (Admin) sit apart from the acrostic. */}
+          {trailing && trailing.length > 0 && (
+            <div
+              className={`flex flex-col gap-0.5 border-t border-line-subtle ${
+                collapsed ? "mx-auto w-10 pt-1.5" : "pt-3"
+              }`}
+            >
+              {trailing.map((item) => (
+                <SideLink
+                  key={item.id}
+                  collapsed={collapsed}
+                  active={item.id === current}
+                  disabled={item.disabled}
+                  onClick={() => onNavigate(item.id)}
+                  hint={item.hint}
+                  label={item.label}
+                />
+              ))}
+            </div>
+          )}
         </nav>
 
         {/* Sidebar footer: scenarios switcher + theme toggle + user menu.
@@ -197,31 +280,73 @@ export function AppShell<T extends string>({
         </div>
       </aside>
 
-      {/* ---- Mobile / tablet top bar ------------------------------------ */}
+      {/* ---- Mobile / tablet top bar (two-tier) ------------------------- */}
+      {/* No rail to spell a word here, and ten pages won't fit one row. So the
+          nav splits: row 1 keeps all four PLAN section names on screen at once
+          (the grouping stays legible without scrolling), and row 2 shows only
+          the pages of the active section — never a horizontal scroll of ten,
+          never an active page hidden off-screen. Section pills read as tabs
+          (label + accent underline); page pills reuse the filled MobilePill,
+          so the two levels are visually distinct. */}
       <header className="sticky top-0 z-20 border-b border-line-subtle bg-surface-base/85 backdrop-blur-md lg:hidden">
-        <div className="mx-auto flex max-w-[880px] items-center justify-between gap-4 px-5 py-3">
+        {/* Row 1 — brand · section tabs · utilities */}
+        <div className="mx-auto flex max-w-[880px] items-center gap-2 px-4 py-2.5">
           <BrandButton onHome={onHome} label="breadcrumbs — go to accounts">
             <Logo variant="mark" size={26} />
           </BrandButton>
-          <nav className="flex gap-0.5 overflow-x-auto" aria-label="Main">
-            {nav.map((item) => (
+          <nav
+            ref={sectionNavRef}
+            className="flex min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto"
+            aria-label="Sections"
+          >
+            {sections.map((section) => {
+              const primary = section.items[0];
+              const activeInSection = section.items.some((item) => item.id === current);
+              return (
+                <button
+                  key={section.header}
+                  type="button"
+                  onClick={() => primary && onNavigate(primary.id)}
+                  aria-current={activeInSection ? "true" : undefined}
+                  title={`${section.header}: ${section.items.map((i) => i.label).join(", ")}`}
+                  className={`flex shrink-0 flex-col items-center rounded-md px-1.5 py-1 text-label transition-colors ${
+                    activeInSection
+                      ? "font-medium text-accent-ink"
+                      : "text-ink-tertiary hover:text-ink-secondary"
+                  }`}
+                >
+                  <span>{section.header}</span>
+                  {/* Active-tab underline — echoes the expanded sidebar's beacon
+                      dot without needing an icon. */}
+                  <span
+                    aria-hidden="true"
+                    className={`mt-0.5 h-0.5 w-5 rounded-full transition-colors ${
+                      activeInSection ? "bg-accent" : "bg-transparent"
+                    }`}
+                  />
+                </button>
+              );
+            })}
+          </nav>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {/* Admin (trailing) sits with the utilities, outside the acrostic,
+                so it's reachable from every section rather than tucked into one
+                section's page row. */}
+            {trailing?.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                disabled={item.disabled}
                 onClick={() => onNavigate(item.id)}
                 aria-current={item.id === current ? "page" : undefined}
-                className={`min-h-[34px] shrink-0 rounded-pill px-3 text-label transition-colors ${
+                className={`rounded-md px-2 py-1.5 text-meta transition-colors ${
                   item.id === current
-                    ? "bg-accent-soft font-medium text-accent-ink"
-                    : "text-ink-tertiary hover:text-ink-secondary"
-                } disabled:opacity-30`}
+                    ? "text-accent-ink"
+                    : "text-ink-tertiary hover:text-ink"
+                }`}
               >
                 {item.label}
               </button>
             ))}
-          </nav>
-          <div className="flex shrink-0 items-center gap-1">
             {onOpenSettings && (
               <button
                 type="button"
@@ -238,9 +363,32 @@ export function AppShell<T extends string>({
                 <GearIcon />
               </button>
             )}
-            <ThemeToggle />
+            {/* Icon-only here (its label would crowd out the section tabs); the
+                gear beside it is icon-only too, so they read as a matched pair. */}
+            <span className="flex h-9 w-9 shrink-0 items-center">
+              <ThemeToggle compact />
+            </span>
           </div>
         </div>
+
+        {/* Row 2 — the active section's pages. Absent on Settings (which lives
+            outside the sections); the gear already shows its own active state. */}
+        {activeSection && (
+          <nav
+            ref={pageNavRef}
+            aria-label={`${activeSection.header} pages`}
+            className="mx-auto flex max-w-[880px] items-center gap-1 overflow-x-auto border-t border-line-subtle/60 px-4 py-1.5"
+          >
+            {activeSection.items.map((item) => (
+              <MobilePill
+                key={item.id}
+                item={item}
+                active={item.id === current}
+                onClick={() => onNavigate(item.id)}
+              />
+            ))}
+          </nav>
+        )}
       </header>
 
       {/* ---- Content ---------------------------------------------------- */}
@@ -355,6 +503,109 @@ function SideLink({
   );
 }
 
+/** Expanded-rail section label. Quiet, uppercase, set above its item cluster. */
+function SectionHeader({ children }: { children: ReactNode }) {
+  return (
+    <p className="px-3 pb-1 text-[0.68rem] font-medium uppercase tracking-[0.14em] text-ink-tertiary">
+      {children}
+    </p>
+  );
+}
+
+/**
+ * A section in the retracted rail: one letter tile — the header's initial, the
+ * character that spells the acrostic — with the section's pages tucked into a
+ * flyout revealed on hover or keyboard focus. Clicking the tile itself is a
+ * shortcut to the section's first page, so the rail keeps one-click navigation
+ * while the flyout adds precision. The tile lights up when the current page
+ * lives anywhere in the section.
+ */
+function CollapsedSection<T extends string>({
+  section,
+  current,
+  onNavigate,
+}: {
+  section: NavSection<T>;
+  current: T;
+  onNavigate: (id: T) => void;
+}) {
+  const initial = section.header.trim().charAt(0).toUpperCase();
+  const primary = section.items[0];
+  const activeInSection = section.items.some((item) => item.id === current);
+
+  return (
+    <div className="group relative mx-auto">
+      <button
+        type="button"
+        onClick={() => primary && onNavigate(primary.id)}
+        aria-current={activeInSection ? "true" : undefined}
+        aria-label={`${section.header}: ${section.items.map((i) => i.label).join(", ")}`}
+        title={section.header}
+        className={`flex h-10 w-10 items-center justify-center rounded-md text-body transition-colors ${
+          activeInSection
+            ? "bg-accent-soft font-medium text-accent-ink"
+            : "text-ink-secondary hover:bg-surface-sunken/70 hover:text-ink"
+        }`}
+      >
+        <span aria-hidden="true">{initial}</span>
+      </button>
+
+      {/* Flyout. `invisible` (not just opacity-0) keeps the buttons out of the
+          tab order and un-clickable until the group is hovered or focused. */}
+      <div className="invisible absolute left-full top-0 z-30 ml-2 w-52 rounded-md border border-line-subtle bg-surface-raised p-1 opacity-0 shadow-md transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+        <p className="px-2 pb-1 pt-1 text-[0.62rem] font-medium uppercase tracking-[0.14em] text-ink-tertiary">
+          {section.header}
+        </p>
+        {section.items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            disabled={item.disabled}
+            onClick={() => onNavigate(item.id)}
+            aria-current={item.id === current ? "page" : undefined}
+            className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-label transition-colors ${
+              item.id === current
+                ? "bg-accent-soft font-medium text-accent-ink"
+                : "text-ink-secondary hover:bg-surface-sunken hover:text-ink"
+            } disabled:opacity-30`}
+          >
+            <span>{item.label}</span>
+            {item.hint && <span className="shrink-0 text-meta text-ink-tertiary">{item.hint}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One pill in the mobile top bar. */
+function MobilePill<T extends string>({
+  item,
+  active,
+  onClick,
+}: {
+  item: NavItem<T>;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={item.disabled}
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      title={item.hint ? `${item.label} · ${item.hint}` : item.label}
+      className={`min-h-[34px] shrink-0 rounded-pill px-3 text-label transition-colors ${
+        active
+          ? "bg-accent-soft font-medium text-accent-ink"
+          : "text-ink-tertiary hover:text-ink-secondary"
+      } disabled:opacity-30`}
+    >
+      {item.label}
+    </button>
+  );
+}
+
 /** The settings gear. A plain currentColor stroke icon so it inherits the
  *  button's text colour (tertiary → ink on hover, accent-ink when active). */
 function GearIcon({ className }: { className?: string }) {
@@ -380,7 +631,7 @@ function GearIcon({ className }: { className?: string }) {
 /** The Settings gear that lives at the bottom of the sidebar. Mirrors SideLink's
  *  two shapes (rail tile with hover flyout vs full row) but leads with the gear
  *  icon instead of the beacon dot, so it reads as a utility control set apart
- *  from the CAPITAL nav above it. */
+ *  from the PLAN nav above it. */
 function SettingsLink({
   active,
   collapsed,
