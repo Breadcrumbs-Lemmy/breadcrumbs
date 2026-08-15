@@ -3,6 +3,8 @@ export { expandCadence } from "./domain/recurrence";
 export { AffordabilityRequestSchema, FinancialSnapshotSchema, GoalSchema } from "./domain/schemas";
 export { annotateTransferPairs, summarizeMonthlySpending } from "./domain/monthly-spending";
 export { summarizeSpending, spendingSeries } from "./domain/spending-summary";
+export { buildMonthlyReport, toReportCsv } from "./domain/monthly-report";
+export type { MonthlyReport, BuildMonthlyReportOptions } from "./domain/monthly-report";
 export {
   periodForDate,
   periodFromKey,

@@ -34,6 +34,7 @@ import type {
   Goal,
   GoalsEvaluation,
   InsightsResult,
+  MonthlyReport,
   NetWorthTrend,
   SavingsCapacitySuggestion,
   SavingsGoalInput,
@@ -456,6 +457,79 @@ export function fetchInsights(params: {
   key?: string;
 }): Promise<ApiOutcome<InsightsResult>> {
   return request(`/api/v1/insights${qs({ currency: "USD", period: "month", ...params })}`);
+}
+
+// ---- Monthly report -------------------------------------------------------
+
+/** `GET /api/v1/reports/monthly` — the composed "where did my money go" report
+ *  for one month. Omit `key` for the latest COMPLETE month (the server steps
+ *  back from a still-filling current month). A missing history is a 404 with
+ *  `code: "NO_IMPORTED_HISTORY"`, which the report service maps to its empty
+ *  state rather than an error. */
+export function fetchMonthlyReport(
+  params: { key?: string } = {},
+): Promise<ApiOutcome<MonthlyReport>> {
+  return request(`/api/v1/reports/monthly${qs({ currency: "USD", ...params })}`);
+}
+
+/**
+ * Trigger a browser download of the month's CSV.
+ *
+ * The report endpoints are credentialed, so a plain `<a download>` to the API
+ * would arrive without the session and 401. Instead we fetch the bytes with the
+ * same auth `request` uses (httpOnly cookie + any in-memory bearer), wrap them
+ * in a Blob, and click a synthetic anchor. The filename is the server's own
+ * `content-disposition` (named for the month), so the browser and the CSV agree.
+ *
+ * This does no arithmetic and reshapes nothing (`CD-011`); it moves opaque bytes.
+ */
+export async function downloadMonthlyReportCsv(
+  params: { key?: string } = {},
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const token = getBearerToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["authorization"] = `Bearer ${token}`;
+
+    const response = await fetch(
+      `${apiBaseUrl()}/api/v1/reports/monthly.csv${qs({ currency: "USD", ...params })}`,
+      { headers, credentials: "include" },
+    );
+    if (!response.ok) {
+      // The one expected failure is an empty store; keep the message generic and
+      // let the screen's own empty/error state carry the detail.
+      return { ok: false, message: "Couldn't generate the CSV to download." };
+    }
+
+    const blob = await response.blob();
+    const filename =
+      filenameFromDisposition(response.headers.get("content-disposition")) ??
+      "monthly-report.csv";
+
+    const url = URL.createObjectURL(blob);
+    try {
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, message: "Can't reach the API to download the CSV." };
+  }
+}
+
+/** Pull the filename out of a `content-disposition` header, tolerating the
+ *  quoted and unquoted forms. Returns undefined when absent so the caller can
+ *  fall back to a stable default. */
+function filenameFromDisposition(disposition: string | null): string | undefined {
+  if (!disposition) return undefined;
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  return match?.[1];
 }
 
 // ---- Accounts -------------------------------------------------------------

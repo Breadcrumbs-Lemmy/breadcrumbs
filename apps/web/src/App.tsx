@@ -30,6 +30,7 @@ import { SpendingScreen } from "./screens/SpendingScreen";
 import { BudgetsScreen } from "./screens/BudgetsScreen";
 import { GoalsScreen } from "./screens/GoalsScreen";
 import { CashflowScreen } from "./screens/CashflowScreen";
+import { MonthlyReportScreen } from "./screens/MonthlyReportScreen";
 import { TransactionsScreen } from "./screens/TransactionsScreen";
 import { InsightsScreen } from "./screens/InsightsScreen";
 import { AccountsScreen } from "./screens/AccountsScreen";
@@ -65,6 +66,7 @@ type Route =
   | "budgets"
   | "goals"
   | "cashflow"
+  | "report"
   | "transactions"
   | "insights"
   | "accounts"
@@ -294,6 +296,7 @@ function AppContent() {
             onImport={() => setRoute("import")}
             onOpenBudgets={() => setRoute("budgets")}
             onOpenCashflow={() => setRoute("cashflow")}
+            onOpenReport={() => setRoute("report")}
           />
         )}
 
@@ -322,6 +325,16 @@ function AppContent() {
             onBack={() => setRoute("spending")}
             onImport={() => {
               setImportOrigin("spending");
+              setRoute("import");
+            }}
+          />
+        )}
+
+        {route === "report" && (
+          <MonthlyReportScreen
+            onBack={() => setRoute("spending")}
+            onImport={() => {
+              setImportOrigin("report");
               setRoute("import");
             }}
           />

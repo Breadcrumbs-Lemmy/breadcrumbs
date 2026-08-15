@@ -35,11 +35,13 @@ export function SpendingScreen({
   onImport,
   onOpenBudgets,
   onOpenCashflow,
+  onOpenReport,
 }: {
   onCheckPurchase?: () => void;
   onImport?: () => void;
   onOpenBudgets?: () => void;
   onOpenCashflow?: () => void;
+  onOpenReport?: () => void;
 }) {
   const [period, setPeriod] = useState<PeriodKind>("month");
   const [outcome, setOutcome] = useState<SpendingOutcome | null>(null);
@@ -370,6 +372,30 @@ export function SpendingScreen({
                   <span className="block text-body text-ink">What's coming up</span>
                   <span className="mt-0.5 block text-meta text-ink-tertiary">
                     Upcoming income and bills before payday
+                  </span>
+                </span>
+                <span aria-hidden="true" className="text-ink-tertiary">
+                  ›
+                </span>
+              </button>
+            )}
+
+            {/* The monthly "where did my money go" report — a readable,
+                printable, exportable summary of a chosen month. Reached from
+                here as a button card, not a nav tab (the rail spells
+                C·A·P·I·T·A·L, so it stays off it — same rule as Settings) —
+                see docs/report.md. */}
+            {onOpenReport && (
+              <button
+                type="button"
+                onClick={onOpenReport}
+                className="card flex w-full items-center justify-between px-5 py-4 text-left hover:shadow-md"
+                style={{ transition: "box-shadow var(--dur-base) var(--ease-out)" }}
+              >
+                <span>
+                  <span className="block text-body text-ink">Where did my money go?</span>
+                  <span className="mt-0.5 block text-meta text-ink-tertiary">
+                    A monthly report to read, print, or export
                   </span>
                 </span>
                 <span aria-hidden="true" className="text-ink-tertiary">
