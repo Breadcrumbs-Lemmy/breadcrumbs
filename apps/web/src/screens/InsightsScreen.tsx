@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import type { Insight, InsightsResult } from "@ai-fin-os/core";
+import type { Dispatch, SetStateAction } from "react";
 import { fetchInsights, type ApiOutcome } from "../services/api";
 import { formatMoney } from "../format/money";
 import { Card, Chip, Delta, SectionLabel, Segmented, TrailDivider } from "../components/ui";
@@ -24,12 +25,21 @@ const INSIGHT_PERIODS: PeriodKind[] = ["week", "month", "year"];
 
 export function InsightsScreen({
   onSeeTransactions,
+  period,
+  setPeriod,
+  periodKey,
+  setPeriodKey,
 }: {
   onSeeTransactions?: (focus: InsightFocus) => void;
-}) {
-  const [period, setPeriod] = useState<PeriodKind>("month");
+  // Filter selection is owned by the shell so it survives navigating out to the
+  // Transactions drill-down and back — this screen unmounts on the way, so local
+  // state would reset to the default month on return.
+  period: PeriodKind;
+  setPeriod: Dispatch<SetStateAction<PeriodKind>>;
   // Which specific period key to view (e.g. "2026-05"). null = current.
-  const [periodKey, setPeriodKey] = useState<string | null>(null);
+  periodKey: string | null;
+  setPeriodKey: Dispatch<SetStateAction<string | null>>;
+}) {
   const [outcome, setOutcome] = useState<ApiOutcome<InsightsResult> | null>(null);
 
   useEffect(() => {
@@ -120,7 +130,7 @@ export function InsightsScreen({
         {insights.length === 0 && (
           <Card className="text-center">
             <div className="mb-4 flex justify-center">
-              <LogoMark size={42} beacon />
+              <LogoMark size={42} beacon spill={false} />
             </div>
             <p className="font-display text-[1.25rem] font-medium text-ink">
               Nothing stands out this {responsePeriod.kind}

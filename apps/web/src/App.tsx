@@ -43,6 +43,7 @@ import { AdminScreen } from "./screens/AdminScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { emptyDraft, requestFromDraft, type PurchaseDraft } from "./model/snapshot";
 import type { InsightFocus } from "./model/insight-focus";
+import type { PeriodKind } from "./model/period";
 import { BOUNDARY_COPY, UI_COPY } from "./copy";
 import { Card } from "./components/ui";
 import { Ambient } from "./components/Ambient";
@@ -141,6 +142,12 @@ function AppContent() {
    *  that insight's backend total so the drill-down can show what they add up
    *  to. Cleared when Transactions is reached from the nav instead. */
   const [txFocus, setTxFocus] = useState<InsightFocus | null>(null);
+  /** Insights filter selection, held here rather than inside InsightsScreen so it
+   *  survives the round trip to the Transactions drill-down: that screen replaces
+   *  Insights (unmounting it), so screen-local state would snap back to the
+   *  default month when the user navigates back. */
+  const [insightsPeriod, setInsightsPeriod] = useState<PeriodKind>("month");
+  const [insightsPeriodKey, setInsightsPeriodKey] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<AffordabilityOutcome | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /** The user's own statement that the derived bill list is complete. Reset on
@@ -350,6 +357,10 @@ function AppContent() {
 
         {route === "insights" && (
           <InsightsScreen
+            period={insightsPeriod}
+            setPeriod={setInsightsPeriod}
+            periodKey={insightsPeriodKey}
+            setPeriodKey={setInsightsPeriodKey}
             onSeeTransactions={(focus) => {
               // Carry the insight's transactions AND its backend total into the
               // Transactions screen so the drill-down filters to that set and can
