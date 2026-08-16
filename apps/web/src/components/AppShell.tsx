@@ -300,6 +300,13 @@ export function AppShell<T extends string>({
             aria-label="Sections"
           >
             {sections.map((section) => {
+              // A section pill navigates to the section's first page — the same
+              // "section home" one-tap shortcut the collapsed rail tile uses
+              // (see CollapsedSection). Tapping the section you're already in
+              // therefore moves you to its first page (e.g. Goals → Cash-flow);
+              // that is deliberate, not a stray jump. Moving between the pages
+              // of the active section is Row 2's job below, and aria-current
+              // here marks the active *section*, not this specific page.
               const primary = section.items[0];
               const activeInSection = section.items.some((item) => item.id === current);
               return (
