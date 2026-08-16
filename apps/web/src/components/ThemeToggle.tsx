@@ -16,6 +16,7 @@
  * across platforms, no SVG import.
  */
 import { useTheme, type Theme } from "../theme";
+import { swallowTransitionRejections, type ViewTransitionLike } from "./theme-transition";
 
 const CYCLE: readonly Theme[] = ["light", "dark", "system"] as const;
 
@@ -31,7 +32,7 @@ const ICONS: Record<Theme, string> = {
   system: "◑",  // half circle — "following OS"
 };
 
-type StartViewTransition = (cb: () => void) => { ready: Promise<void> };
+type StartViewTransition = (cb: () => void) => ViewTransitionLike;
 
 export function ThemeToggle({ compact = false }: { compact?: boolean } = {}) {
   const { theme, setTheme } = useTheme();
@@ -57,7 +58,11 @@ export function ThemeToggle({ compact = false }: { compact?: boolean } = {}) {
     const root = document.documentElement;
     root.style.setProperty("--vt-x", `${e.clientX}px`);
     root.style.setProperty("--vt-y", `${e.clientY}px`);
-    doc.startViewTransition(() => setTheme(next));
+    // Capture the transition and swallow its expected `ready`/`finished`
+    // rejections (skipped/aborted transition, or a hidden document) so they
+    // don't surface as uncaught promise rejections — the swap still happens
+    // via the update callback (B9).
+    swallowTransitionRejections(doc.startViewTransition(() => setTheme(next)));
   }
 
   return (

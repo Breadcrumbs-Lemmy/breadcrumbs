@@ -25,6 +25,7 @@ import type { Budget, BudgetLine, BudgetStatus, OverallBudgetProgress } from "@a
 import {
   loadBudgets,
   saveBudgets,
+  nothingToBudget,
   type BudgetsOutcome,
   type BudgetBasis,
 } from "../services/budgets";
@@ -351,7 +352,11 @@ function BudgetsBody({
   const noun = progress.period.kind === "week" ? "week" : "month";
   const adj = noun === "week" ? "weekly" : "monthly";
   const Adj = noun === "week" ? "Weekly" : "Monthly";
-  const nothingImported = progress.budgetedCount === 0 && view.categories.length === 0 && draft.length === 0;
+  // Blank-slate gate keyed off the global config, not this window's emptiness:
+  // a spend-free week for a user who has monthly caps is not "nothing imported"
+  // (B3). `draft` is subsumed — it can only be non-empty when caps exist for the
+  // basis, which nothingToBudget already rules out via the shared config.
+  const nothingImported = nothingToBudget(view);
 
   if (nothingImported) {
     return (

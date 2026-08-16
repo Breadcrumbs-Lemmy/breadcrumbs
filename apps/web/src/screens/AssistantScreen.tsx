@@ -237,7 +237,7 @@ function Bubble({ turn }: { turn: Turn }) {
   if (turn.role === "user") {
     return (
       <div className="flex justify-end">
-        <p className="max-w-[85%] rounded-lg bg-surface-sunken px-4 py-2.5 text-body text-ink">
+        <p className="max-w-[85%] break-words rounded-lg bg-surface-sunken px-4 py-2.5 text-body text-ink">
           {turn.content}
         </p>
       </div>
@@ -246,7 +246,7 @@ function Bubble({ turn }: { turn: Turn }) {
 
   return (
     <div>
-      <div className="max-w-[95%] whitespace-pre-wrap text-body leading-relaxed text-ink">
+      <div className="max-w-[95%] whitespace-pre-wrap break-words text-body leading-relaxed text-ink">
         {turn.content}
       </div>
       {turn.toolCalls && turn.toolCalls.length > 0 && <Sources toolCalls={turn.toolCalls} />}

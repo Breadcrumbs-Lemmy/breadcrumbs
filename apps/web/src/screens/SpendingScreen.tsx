@@ -24,6 +24,7 @@ import { PERIOD_LABELS, isPeriodSupported, type PeriodKind } from "../model/peri
 import { useAssistantView } from "../services/assistant-scope";
 import { categoryColor } from "../model/category-color";
 import { formatMoney } from "../format/money";
+import { banksAndAccounts } from "../format/counts";
 import { Bar, Card, Chip, CountUpMoney, Delta, Segmented, SectionLabel } from "../components/ui";
 import { LogoMark } from "../components/Logo";
 import { issuerLabel } from "../components/BankCard";
@@ -490,7 +491,7 @@ function Figures({
         <p className="mt-2.5 text-meta text-ink-tertiary">
           {account
             ? `${account.displayName} only`
-            : `${summary.institutionTotals.length} banks · ${summary.accountTotals.length} accounts`}
+            : banksAndAccounts(summary.institutionTotals.length, summary.accountTotals.length)}
         </p>
       </div>
     </Card>
@@ -510,8 +511,19 @@ function Categories({
   // More rows fit comfortably at desktop, so the fold sits lower there.
   const shown = expanded ? all : all.slice(0, 8);
 
+  // A month with accounts but no spending (e.g. August in the seed) has an empty
+  // categoryTotals but still reaches this normal layout — the top-level "Nothing
+  // here yet" only fires when there's no data at all. Without a row the card
+  // rendered as a bare bordered box under "Where it went" (B7).
+  const periodNoun = summary.period.kind === "statement" ? "statement period" : summary.period.kind;
+
   return (
     <Card padded={false} className="overflow-hidden">
+      {all.length === 0 && (
+        <p className="px-5 py-6 text-center text-body text-ink-secondary sm:px-6">
+          No spending recorded this {periodNoun}.
+        </p>
+      )}
       {shown.map((c, i) => {
         const delta = c.comparison;
         // Negative comes from a refund with no matching spend this period.
@@ -643,9 +655,7 @@ function AccountsPanel({
         <AccountRow
           first
           label="All accounts"
-          sub={`${bankCount} ${bankCount === 1 ? "bank" : "banks"} · ${accounts.length} ${
-            accounts.length === 1 ? "account" : "accounts"
-          }`}
+          sub={banksAndAccounts(bankCount, accounts.length)}
           amount={totalOutflowCents}
           active={selected === null}
           onClick={() => onSelect(null)}

@@ -60,6 +60,22 @@ export async function loadGoals(): Promise<GoalsOutcome> {
   };
 }
 
+/**
+ * Whether the empty-goals state should invite a first (or more) import (B10).
+ *
+ * The savings-room note renders only once there's enough recent history to state
+ * a typical monthly surplus (`suggestion.hasEnoughData`). This import invite is
+ * that flag's exact complement, so the two are mutually exclusive and can never
+ * appear together making contradictory claims on one card — the note saying
+ * "about $X a month was left after everything you spent" while the invite asks
+ * "No statement imported yet?". When there's enough data, the note speaks and the
+ * invite stays silent; otherwise the invite asks for the activity that would let
+ * pace be measured.
+ */
+export function shouldInviteImport(suggestion: SavingsCapacitySuggestion | null): boolean {
+  return !suggestion?.hasEnoughData;
+}
+
 /** Maps a non-ok API outcome kind to a human message. `ok` never reaches here. */
 function errorMessage(kind: "ok" | "invalid" | "rejected" | "error" | "unauthenticated"): string {
   switch (kind) {

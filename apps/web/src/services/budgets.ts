@@ -112,6 +112,34 @@ export async function loadBudgets(basis: BudgetBasis = "month", key?: string): P
   };
 }
 
+/**
+ * Blank-slate detection for the Budgets screen (B3).
+ *
+ * The "import a statement first" onboarding is a data-onboarding state: it must
+ * reflect whether the user has ANY budget data at all — not whether the window
+ * currently in view happens to be empty. Weekly and monthly caps live in one
+ * shared `config`, but the progress, draft, and category lists are all scoped to
+ * the window being edited. A user with monthly caps but none for the week,
+ * viewing a spend-free week, trips every window-scoped signal (no weekly draft,
+ * no weekly spend, `budgetedCount === 0`) yet is plainly not a new user — so the
+ * old window-scoped gate wrongly told them to go import a statement.
+ *
+ * Key the onboarding off the global config instead: if any cap exists in either
+ * window (per-category or an overall weekly/monthly cap), the user has data and
+ * this is never a blank slate. Only when there are no caps anywhere AND this
+ * window has no spend categories to offer is it truly nothing-to-budget.
+ */
+export function nothingToBudget(
+  view: Pick<Extract<BudgetsOutcome, { kind: "ready" }>, "config" | "categories">,
+): boolean {
+  const { config, categories } = view;
+  const hasConfiguredCaps =
+    config.budgets.length > 0 ||
+    config.overallLimitCents != null ||
+    config.overallWeeklyLimitCents != null;
+  return !hasConfiguredCaps && categories.length === 0;
+}
+
 /** Maps a non-ok API outcome kind to a human message. `ok` never reaches here. */
 function errorMessage(kind: "ok" | "invalid" | "rejected" | "error" | "unauthenticated"): string {
   switch (kind) {

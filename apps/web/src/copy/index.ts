@@ -7,6 +7,7 @@
  */
 import type {
   AffordabilityLevel,
+  Assumption,
   AssumptionCode,
   FreshnessWarning,
   GoalType,
@@ -43,6 +44,26 @@ export const ASSUMPTION_COPY: Record<AssumptionCode, string> = {
   CONSERVATIVE_SAME_DAY_ORDERING_APPLIED:
     "When bills and income land on the same day, bills are counted first.",
 };
+
+/**
+ * The backend emits one assumption per related entity, so several can share a
+ * `code` — e.g. one AVAILABLE_BALANCE_MISSING for every account that doesn't
+ * report an available balance. ASSUMPTION_COPY is keyed by code alone, so those
+ * duplicates would render as identical rows and, sharing a React `key`, trigger
+ * duplicate-key warnings and stale-row reconciliation bugs (B1). Collapse to one
+ * assumption per code (first occurrence wins, order preserved) for both display
+ * and the disclosure count.
+ */
+export function dedupeAssumptionsByCode(assumptions: readonly Assumption[]): Assumption[] {
+  const seen = new Set<AssumptionCode>();
+  const unique: Assumption[] = [];
+  for (const assumption of assumptions) {
+    if (seen.has(assumption.code)) continue;
+    seen.add(assumption.code);
+    unique.push(assumption);
+  }
+  return unique;
+}
 
 // ---- Goals (D-010) --------------------------------------------------------
 

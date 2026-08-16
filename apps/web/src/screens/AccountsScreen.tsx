@@ -788,6 +788,12 @@ function AccountCardTile({
   onOpen: () => void;
 }) {
   const cycle = account.statementCycle;
+  // min-w-0: this button is a grid item (grid-cols-1 on mobile). Its default
+  // min-width:auto pins it to its 377px min-content, so on a 335px mobile track
+  // it overflowed the cell — and the viewport — by ~42px, pushing the
+  // right-aligned balance figures off-screen where the page can't scroll to them
+  // (B5). min-w-0 lets the cell shrink to the track; the account-name span then
+  // truncates (by design) and every balance stays on-screen.
   return (
     <button
       type="button"
@@ -795,7 +801,7 @@ function AccountCardTile({
       aria-label={`${account.displayName}, ${typeLabel(account)}, balance ${formatMoney(
         account.currentBalanceCents,
       )}. View transactions.`}
-      className="bankcard-flip group rounded-lg text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base"
+      className="bankcard-flip group min-w-0 rounded-lg text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base"
     >
       <BankCard account={account} institutionName={institutionName} />
 

@@ -319,30 +319,35 @@ function TrendTable({ points }: { points: NetWorthPoint[] }) {
       <summary className="min-h-[44px] cursor-pointer text-label text-ink-secondary">
         View as table
       </summary>
-      <table className="mt-2 w-full text-meta">
-        <thead>
-          <tr className="text-left text-ink-secondary">
-            <th className="py-1 pr-4 font-medium">Month</th>
-            <th className="py-1 pr-4 font-medium">Net worth</th>
-            <th className="py-1 pr-4 font-medium">Cash</th>
-            <th className="py-1 pr-4 font-medium">Owed</th>
-            <th className="py-1 font-medium">Basis</th>
-          </tr>
-        </thead>
-        <tbody className="tabular">
-          {points.map((point) => (
-            <tr key={point.month} className="border-t border-line-subtle">
-              <td className="py-1 pr-4">{formatMonth(point.month, true)}</td>
-              <td className="py-1 pr-4">{formatMoney(point.netWorthCents)}</td>
-              <td className="py-1 pr-4">{formatMoney(point.cashCents)}</td>
-              <td className="py-1 pr-4">{formatMoney(point.debtCents)}</td>
-              <td className="py-1 text-ink-tertiary">
-                {point.basis === "recorded" ? "Recorded" : "Reconstructed"}
-              </td>
+      {/* Five money columns overflow a phone viewport; let the table scroll
+          within its own box (mirrors the chart's wrapper) so the rightmost
+          "Basis" column stays reachable instead of clipping off-screen (B11). */}
+      <div className="overflow-x-auto">
+        <table className="mt-2 w-full text-meta">
+          <thead>
+            <tr className="text-left text-ink-secondary">
+              <th className="py-1 pr-4 font-medium">Month</th>
+              <th className="py-1 pr-4 font-medium">Net worth</th>
+              <th className="py-1 pr-4 font-medium">Cash</th>
+              <th className="py-1 pr-4 font-medium">Owed</th>
+              <th className="py-1 font-medium">Basis</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="tabular">
+            {points.map((point) => (
+              <tr key={point.month} className="border-t border-line-subtle">
+                <td className="py-1 pr-4">{formatMonth(point.month, true)}</td>
+                <td className="py-1 pr-4">{formatMoney(point.netWorthCents)}</td>
+                <td className="py-1 pr-4">{formatMoney(point.cashCents)}</td>
+                <td className="py-1 pr-4">{formatMoney(point.debtCents)}</td>
+                <td className="py-1 text-ink-tertiary">
+                  {point.basis === "recorded" ? "Recorded" : "Reconstructed"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </details>
   );
 }
