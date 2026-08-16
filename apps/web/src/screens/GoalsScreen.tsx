@@ -29,7 +29,13 @@ import type {
   GoalStatus,
   SavingsCapacitySuggestion,
 } from "@ai-fin-os/core";
-import { loadGoals, saveGoals, type GoalInput, type GoalsOutcome } from "../services/goals";
+import {
+  loadGoals,
+  saveGoals,
+  shouldInviteImport,
+  type GoalInput,
+  type GoalsOutcome,
+} from "../services/goals";
 import { centsToDollars, dollarsToCents } from "../model/snapshot";
 import { formatMoney } from "../format/money";
 import { Bar, Card, SectionLabel } from "../components/ui";
@@ -297,7 +303,7 @@ function GoalsBody({
         >
           Add a goal
         </button>
-        {onImport && (
+        {onImport && shouldInviteImport(view.suggestion) && (
           <p className="mt-4 text-meta text-ink-tertiary">
             No statement imported yet?{" "}
             <button type="button" onClick={onImport} className="text-accent underline underline-offset-4">
