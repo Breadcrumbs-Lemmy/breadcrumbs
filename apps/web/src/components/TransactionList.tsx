@@ -135,6 +135,15 @@ export function TransactionList({
   // we're showing, not the whole-history page total.
   const total = focusSet ? rows.length : pages[0]?.totalCount ?? 0;
 
+  // Group once, and date the headers against the newest posted date. The list is
+  // newest-first, so the first group is the latest data — the app's reference
+  // "now" (a data date, never the wall clock). Headers previously referenced
+  // each group against ITSELF, so the years always matched and the year was
+  // never shown; on multi-year history, or across a year boundary within one
+  // list, "Mar 14" was ambiguous (B14). Now only the reference year is elided.
+  const groups = groupByDate(rows);
+  const latestPostedDate = groups[0]?.date;
+
   async function loadMore() {
     if (!cursor) return;
     setLoadingMore(true);
@@ -247,7 +256,7 @@ export function TransactionList({
             <span className="text-meta text-ink-tertiary">Newest first</span>
           </div>
           <Card padded={false} className="overflow-hidden">
-            {groupByDate(rows).map((group, gi) => (
+            {groups.map((group, gi) => (
               <div key={group.date}>
                 <div
                   className={`flex items-baseline justify-between bg-surface-sunken px-5 py-2 ${
@@ -255,7 +264,7 @@ export function TransactionList({
                   }`}
                 >
                   <span className="text-label text-ink-secondary">
-                    {formatDate(group.date, group.date)}
+                    {formatDate(group.date, latestPostedDate)}
                   </span>
                   <span className="text-meta text-ink-tertiary">{purchaseCount(group.items)}</span>
                 </div>
