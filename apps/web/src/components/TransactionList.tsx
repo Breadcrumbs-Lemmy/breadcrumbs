@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import type { TransactionPage, TransactionView } from "@ai-fin-os/core";
 import { fetchTransactions, type ApiOutcome } from "../services/api";
 import { formatMoney } from "../format/money";
+import { amountSign } from "../format/amount-sign";
 import { formatDate } from "../format/dates";
 import { Card, Chip, SectionLabel } from "./ui";
 import { categoryColor } from "../model/category-color";
@@ -327,6 +328,7 @@ function Row({
   showAccountTag: boolean;
 }) {
   const inflow = t.amountCents > 0;
+  const sign = amountSign(t.amountCents);
   const muted =
     t.flowType === "TRANSFER_OUT" || t.flowType === "TRANSFER_IN" || t.flowType === "UNCLASSIFIED";
 
@@ -362,7 +364,7 @@ function Row({
           color: inflow ? "var(--accent)" : muted ? "var(--text-secondary)" : "var(--text-primary)",
         }}
       >
-        {inflow ? "+" : "−"}
+        {sign}
         {formatMoney(Math.abs(t.amountCents))}
       </span>
     </div>
