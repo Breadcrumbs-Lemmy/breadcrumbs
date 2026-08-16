@@ -24,6 +24,7 @@ import {
 } from "../services/api";
 import { Card, SectionLabel } from "../components/ui";
 import { formatDate } from "../format/dates";
+import { pluralize } from "../format/counts";
 
 export function AdminScreen() {
   const [users, setUsers] = useState<PublicUser[]>([]);
@@ -88,7 +89,9 @@ export function AdminScreen() {
         <div>
           <h1 className="text-heading text-ink">User management</h1>
           <p className="mt-0.5 text-body text-ink-secondary">
-            {users.length} {users.length === 1 ? "account" : "accounts"}
+            {/* Hold a dash until the fetch settles so the count never flashes
+                "0 accounts" before the real number arrives (B12). */}
+            {loading || error ? "—" : pluralize(users.length, "account")}
           </p>
         </div>
         <button
