@@ -24,6 +24,7 @@ import { PERIOD_LABELS, isPeriodSupported, type PeriodKind } from "../model/peri
 import { useAssistantView } from "../services/assistant-scope";
 import { categoryColor } from "../model/category-color";
 import { formatMoney } from "../format/money";
+import { banksAndAccounts } from "../format/counts";
 import { Bar, Card, Chip, CountUpMoney, Delta, Segmented, SectionLabel } from "../components/ui";
 import { LogoMark } from "../components/Logo";
 import { issuerLabel } from "../components/BankCard";
@@ -490,7 +491,7 @@ function Figures({
         <p className="mt-2.5 text-meta text-ink-tertiary">
           {account
             ? `${account.displayName} only`
-            : `${summary.institutionTotals.length} banks · ${summary.accountTotals.length} accounts`}
+            : banksAndAccounts(summary.institutionTotals.length, summary.accountTotals.length)}
         </p>
       </div>
     </Card>
@@ -643,9 +644,7 @@ function AccountsPanel({
         <AccountRow
           first
           label="All accounts"
-          sub={`${bankCount} ${bankCount === 1 ? "bank" : "banks"} · ${accounts.length} ${
-            accounts.length === 1 ? "account" : "accounts"
-          }`}
+          sub={banksAndAccounts(bankCount, accounts.length)}
           amount={totalOutflowCents}
           active={selected === null}
           onClick={() => onSelect(null)}
