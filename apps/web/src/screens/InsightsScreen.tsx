@@ -13,6 +13,7 @@ import type { Insight, InsightsResult } from "@ai-fin-os/core";
 import type { Dispatch, SetStateAction } from "react";
 import { fetchInsights, type ApiOutcome } from "../services/api";
 import { formatMoney } from "../format/money";
+import { pluralize } from "../format/counts";
 import { Card, Chip, Delta, SectionLabel, Segmented, TrailDivider } from "../components/ui";
 import { LogoMark } from "../components/Logo";
 import { categoryColor } from "../model/category-color";
@@ -201,7 +202,7 @@ function InsightsResults({
         <SectionLabel>Recurring</SectionLabel>
         <Card padded={false} className="overflow-hidden">
           <div className="flex items-baseline justify-between border-b border-line-subtle px-5 py-4">
-            <span className="text-body">{recurring.count} subscriptions</span>
+            <span className="text-body">{pluralize(recurring.count, "subscription")}</span>
             <span className="numeral text-figure">
               {formatMoney(recurring.totalMonthlyCents)}
               <span className="text-meta font-normal text-ink-tertiary">/mo</span>
