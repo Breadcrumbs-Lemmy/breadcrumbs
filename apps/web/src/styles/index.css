@@ -1184,7 +1184,12 @@
     display: flex;
     flex-direction: column;
     width: min(360px, calc(100vw - 32px));
-    max-height: min(72vh, 560px);
+    /* Cap the height so the panel's top edge (anchored `bottom: 116px`) never
+       rises above the mobile sticky header (~104px, z-20) and occludes it on
+       short phones (B19). Clearance = header 104 + 12px gap + 116px bottom
+       offset = 232px; 72vh/560px still bind on taller viewports, so nothing
+       changes there. */
+    max-height: min(72vh, calc(100vh - 232px), 560px);
     padding: 0;
     overflow: hidden;
     transform-origin: bottom right;
