@@ -8,7 +8,13 @@ import type { AffordabilityResponse, DecisionReason } from "@ai-fin-os/core";
 import { LevelGlyph, MetricRow } from "./primitives";
 import { TrailDivider } from "./ui";
 import { reasonCopy, type ReasonContext } from "../copy/reasons";
-import { ASSUMPTION_COPY, BOUNDARY_COPY, LEVEL_WORD, UI_COPY } from "../copy";
+import {
+  ASSUMPTION_COPY,
+  BOUNDARY_COPY,
+  LEVEL_WORD,
+  UI_COPY,
+  dedupeAssumptionsByCode,
+} from "../copy";
 import { headlineFor } from "../copy/headline";
 
 type Props = {
@@ -35,6 +41,10 @@ export function VerdictPanel({ response, bufferCents, labelFor, onResolve }: Pro
   // reasons[] order is guaranteed by the backend; the first entry is the
   // determining reason. UI does not implement its own precedence logic.
   const [primary, ...rest] = explanation.reasons;
+
+  // Assumptions can repeat a code (one per related account); the copy is keyed
+  // by code alone, so collapse to one row per code before counting/rendering.
+  const assumptions = dedupeAssumptionsByCode(explanation.assumptions);
 
   return (
     <div
@@ -102,17 +112,17 @@ export function VerdictPanel({ response, bufferCents, labelFor, onResolve }: Pro
       {/* CD-007: reserved for later deferral/shortfall guidance. Renders
           nothing in MVP 0 and must not be filled by UI inference. */}
 
-      {explanation.assumptions.length > 0 && (
+      {assumptions.length > 0 && (
         <div className="mt-3">
           <Disclosure
             open={showAssumptions}
             onToggle={() => setShowAssumptions((v) => !v)}
-            label={UI_COPY.assumptionsCount(explanation.assumptions.length)}
+            label={UI_COPY.assumptionsCount(assumptions.length)}
           />
           {showAssumptions && (
             <div className="mt-3 rounded-lg border border-line-subtle bg-surface-raised p-4">
               <ul className="space-y-2">
-                {explanation.assumptions.map((assumption) => (
+                {assumptions.map((assumption) => (
                   <li key={assumption.code} className="text-body text-ink-secondary">
                     {ASSUMPTION_COPY[assumption.code]}
                   </li>
