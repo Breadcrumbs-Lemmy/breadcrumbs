@@ -711,6 +711,39 @@
     background: #fff !important;
   }
 
+  /* Force the light palette onto paper. A dark-theme (or System-dark) user
+     otherwise keeps the dark `--surface-*` / cream `--text-*` custom properties,
+     and `print-color-adjust: exact` (below) then actually inks dark cards onto
+     the page instead of dropping them — an ink-heavy, low-contrast printout of
+     the Monthly Report (B17). Re-declare the neutral + semantic tokens the
+     report uses at their light values so the sheet is always light; category
+     identity colours are left to print in colour as intended.
+     `!important` beats the higher-specificity `:root[data-theme="dark"]` and the
+     system-dark media block regardless of source order. Mirrors the light
+     `:root` block in tokens.css — keep the two in sync. */
+  :root {
+    --surface-base: #f7f4ee !important;
+    --surface-raised: #ffffff !important;
+    --surface-sunken: #ece7de !important;
+    --surface-inset: #e3ddd1 !important;
+
+    --border-subtle: #e4ded4 !important;
+    --border-strong: #cabfb0 !important;
+
+    --text-primary: #1b1915 !important;
+    --text-secondary: #574f45 !important;
+    --text-tertiary: #6f665c !important;
+    --text-inverse: #f7f4ee !important;
+
+    --accent: #1d6b5a !important;
+    --accent-hover: #175646 !important;
+    --accent-soft: #dcece7 !important;
+    --accent-ink: #0d3b31 !important;
+
+    --alert: #a3372a !important;
+    --alert-soft: #f9ebe8 !important;
+  }
+
   /* Blank everything… */
   body * {
     visibility: hidden;
