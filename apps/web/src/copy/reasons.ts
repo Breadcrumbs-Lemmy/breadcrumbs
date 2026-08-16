@@ -175,16 +175,21 @@ const COPY: { [Code in ReasonCode]: Composer<Code> } = {
 
   COVERAGE_INCOMPLETE: (p, ctx) => {
     const through = day(p.horizonEndDate ?? ctx.horizonEndDate, ctx);
-    const subject =
+    // Subject and its grammatical number travel together so the verb agrees.
+    // "bills" and "account balances" are plural ("have"/"aren't"); the rest are
+    // singular or uncountable ("has"/"isn't"). A plural fixture used to read
+    // "Not all bills … has been confirmed" — deriving number from the subject
+    // string is fragile, so it's carried as an explicit flag (B2).
+    const { subject, plural } =
       p.coverageType === "income"
-        ? "income"
+        ? { subject: "income", plural: false }
         : p.coverageType === "obligations"
-          ? "bills"
+          ? { subject: "bills", plural: true }
           : p.coverageType === "balances"
-            ? "account balances"
+            ? { subject: "account balances", plural: true }
             : p.coverageType === "currency"
-              ? "currency information"
-              : "some information";
+              ? { subject: "currency information", plural: false }
+              : { subject: "some information", plural: false };
     // The resolution must route to whatever is actually incomplete. A previous
     // version hard-coded "Confirm your recurring bills" for every coverage type,
     // so an income-coverage gap told the user to check their bills. The body
@@ -197,8 +202,8 @@ const COPY: { [Code in ReasonCode]: Composer<Code> } = {
           ? { label: "Check your accounts", target: "accounts" as const }
           : { label: "Confirm your recurring bills", target: "obligations" as const };
     return {
-      primary: `Not all ${subject} through ${through} has been confirmed. Answering now would overstate how much is known.`,
-      secondary: `${subject.charAt(0).toUpperCase()}${subject.slice(1)} isn't confirmed through ${through}`,
+      primary: `Not all ${subject} through ${through} ${plural ? "have" : "has"} been confirmed. Answering now would overstate how much is known.`,
+      secondary: `${subject.charAt(0).toUpperCase()}${subject.slice(1)} ${plural ? "aren't" : "isn't"} confirmed through ${through}`,
       resolution,
     };
   },
