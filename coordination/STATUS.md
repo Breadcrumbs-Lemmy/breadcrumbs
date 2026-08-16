@@ -1,8 +1,47 @@
 # Coordination Status
 
 Status: Living  
-Last updated: 2026-08-08
+Last updated: 2026-08-16
 
+> **UI validation sweep landed 2026-08-16 (`[UI: Claude]`, `apps/web` only; `H-094`, PR #18).**
+> A full pass over the reconciled validation findings: **20 UI bugs fixed, 1 evaluated and
+> kept by-design.** Branch `fix/validation-sweep` (22 commits off `main` `cc4f734`), pushed and
+> opened as **PR #18**. Per the user's instruction each confirmed bug is a **single, isolated,
+> cherry-pickable commit** — fix → tests → live browser validation → commit — in priority order,
+> after one `chore` commit adding the vitest harness.
+>
+> **Fixed:** HIGH `B1` (VerdictPanel duplicate-key collapse); MED `B5` (account-tile mobile
+> overflow), `B3` (Budgets blank-slate keyed on global config not the open window), `B10` (Goals
+> contradictory empty-state), `B11` (net-worth trend table scroll), `B17` (Monthly Report prints
+> light in every theme); LOW-MED `B13` (System-dark `--text-tertiary` synced), `B14` (older date
+> headers show the year), `B16` (Insights controls stay mounted — no Skeleton remount flash); LOW
+> `B2` (`COVERAGE_INCOMPLETE` verb agreement), `B6`/`B8`/`B12` (pluralization via shared
+> `format/counts.ts`), `B7` (zero-spend empty-state row), `B15` (Import error card alert styling),
+> `B4` (Admin toggle surfaces rejections instead of silent no-op), `B9` (ThemeToggle swallows
+> expected ViewTransition rejections); plausible/defensive `B19` (mascot panel clears the mobile
+> sticky header on short phones — `calc(100vh - 232px)`; the finding's suggested 132px clamp would
+> **not** have fixed iPhone SE), `B20` (Assistant bubbles break long unbroken tokens), `B21`
+> (zero-cent row renders `$0` not `−$0`, via a pure `amountSign` helper).
+>
+> **`B18` evaluated and deliberately KEPT** — tapping a section tab jumps to the section's first
+> page even when already inside it (Goals → Cash-flow). This mirrors the `CollapsedSection` rail
+> tile's documented "section home" shortcut, and mobile Row 2 handles within-section moves; rather
+> than fragment the pattern, the commit documents the intent at the mobile pill (the rail had the
+> note, the pill didn't) and adds a guard locking both nav surfaces to the same behavior. **No
+> behavior change.** Four Workflow findings **correctly rejected** (re-verified false, not "fixed"):
+> SettingsScreen `opacity-45` (in Tailwind's default scale), InsightsScreen Delta `Math.abs`
+> (already normalized), SpendingScreen:431 net (no runtime impact), InsightsScreen:112 `items-center`
+> (no visual impact).
+>
+> **Testing** (given `apps/web` runs vitest in **node with no DOM**): real unit tests where logic
+> could be extracted into pure modules (`amount-sign.ts`, `admin-errors.ts`, `theme-transition.ts`,
+> `counts.ts`); source-guard tests for render-conditional/layout/CSS bugs; and live browser
+> validation for every visible change (fetch-stubbing unreachable states, DOM probes reading
+> `getComputedStyle`/`scrollWidth` against the built stylesheet, confirming screenshots). Verified:
+> `pnpm --filter @ai-fin-os/web test` **90 pass across 23 files**, web `tsc --noEmit` clean. Scope:
+> 49 files, entirely `apps/web` (+ vitest config/lockfile) — **no `packages/*`, no backend.** Detail
+> in `HANDOFFS.md` `H-094`. Follow-up: PR #18 review/merge.
+>
 > **Overnight backend session started 2026-08-08 (`[UI: Claude]`, backend lane).**
 > The user is asleep and asked a fresh session to pick up unblocked work without
 > colliding with concurrent agents. Two sessions were live in `apps/web` at the
