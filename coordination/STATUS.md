@@ -3,7 +3,7 @@
 Status: Living  
 Last updated: 2026-08-16
 
-> **UI validation sweep landed 2026-08-16 (`[UI: Claude]`, `apps/web` only; `H-094`, PR #18).**
+> **UI validation sweep merged to `main` 2026-08-16 (`[UI: Claude]`, `apps/web` only; `H-094`, PR #18).**
 > A full pass over the reconciled validation findings: **20 UI bugs fixed, 1 evaluated and
 > kept by-design.** Branch `fix/validation-sweep` (22 commits off `main` `cc4f734`), pushed and
 > opened as **PR #18**. Per the user's instruction each confirmed bug is a **single, isolated,
@@ -40,7 +40,9 @@ Last updated: 2026-08-16
 > `getComputedStyle`/`scrollWidth` against the built stylesheet, confirming screenshots). Verified:
 > `pnpm --filter @ai-fin-os/web test` **90 pass across 23 files**, web `tsc --noEmit` clean. Scope:
 > 49 files, entirely `apps/web` (+ vitest config/lockfile) — **no `packages/*`, no backend.** Detail
-> in `HANDOFFS.md` `H-094`. Follow-up: PR #18 review/merge.
+> in `HANDOFFS.md` `H-094`. **Merged to `main` 2026-08-16** — PR #18 (merge `a77ae30`); the
+> coordination record split out to PR #19 (merge `f28835f`) and marked done via PR #20 (merge
+> `a97fe66`); all three branches deleted, `main` fast-forwarded. No follow-up.
 >
 > **Overnight backend session started 2026-08-08 (`[UI: Claude]`, backend lane).**
 > The user is asleep and asked a fresh session to pick up unblocked work without
