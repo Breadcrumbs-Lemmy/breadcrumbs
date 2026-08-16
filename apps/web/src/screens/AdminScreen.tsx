@@ -25,6 +25,7 @@ import {
 import { Card, SectionLabel } from "../components/ui";
 import { formatDate } from "../format/dates";
 import { pluralize } from "../format/counts";
+import { toggleErrorMessage } from "./admin-errors";
 
 export function AdminScreen() {
   const [users, setUsers] = useState<PublicUser[]>([]);
@@ -58,21 +59,29 @@ export function AdminScreen() {
 
   async function handleRoleToggle(user: PublicUser) {
     const newRole = user.role === "admin" ? "user" : "admin";
+    setError(null);
     const result = await adminSetRole(user.id, newRole);
     if (result.kind === "ok") {
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? result.data.user : u)),
       );
+    } else {
+      // Without this the click was a silent no-op — e.g. the server rejects
+      // demoting the last admin, and the row simply didn't change (B4).
+      setError(toggleErrorMessage(result, "change this user's role"));
     }
   }
 
   async function handleStatusToggle(user: PublicUser) {
     const newStatus = user.status === "active" ? "disabled" : "active";
+    setError(null);
     const result = await adminSetStatus(user.id, newStatus);
     if (result.kind === "ok") {
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? result.data.user : u)),
       );
+    } else {
+      setError(toggleErrorMessage(result, "change this user's status"));
     }
   }
 
