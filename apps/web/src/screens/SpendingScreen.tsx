@@ -511,8 +511,19 @@ function Categories({
   // More rows fit comfortably at desktop, so the fold sits lower there.
   const shown = expanded ? all : all.slice(0, 8);
 
+  // A month with accounts but no spending (e.g. August in the seed) has an empty
+  // categoryTotals but still reaches this normal layout — the top-level "Nothing
+  // here yet" only fires when there's no data at all. Without a row the card
+  // rendered as a bare bordered box under "Where it went" (B7).
+  const periodNoun = summary.period.kind === "statement" ? "statement period" : summary.period.kind;
+
   return (
     <Card padded={false} className="overflow-hidden">
+      {all.length === 0 && (
+        <p className="px-5 py-6 text-center text-body text-ink-secondary sm:px-6">
+          No spending recorded this {periodNoun}.
+        </p>
+      )}
       {shown.map((c, i) => {
         const delta = c.comparison;
         // Negative comes from a refund with no matching spend this period.
