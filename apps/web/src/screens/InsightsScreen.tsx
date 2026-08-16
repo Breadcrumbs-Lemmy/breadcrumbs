@@ -8,7 +8,7 @@
  * Every insight links to the transactions that produced it. An insight the user
  * cannot verify is a claim, not a fact.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Insight, InsightsResult } from "@ai-fin-os/core";
 import type { Dispatch, SetStateAction } from "react";
 import { fetchInsights, type ApiOutcome } from "../services/api";
@@ -41,61 +41,65 @@ export function InsightsScreen({
   setPeriodKey: Dispatch<SetStateAction<string | null>>;
 }) {
   const [outcome, setOutcome] = useState<ApiOutcome<InsightsResult> | null>(null);
+  // True while a same-granularity period switch (a period chip) re-fetches with
+  // the previous view still on screen, so the results dim in place instead of the
+  // whole controls block blinking down to a skeleton — see B16.
+  const [refreshing, setRefreshing] = useState(false);
+
+  // The granularity currently on screen. Changing it (the Segmented) replaces the
+  // whole series — its available periods differ — so that drops to a skeleton; a
+  // same-granularity chip switch re-scopes the same series and keeps the controls
+  // (and their keyboard focus) mounted while the scoped figures load.
+  const granularityRef = useRef<PeriodKind | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setOutcome(null);
-    void fetchInsights({ period, key: periodKey ?? undefined }).then(
-      (next) => !cancelled && setOutcome(next),
-    );
+    const sameGranularity = granularityRef.current === period;
+    granularityRef.current = period;
+    if (sameGranularity) setRefreshing(true);
+    else setOutcome(null);
+    void fetchInsights({ period, key: periodKey ?? undefined }).then((next) => {
+      if (cancelled) return;
+      setOutcome(next);
+      setRefreshing(false);
+    });
     return () => {
       cancelled = true;
     };
   }, [period, periodKey]);
 
-  // Publish the viewed period to the assistant. Called before the early returns
+  // Publish the viewed period to the assistant. Computed before the branches
   // below so the hook order stays stable. Prefer the backend-resolved period
   // (exact key + label) once loaded; before that, name the selection from state
   // so the scope is right even while insights are still loading.
+  const okData = outcome?.kind === "ok" ? outcome.data : null;
   useAssistantView({
-    period:
-      outcome?.kind === "ok"
-        ? {
-            kind: outcome.data.period.kind,
-            key: outcome.data.period.key,
-            label: outcome.data.period.label,
-          }
-        : { kind: period, key: periodKey ?? undefined },
+    period: okData
+      ? {
+          kind: okData.period.kind,
+          key: okData.period.key,
+          label: okData.period.label,
+        }
+      : { kind: period, key: periodKey ?? undefined },
   });
 
-  if (outcome === null) return <Skeleton />;
-
-  if (outcome.kind !== "ok") {
-    return (
-      <Card className="max-w-[560px]">
-        <p className="text-body">Couldn't load insights.</p>
-        <p className="mt-1 text-meta text-ink-tertiary">
-          {outcome.kind === "error" ? outcome.message : "The request was rejected."}
-        </p>
-      </Card>
-    );
-  }
-
-  const { insights, recurring, period: responsePeriod } = outcome.data;
-
-  // The response carries the available periods in the series. Grab them for
-  // navigation chips — same pattern as SpendingScreen's period switcher.
+  // The response carries the available periods in the series — navigation chips,
+  // same pattern as SpendingScreen's period switcher. Present only once loaded.
   const availablePeriods: Array<{ key: string; label: string }> = [];
-  if ("availablePeriods" in outcome.data && Array.isArray(outcome.data.availablePeriods)) {
-    (outcome.data.availablePeriods as Array<{ key: string; label: string }>).forEach((p) => {
+  if (okData && "availablePeriods" in okData && Array.isArray(okData.availablePeriods)) {
+    (okData.availablePeriods as Array<{ key: string; label: string }>).forEach((p) => {
       availablePeriods.push(p);
     });
   }
+  const responsePeriod = okData?.period;
 
   return (
     <>
-      {/* Period controls — same two-level pattern as Spending: granularity
-          on the left, specific period navigation on the right. */}
+      {/* Period controls — always mounted. Switching granularity or period must
+          never unmount this block: it used to sit behind an `outcome === null`
+          early return, so every switch blinked the controls out and dropped
+          keyboard focus on the segment/chip. Only the results region below swaps
+          to a loading state now (B16). */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="w-full sm:max-w-[320px]">
           <Segmented
@@ -108,7 +112,7 @@ export function InsightsScreen({
             options={INSIGHT_PERIODS.map((p) => ({ value: p, label: PERIOD_LABELS[p] }))}
           />
         </div>
-        {availablePeriods.length > 1 && (
+        {responsePeriod && availablePeriods.length > 1 && (
           <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             {availablePeriods.map((p) => (
               <Chip
@@ -123,7 +127,52 @@ export function InsightsScreen({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+      {outcome === null && <Skeleton />}
+
+      {outcome !== null && outcome.kind !== "ok" && (
+        <Card className="max-w-[560px]">
+          <p className="text-body">Couldn't load insights.</p>
+          <p className="mt-1 text-meta text-ink-tertiary">
+            {outcome.kind === "error" ? outcome.message : "The request was rejected."}
+          </p>
+        </Card>
+      )}
+
+      {okData && (
+        <InsightsResults
+          data={okData}
+          refreshing={refreshing}
+          onSeeTransactions={onSeeTransactions}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * The results region — insights on the left, recurring charges on the right.
+ * Split out from the screen so the period controls above can stay mounted while
+ * only this region shows a loading/refreshing state (B16). While a same-period
+ * refetch is in flight the previous results stay on screen, dimmed.
+ */
+function InsightsResults({
+  data,
+  refreshing,
+  onSeeTransactions,
+}: {
+  data: InsightsResult;
+  refreshing: boolean;
+  onSeeTransactions?: (focus: InsightFocus) => void;
+}) {
+  const { insights, recurring, period: responsePeriod } = data;
+
+  return (
+    <div
+      className={`grid grid-cols-1 gap-5 transition-opacity duration-200 lg:grid-cols-12 ${
+        refreshing ? "opacity-60" : "opacity-100"
+      }`}
+      aria-busy={refreshing}
+    >
       <div className="space-y-3 lg:col-span-7 xl:col-span-8">
         <SectionLabel>Worth a look · {responsePeriod.label}</SectionLabel>
 
@@ -196,7 +245,6 @@ export function InsightsScreen({
         </p>
       </div>
     </div>
-    </>
   );
 }
 
