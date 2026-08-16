@@ -247,8 +247,8 @@ export function ImportScreen({
       <Steps current={step} />
 
       {error && (
-        <Card className="mt-5 border-l-2" >
-          <p className="text-body text-ink">{error}</p>
+        <Card className="mt-5 border-l-2 border-l-alert">
+          <p className="text-body text-alert">{error}</p>
         </Card>
       )}
 
