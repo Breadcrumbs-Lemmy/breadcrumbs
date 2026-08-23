@@ -27,7 +27,7 @@ const plaidConfig: PlaidConfig = {
   env: "sandbox",
   clientId: "sandbox-client",
   secret: "sandbox-secret",
-  clientName: "Breadcrumbs Sandbox",
+  clientName: "Breadcrumbz Sandbox",
   countryCodes: ["US"],
 };
 

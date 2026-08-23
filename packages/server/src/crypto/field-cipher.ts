@@ -72,7 +72,7 @@ export class FieldCipher {
 export class FieldCipherKeyError extends Error {
   constructor(actualBytes: number) {
     super(
-      `BREADCRUMBS_ENCRYPTION_KEY must decode to ${KEY_BYTES} bytes (got ${actualBytes}). ` +
+      `BREADCRUMBZ_ENCRYPTION_KEY must decode to ${KEY_BYTES} bytes (got ${actualBytes}). ` +
         `Generate one with: openssl rand -base64 32`,
     );
     this.name = "FieldCipherKeyError";
@@ -80,14 +80,14 @@ export class FieldCipherKeyError extends Error {
 }
 
 /**
- * Build a `FieldCipher` from `BREADCRUMBS_ENCRYPTION_KEY` if it is set, else
+ * Build a `FieldCipher` from `BREADCRUMBZ_ENCRYPTION_KEY` if it is set, else
  * return undefined so stores fall back to their prior (plaintext) behaviour —
  * the zero-config single-user path stays frictionless, and encryption is opt-in
  * by providing a key. The key may be hex (64 chars) or base64; either must
  * decode to exactly 32 bytes.
  */
 export function loadFieldCipher(env: NodeJS.ProcessEnv = process.env): FieldCipher | undefined {
-  const raw = env.BREADCRUMBS_ENCRYPTION_KEY?.trim();
+  const raw = env.BREADCRUMBZ_ENCRYPTION_KEY?.trim();
   if (!raw) return undefined;
   const key = /^[0-9a-fA-F]{64}$/.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
   if (key.length !== KEY_BYTES) throw new FieldCipherKeyError(key.length);

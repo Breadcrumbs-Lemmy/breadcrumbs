@@ -78,7 +78,7 @@ export class FileGoalStore implements GoalStore {
       // and let the next save overwrite the user's real goals — fail loud.
       if (!this.cipher) {
         throw new Error(
-          "Goal store is encrypted but no encryption key is configured (BREADCRUMBS_ENCRYPTION_KEY).",
+          "Goal store is encrypted but no encryption key is configured (BREADCRUMBZ_ENCRYPTION_KEY).",
         );
       }
       const plaintext = this.cipher.decrypt((raw as EncryptedStateEnvelope).$enc, GOAL_STATE_AAD);
@@ -112,8 +112,8 @@ export class FileGoalStore implements GoalStore {
 }
 
 export function defaultGoalStorePath(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = env.BREADCRUMBS_LOCAL_DATA_DIR?.trim();
-  const dataDir = configured && configured.length > 0 ? configured : join(homedir(), ".breadcrumbs", "local-data");
+  const configured = env.BREADCRUMBZ_LOCAL_DATA_DIR?.trim();
+  const dataDir = configured && configured.length > 0 ? configured : join(homedir(), ".breadcrumbz", "local-data");
   return join(dataDir, "goals.json");
 }
 

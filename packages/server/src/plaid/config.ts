@@ -16,7 +16,7 @@ const PlaidConfigSchema = z.object({
   env: z.enum(["sandbox", "production"]),
   clientId: z.string().min(1),
   secret: z.string().min(1),
-  clientName: z.string().min(1).max(30).default("Breadcrumbs"),
+  clientName: z.string().min(1).max(30).default("Breadcrumbz"),
   countryCodes: z.array(z.literal("US")).min(1).default(["US"]),
   redirectUri: z.string().url().optional(),
   webhook: z.string().url().optional(),

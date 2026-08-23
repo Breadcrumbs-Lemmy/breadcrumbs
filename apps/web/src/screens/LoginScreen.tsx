@@ -62,7 +62,7 @@ function SignInForm({ onShowRegister }: { onShowRegister?: () => void }) {
   }
 
   return (
-    <AuthShell title="Sign in to Breadcrumbs">
+    <AuthShell title="Sign in to Breadcrumbz">
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
         <Field label="Email">
           <input

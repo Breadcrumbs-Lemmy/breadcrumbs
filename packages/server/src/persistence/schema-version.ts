@@ -41,7 +41,7 @@ export const CURRENT_SCHEMA_VERSION = 1;
 const META_FILENAME = "meta.json";
 
 export type DataDirMeta = {
-  app: "breadcrumbs";
+  app: "breadcrumbz";
   schemaVersion: number;
   updatedAt: string;
 };
@@ -125,11 +125,11 @@ export function metaPath(dataDir: string): string {
 export async function readMeta(dataDir: string): Promise<DataDirMeta | undefined> {
   const meta = await readJsonFile<Partial<DataDirMeta> | undefined>(metaPath(dataDir), undefined);
   if (!meta || typeof meta !== "object" || typeof meta.schemaVersion !== "number") return undefined;
-  return { app: "breadcrumbs", schemaVersion: meta.schemaVersion, updatedAt: meta.updatedAt ?? "" };
+  return { app: "breadcrumbz", schemaVersion: meta.schemaVersion, updatedAt: meta.updatedAt ?? "" };
 }
 
 async function writeMeta(dataDir: string, version: number, now: Date): Promise<void> {
-  const meta: DataDirMeta = { app: "breadcrumbs", schemaVersion: version, updatedAt: now.toISOString() };
+  const meta: DataDirMeta = { app: "breadcrumbz", schemaVersion: version, updatedAt: now.toISOString() };
   await writeJsonFileAtomic(metaPath(dataDir), meta);
 }
 

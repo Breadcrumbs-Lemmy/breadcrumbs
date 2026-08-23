@@ -8,7 +8,7 @@
 #   ollama  the on-box model. Publishes NO host port — it is reachable only from
 #           inside the compose network, so a working chat proves the API talked
 #           to it privately at http://ollama:11434/v1.
-#   api     the Fastify API on host :8787, wired to BREADCRUMBS_AGENT_PROVIDER=local.
+#   api     the Fastify API on host :8787, wired to BREADCRUMBZ_AGENT_PROVIDER=local.
 #   web     the React UI on a free host port (5173 is often held by a dev server,
 #           so this script auto-picks the next free one).
 #
@@ -26,7 +26,7 @@
 #   ./scripts/run-local-agent-docker.sh                 # auto-detect CPU/GPU
 #   ./scripts/run-local-agent-docker.sh --gpu           # force the GPU overlay
 #   ./scripts/run-local-agent-docker.sh --cpu           # force CPU even on a GPU box
-#   BREADCRUMBS_LOCAL_AGENT_MODEL=qwen2.5:32b ./scripts/run-local-agent-docker.sh --gpu
+#   BREADCRUMBZ_LOCAL_AGENT_MODEL=qwen2.5:32b ./scripts/run-local-agent-docker.sh --gpu
 #
 set -euo pipefail
 
@@ -48,10 +48,10 @@ port_free() { $HAVE_LSOF || return 0; ! lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/n
 # wired into Docker — the best single predictor that a GPU reservation will work.
 gpu_runtime_present() { docker info 2>/dev/null | grep -qiE 'nvidia'; }
 
-# --- Args: --gpu / --cpu override the auto-detection (or set BREADCRUMBS_GPU) --
+# --- Args: --gpu / --cpu override the auto-detection (or set BREADCRUMBZ_GPU) --
 case "${1:-}" in
-  --gpu) BREADCRUMBS_GPU=1 ;;
-  --cpu) BREADCRUMBS_GPU=0 ;;
+  --gpu) BREADCRUMBZ_GPU=1 ;;
+  --cpu) BREADCRUMBZ_GPU=0 ;;
   "")    ;;
   *)     die "Unknown argument: $1  (use --gpu, --cpu, or no argument to auto-detect)." ;;
 esac
@@ -59,11 +59,11 @@ esac
 # --- Config ------------------------------------------------------------------
 # Runnable default. The compose default is llama3.3:70b (~40GB VRAM, multi-GB
 # pull); 8b is proven-correct on this project, fits the cheapest GPU (and any
-# CPU box), and is already cached in the breadcrumbs-ollama-models volume, so it
+# CPU box), and is already cached in the breadcrumbz-ollama-models volume, so it
 # serves instantly. Exporting this var drives BOTH the ollama pull tag and the
 # api's model — keeping them in lockstep.
-MODEL="${BREADCRUMBS_LOCAL_AGENT_MODEL:-llama3.1:8b}"
-export BREADCRUMBS_LOCAL_AGENT_MODEL="$MODEL"
+MODEL="${BREADCRUMBZ_LOCAL_AGENT_MODEL:-llama3.1:8b}"
+export BREADCRUMBZ_LOCAL_AGENT_MODEL="$MODEL"
 
 API_PORT=8787
 
@@ -88,7 +88,7 @@ fi
 
 # Decide CPU vs GPU now that we know Docker is reachable.
 GPU_FILES=()
-case "${BREADCRUMBS_GPU:-auto}" in
+case "${BREADCRUMBZ_GPU:-auto}" in
   1|true|yes|on)  USE_GPU=true ;;
   0|false|no|off) USE_GPU=false ;;
   *)              if gpu_runtime_present; then USE_GPU=true; else USE_GPU=false; fi ;;
@@ -130,7 +130,7 @@ ok "Web UI will publish on host port $WEB_PORT"
 # means different things on each. No file extension: `docker compose -f` parses
 # any file as YAML regardless of name, and appending ".yml" to the result would
 # leak the 0-byte file mktemp actually created (the trap would miss it).
-WEB_OVERRIDE="$(mktemp "${TMPDIR:-/tmp}/breadcrumbs-web-port.XXXXXX")"
+WEB_OVERRIDE="$(mktemp "${TMPDIR:-/tmp}/breadcrumbz-web-port.XXXXXX")"
 cat >"$WEB_OVERRIDE" <<YAML
 services:
   web:
@@ -201,12 +201,12 @@ log "Ready"
   echo "  Model  : ${MODEL}   ($($USE_GPU && echo 'GPU' || echo 'CPU') · local / offline — prompts never leave this machine)"
   echo
   if $USE_GPU; then
-    echo "  Running on GPU. To fit a bigger model, set BREADCRUMBS_LOCAL_AGENT_MODEL to a tier"
+    echo "  Running on GPU. To fit a bigger model, set BREADCRUMBZ_LOCAL_AGENT_MODEL to a tier"
     echo "  your card's VRAM allows (see docker-compose.gpu.yml) and re-run — larger cards cost more."
   else
     echo "  Running on CPU. On a Mac, PDF *extraction* inference may exceed its 180s timeout;"
     echo "  chat works but is slower than native Ollama. For fast extraction, run Ollama natively"
-    echo "  (Metal GPU) and point BREADCRUMBS_LOCAL_AGENT_BASE_URL at it — or deploy on an NVIDIA"
+    echo "  (Metal GPU) and point BREADCRUMBZ_LOCAL_AGENT_BASE_URL at it — or deploy on an NVIDIA"
     echo "  host and re-run with --gpu. See the 'Deploying on EC2' note in docker-compose.local-agent.yml."
   fi
   echo

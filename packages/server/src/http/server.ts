@@ -111,7 +111,7 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   // handler runs and calls `principalOf`.
   // A caller that injects a concrete store wants the ephemeral, test-shaped
   // server: identity stays in-memory so a test never writes users or sessions
-  // into the real `~/.breadcrumbs`. A bare `createServer()` (as `main.ts` calls
+  // into the real `~/.breadcrumbz`. A bare `createServer()` (as `main.ts` calls
   // it) persists identity to disk so accounts survive a restart.
   const ephemeral = Boolean(options.statementImportStore) || Boolean(options.stores);
   // One encryption key, loaded once, protects everything at rest: the per-user
@@ -121,7 +121,7 @@ export async function createServer(configOrOptions: PlaidConfig | CreateServerOp
   const fieldCipher = loadFieldCipher(process.env);
   if (!ephemeral && !fieldCipher) {
     console.warn(
-      "[security] WARNING: BREADCRUMBS_ENCRYPTION_KEY is not set — imported financial " +
+      "[security] WARNING: BREADCRUMBZ_ENCRYPTION_KEY is not set — imported financial " +
         "data and Plaid access tokens are stored WITHOUT application-level encryption " +
         "(file permissions only). Set a 32-byte key (openssl rand -base64 32) to encrypt at rest.",
     );

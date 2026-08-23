@@ -58,7 +58,7 @@ async function main(): Promise<void> {
   if (authConfig.mode === "single_user" && process.env.NODE_ENV === "production") {
     console.warn(
       "[auth] WARNING: running in single_user mode in production — NO login is required and " +
-        "every request acts as the owner. Set BREADCRUMBS_AUTH_MODE=multi_user for a shared deployment.",
+        "every request acts as the owner. Set BREADCRUMBZ_AUTH_MODE=multi_user for a shared deployment.",
     );
   }
 
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
   // passwordless account in the store, making `users.count()` non-zero so the
   // first real registrant is denied the admin role that bootstrap grants — a
   // fresh deployment would then have an admin that cannot log in and no user who
-  // can administer. There, the first registrant (or `BREADCRUMBS_OWNER_EMAIL`)
+  // can administer. There, the first registrant (or `BREADCRUMBZ_OWNER_EMAIL`)
   // becomes admin instead.
   if (authConfig.mode === "single_user") {
     await authService.ensureOwner();
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   const server = await createServer({
     plaidConfig,
     authService,
-    allowedCorsOrigins: parseCsvEnv(process.env.BREADCRUMBS_CORS_ORIGINS),
+    allowedCorsOrigins: parseCsvEnv(process.env.BREADCRUMBZ_CORS_ORIGINS),
   });
 
   await server.listen({ port, host });

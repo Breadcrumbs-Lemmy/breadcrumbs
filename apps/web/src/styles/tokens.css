@@ -1,10 +1,10 @@
-/* Breadcrumbs design tokens — docs/ui-design-system.md
+/* Breadcrumbz design tokens — docs/ui-design-system.md
  *
  * Defined as CSS custom properties so the token layer survives a change of
  * styling library. Tailwind references these; it does not define them.
  *
  * Brand: "Cartograph." A finance app is a map of where your money went —
- * Breadcrumbs helps you follow the trail. Warm rather than clinical, quiet
+ * Breadcrumbz helps you follow the trail. Warm rather than clinical, quiet
  * rather than loud, with a deep teal accent and a single teal→honey brand
  * gradient doing the emphatic, wayfinding work. The palette is richer and more
  * confident than the first pass (which read as "basic"), but every value is

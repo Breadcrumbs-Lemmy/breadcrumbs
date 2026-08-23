@@ -4,7 +4,7 @@
 **Last updated: 9 August 2026**
 
 These Terms of Service ("Terms") are a legal agreement between you and
-**Lemuel Mutah** (the "Operator", "we", "us"), who operates the **Breadcrumbs**
+**Lemuel Mutah** (the "Operator", "we", "us"), who operates the **Breadcrumbz**
 personal-finance application and related services (the "Service"). By creating an
 account or using the Service, you agree to these Terms. If you do not agree, do
 not use the Service.
@@ -14,14 +14,14 @@ handle your data and is incorporated into these Terms by reference.
 
 ---
 
-## 1. What Breadcrumbs is
+## 1. What Breadcrumbz is
 
-Breadcrumbs is a **read-only** personal-finance tool. It lets you link your
+Breadcrumbz is a **read-only** personal-finance tool. It lets you link your
 financial accounts (through Plaid), view your balances and transactions, see
 automatically generated spending summaries and insights, and optionally ask
 questions of an AI assistant.
 
-**Breadcrumbs never moves money.** It cannot make payments, transfers, trades,
+**Breadcrumbz never moves money.** It cannot make payments, transfers, trades,
 deposits, or withdrawals. It only reads and displays your account information.
 
 ---
@@ -36,7 +36,7 @@ access, and you represent that you have that authority.
 
 ## 3. Not financial advice
 
-**Breadcrumbs is an informational tool only. It does not provide financial,
+**Breadcrumbz is an informational tool only. It does not provide financial,
 investment, tax, legal, or accounting advice, and nothing in the Service is a
 recommendation to take or not take any financial action.**
 
@@ -87,7 +87,7 @@ retrieve your account information through Plaid on your behalf.
 
 ## 7. Intellectual property and license
 
-The Breadcrumbs software, and all related content and trademarks, are owned by the
+The Breadcrumbz software, and all related content and trademarks, are owned by the
 Operator or its licensors. Subject to these Terms, you are granted a limited,
 personal, non-exclusive, non-transferable, revocable license to use the Service
 for your own personal use. You may not copy, modify, distribute, sell, or reverse
@@ -98,7 +98,7 @@ applicable law expressly permits.
 
 ## 8. Self-hosting
 
-Breadcrumbs can be run on your own infrastructure. If you self-host, **you** are
+Breadcrumbz can be run on your own infrastructure. If you self-host, **you** are
 the operator of that instance: you are responsible for its deployment, security
 (including TLS, disk encryption, firewalls, and backups), and for complying with
 all laws applicable to your operation of it, including any obligations to the

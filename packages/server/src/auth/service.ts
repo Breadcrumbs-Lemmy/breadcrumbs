@@ -21,7 +21,7 @@ import type { FieldCipher } from "../crypto/field-cipher";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Shown by the authenticator app so the user can tell this factor apart. */
-const MFA_ISSUER = "Breadcrumbs";
+const MFA_ISSUER = "Breadcrumbz";
 /** AAD prefix binding a stored TOTP secret to its owning user, so a swapped
  *  ciphertext from another record fails to decrypt. */
 const MFA_AAD_PREFIX = "mfa-totp:";
@@ -83,13 +83,13 @@ export class AuthService {
   /**
    * Guarantee the owner account exists. In single-user mode this is the one
    * account the whole app runs as; in multi-user mode it is a convenience so a
-   * fresh deployment has a first admin to sign in as if `BREADCRUMBS_OWNER_*`
+   * fresh deployment has a first admin to sign in as if `BREADCRUMBZ_OWNER_*`
    * are set. Idempotent — safe to call on every boot.
    */
   async ensureOwner(seed?: { email?: string; password?: string; displayName?: string }): Promise<User> {
     const existing = await this.users.getById(OWNER_USER_ID);
     if (existing) return existing;
-    const email = normalizeEmail(seed?.email ?? this.config.ownerEmail ?? "owner@breadcrumbs.local");
+    const email = normalizeEmail(seed?.email ?? this.config.ownerEmail ?? "owner@breadcrumbz.local");
     const now = new Date().toISOString();
     const owner: User = {
       id: OWNER_USER_ID,

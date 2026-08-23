@@ -1,4 +1,4 @@
-# AI Fin OS (Breadcrumbs)
+# AI Fin OS (Breadcrumbz)
 
 A personal-finance operating system: connect accounts (Plaid) or import
 statements (CSV/PDF), and get a clear, honest read on **where your money is
@@ -50,15 +50,15 @@ All secrets live in `.env` (git-ignored — never commit it). See
 | Variable | Purpose |
 | --- | --- |
 | `PLAID_ENV` / `PLAID_CLIENT_ID` / `PLAID_SECRET` | Plaid credentials & environment (`sandbox` \| `development` \| `production`). |
-| `ANTHROPIC_API_KEY` / `BREADCRUMBS_AGENT_MODEL` | AI assistant provider + model. |
-| `BREADCRUMBS_AUTH_MODE` | `single_user` (default, no login) or `multi_user` (real accounts). **Set explicitly for any shared deployment.** |
-| `BREADCRUMBS_CORS_ORIGINS` | Comma-separated allowed browser origins. |
+| `ANTHROPIC_API_KEY` / `BREADCRUMBZ_AGENT_MODEL` | AI assistant provider + model. |
+| `BREADCRUMBZ_AUTH_MODE` | `single_user` (default, no login) or `multi_user` (real accounts). **Set explicitly for any shared deployment.** |
+| `BREADCRUMBZ_CORS_ORIGINS` | Comma-separated allowed browser origins. |
 
 ## Deploy
 
 Docker images are provided (`Dockerfile.api`, `Dockerfile.web`,
 `docker-compose.yml`). Terminate TLS in front of the API and set
-`BREADCRUMBS_AUTH_MODE=multi_user` before exposing it to the internet.
+`BREADCRUMBZ_AUTH_MODE=multi_user` before exposing it to the internet.
 
 ## License
 

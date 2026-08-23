@@ -1,5 +1,5 @@
 /**
- * Breadcrumbs shell.
+ * Breadcrumbz shell.
  *
  * Opens on Spending. The product's question is "where is my money going?"
  * (`D-011`); affordability is a secondary action reached from that screen.
@@ -99,7 +99,7 @@ function SessionGate() {
     return (
       <div className="flex min-h-screen items-center justify-center" role="status">
         <Logo variant="mark" size={46} beacon />
-        <span className="sr-only">Loading Breadcrumbs…</span>
+        <span className="sr-only">Loading Breadcrumbz…</span>
       </div>
     );
   }
@@ -131,7 +131,7 @@ function AppContent() {
   const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
   const [snapshotNotes, setSnapshotNotes] = useState<SnapshotNotes | null>(null);
   const [draft, setDraft] = useState<PurchaseDraft>(() => emptyDraft(todayIso()));
-  // Land on Accounts — the same destination the Breadcrumbs logo (onHome) goes
+  // Land on Accounts — the same destination the Breadcrumbz logo (onHome) goes
   // to — so the first screen and the logo click are in sync.
   const [route, setRoute] = useState<Route>("accounts");
   /** The screen the Import flow was opened from, so its back button returns

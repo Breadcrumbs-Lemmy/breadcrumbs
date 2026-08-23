@@ -146,14 +146,14 @@ describe("loadAgentConfig provider selection", () => {
   });
 
   it("stays unconfigured for a local provider with no endpoint", () => {
-    expect(loadAgentConfig({ BREADCRUMBS_AGENT_PROVIDER: "local" } as NodeJS.ProcessEnv)).toBeUndefined();
+    expect(loadAgentConfig({ BREADCRUMBZ_AGENT_PROVIDER: "local" } as NodeJS.ProcessEnv)).toBeUndefined();
   });
 
   it("configures a local provider that extracts statements from a PDF's text layer", () => {
     const config = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
-      BREADCRUMBS_LOCAL_AGENT_MODEL: "qwen2.5",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_LOCAL_AGENT_MODEL: "qwen2.5",
     } as NodeJS.ProcessEnv);
     expect(config?.provider).toBe("local");
     expect(config?.model).toBe("qwen2.5");
@@ -173,19 +173,19 @@ describe("loadAgentConfig provider selection", () => {
     // The split: a fast small chat model paired with a stronger extractor — chat
     // only phrases pre-computed figures, extraction reads the statement layout.
     const split = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
-      BREADCRUMBS_LOCAL_AGENT_MODEL: "qwen2.5:3b",
-      BREADCRUMBS_LOCAL_EXTRACTION_MODEL: "qwen2.5:32b",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_LOCAL_AGENT_MODEL: "qwen2.5:3b",
+      BREADCRUMBZ_LOCAL_EXTRACTION_MODEL: "qwen2.5:32b",
     } as NodeJS.ProcessEnv);
     expect(split?.model).toBe("qwen2.5:3b");
     expect(split?.extractionModel).toBe("qwen2.5:32b");
 
     // Unset ⇒ the single-model setup is untouched: extraction uses the chat model.
     const single = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
-      BREADCRUMBS_LOCAL_AGENT_MODEL: "qwen2.5:7b",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_LOCAL_AGENT_MODEL: "qwen2.5:7b",
     } as NodeJS.ProcessEnv);
     expect(single?.extractionModel).toBe("qwen2.5:7b");
   });
@@ -193,8 +193,8 @@ describe("loadAgentConfig provider selection", () => {
   it("lets the hosted provider run a different extraction model than chat", () => {
     const split = loadAgentConfig({
       ANTHROPIC_API_KEY: "sk-test",
-      BREADCRUMBS_AGENT_MODEL: "claude-haiku-4-5-20251001",
-      BREADCRUMBS_EXTRACTION_MODEL: "claude-opus-5",
+      BREADCRUMBZ_AGENT_MODEL: "claude-haiku-4-5-20251001",
+      BREADCRUMBZ_EXTRACTION_MODEL: "claude-opus-5",
     } as NodeJS.ProcessEnv);
     expect(split?.model).toBe("claude-haiku-4-5-20251001");
     expect(split?.extractionModel).toBe("claude-opus-5");
@@ -207,7 +207,7 @@ describe("loadAgentConfig provider selection", () => {
 
 describe("loadAgentConfig extraction provider split", () => {
   it("defaults the extraction provider to the chat provider, mirroring its credentials", () => {
-    // Unset BREADCRUMBS_EXTRACTION_PROVIDER must be a pure no-op: extraction runs
+    // Unset BREADCRUMBZ_EXTRACTION_PROVIDER must be a pure no-op: extraction runs
     // exactly where chat does, with the same key / URL — full backward compat.
     const hosted = loadAgentConfig({ ANTHROPIC_API_KEY: "sk-test" } as NodeJS.ProcessEnv);
     expect(hosted?.extractionProvider).toBe("anthropic");
@@ -215,8 +215,8 @@ describe("loadAgentConfig extraction provider split", () => {
     expect(hosted?.supportsStatementExtraction).toBe(true);
 
     const local = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
     } as NodeJS.ProcessEnv);
     expect(local?.extractionProvider).toBe("local");
     expect(local?.extractionLocalBaseUrl).toBe("http://127.0.0.1:11434/v1");
@@ -227,12 +227,12 @@ describe("loadAgentConfig extraction provider split", () => {
     // The cost-minimising shape the split exists for: chat is free/on-device, and
     // the narrow extraction job runs on a cheap hosted model the operator names.
     const config = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
-      BREADCRUMBS_LOCAL_AGENT_MODEL: "qwen2.5:3b",
-      BREADCRUMBS_EXTRACTION_PROVIDER: "anthropic",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_LOCAL_AGENT_MODEL: "qwen2.5:3b",
+      BREADCRUMBZ_EXTRACTION_PROVIDER: "anthropic",
       ANTHROPIC_API_KEY: "sk-extract",
-      BREADCRUMBS_EXTRACTION_MODEL: "claude-haiku-4-5-20251001",
+      BREADCRUMBZ_EXTRACTION_MODEL: "claude-haiku-4-5-20251001",
     } as NodeJS.ProcessEnv);
 
     expect(config?.provider).toBe("local");
@@ -245,16 +245,16 @@ describe("loadAgentConfig extraction provider split", () => {
   });
 
   it("defaults a hosted extractor to a small, cheap model — never the local chat tag", () => {
-    // A hosted extractor with no BREADCRUMBS_EXTRACTION_MODEL must fall back to a
+    // A hosted extractor with no BREADCRUMBZ_EXTRACTION_MODEL must fall back to a
     // valid hosted model, NOT the local chat tag ("qwen2.5:3b") — which would 404.
     // In this mixed config (local chat) the fallback is a small/cheap model, not
     // the big chat default: the config is entered to save money, so a forgotten
     // knob must not silently bill the priciest model.
     const config = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
-      BREADCRUMBS_LOCAL_AGENT_MODEL: "qwen2.5:3b",
-      BREADCRUMBS_EXTRACTION_PROVIDER: "anthropic",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_LOCAL_AGENT_MODEL: "qwen2.5:3b",
+      BREADCRUMBZ_EXTRACTION_PROVIDER: "anthropic",
       ANTHROPIC_API_KEY: "sk-extract",
     } as NodeJS.ProcessEnv);
     expect(config?.extractionModel).toBe("claude-haiku-4-5-20251001");
@@ -265,9 +265,9 @@ describe("loadAgentConfig extraction provider split", () => {
 
   it("disables extraction (chat stays up) when a hosted extractor has no key", () => {
     const config = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
-      BREADCRUMBS_EXTRACTION_PROVIDER: "anthropic",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_EXTRACTION_PROVIDER: "anthropic",
       // no ANTHROPIC_API_KEY
     } as NodeJS.ProcessEnv);
     // Chat is unaffected — the agent is still configured.
@@ -280,9 +280,9 @@ describe("loadAgentConfig extraction provider split", () => {
   it("routes extraction to a separate LOCAL endpoint, with its own loopback hatch", () => {
     const config = loadAgentConfig({
       ANTHROPIC_API_KEY: "sk-test",
-      BREADCRUMBS_EXTRACTION_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL: "http://127.0.0.1:8080/v1",
-      BREADCRUMBS_LOCAL_EXTRACTION_MODEL: "nuextract",
+      BREADCRUMBZ_EXTRACTION_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL: "http://127.0.0.1:8080/v1",
+      BREADCRUMBZ_LOCAL_EXTRACTION_MODEL: "nuextract",
     } as NodeJS.ProcessEnv);
     expect(config?.provider).toBe("anthropic");
     expect(config?.extractionProvider).toBe("local");
@@ -294,39 +294,39 @@ describe("loadAgentConfig extraction provider split", () => {
   it("disables extraction when a local extractor has no base URL", () => {
     const config = loadAgentConfig({
       ANTHROPIC_API_KEY: "sk-test",
-      BREADCRUMBS_EXTRACTION_PROVIDER: "local",
-      // no BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL
+      BREADCRUMBZ_EXTRACTION_PROVIDER: "local",
+      // no BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL
     } as NodeJS.ProcessEnv);
     expect(config?.supportsStatementExtraction).toBe(false);
-    expect(describeAgentConfigConcerns(config as AgentConfig).join(" ")).toMatch(/BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL is missing/);
+    expect(describeAgentConfigConcerns(config as AgentConfig).join(" ")).toMatch(/BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL is missing/);
   });
 
   it("inherits the loopback hatch only when extraction reuses the chat endpoint", () => {
     // Same-endpoint split: extraction rides the chat host's relaxation.
     const shared = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://ollama:11434/v1",
-      BREADCRUMBS_LOCAL_AGENT_ALLOW_NONLOOPBACK: "true",
-      BREADCRUMBS_LOCAL_EXTRACTION_MODEL: "qwen2.5:32b",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://ollama:11434/v1",
+      BREADCRUMBZ_LOCAL_AGENT_ALLOW_NONLOOPBACK: "true",
+      BREADCRUMBZ_LOCAL_EXTRACTION_MODEL: "qwen2.5:32b",
     } as NodeJS.ProcessEnv);
     expect(shared?.extractionLocalBaseUrl).toBe("http://ollama:11434/v1");
     expect(shared?.extractionAllowNonLoopback).toBe(true);
 
     // A DISTINCT extraction URL must opt in on its own — it does not inherit.
     const distinct = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
-      BREADCRUMBS_LOCAL_AGENT_ALLOW_NONLOOPBACK: "true",
-      BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL: "http://extractor.lan:8080/v1",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_LOCAL_AGENT_ALLOW_NONLOOPBACK: "true",
+      BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL: "http://extractor.lan:8080/v1",
     } as NodeJS.ProcessEnv);
     expect(distinct?.extractionAllowNonLoopback).toBe(false);
   });
 
   it("warns that the on-device guarantee is chat-only when extraction is hosted", () => {
     const config = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
-      BREADCRUMBS_EXTRACTION_PROVIDER: "anthropic",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_EXTRACTION_PROVIDER: "anthropic",
       ANTHROPIC_API_KEY: "sk-extract",
     } as NodeJS.ProcessEnv);
     const concerns = describeAgentConfigConcerns(config as AgentConfig);
@@ -335,8 +335,8 @@ describe("loadAgentConfig extraction provider split", () => {
     // The all-local and all-hosted setups raise nothing (extraction supported and
     // running on the same provider as chat).
     const allLocal = loadAgentConfig({
-      BREADCRUMBS_AGENT_PROVIDER: "local",
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
+      BREADCRUMBZ_AGENT_PROVIDER: "local",
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: "http://127.0.0.1:11434/v1",
     } as NodeJS.ProcessEnv);
     expect(describeAgentConfigConcerns(allLocal as AgentConfig)).toEqual([]);
     expect(describeAgentConfigConcerns(anthropicConfig())).toEqual([]);

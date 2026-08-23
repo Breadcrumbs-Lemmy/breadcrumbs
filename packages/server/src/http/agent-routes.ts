@@ -152,7 +152,7 @@ export async function registerAgentRoutes(
         ? {}
         : {
             reason:
-              "Set ANTHROPIC_API_KEY for the hosted assistant, or BREADCRUMBS_AGENT_PROVIDER=local with BREADCRUMBS_LOCAL_AGENT_BASE_URL for a local, offline one.",
+              "Set ANTHROPIC_API_KEY for the hosted assistant, or BREADCRUMBZ_AGENT_PROVIDER=local with BREADCRUMBZ_LOCAL_AGENT_BASE_URL for a local, offline one.",
           }),
     };
   });

@@ -6,7 +6,7 @@ Owner: `Lemuel Mutah — Owner & Maintainer (sole developer)`
 Companion to: [Information Security Policy](information-security-policy.md) §10, [Plaid Security Questionnaire](plaid-security-questionnaire.md) §A, [Risk Register](risk-register.md)
 
 > **Purpose.** The formal retention schedule referenced by policy §10. It states,
-> per data class, *how long* Breadcrumbs keeps data, *what triggers* its deletion,
+> per data class, *how long* Breadcrumbz keeps data, *what triggers* its deletion,
 > and *how* it is disposed of — so the "we delete on account deletion" claim on a
 > vendor questionnaire maps to a specific, code-backed mechanism.
 >
@@ -18,7 +18,7 @@ Companion to: [Information Security Policy](information-security-policy.md) §10
 
 ## 1. Retention principle
 
-Breadcrumbs retains the **minimum** data needed to provide the product, for **as
+Breadcrumbz retains the **minimum** data needed to provide the product, for **as
 long as the account is active**, and disposes of it when the account (or a
 specific connection) is deleted. It is a **read-only** finance app — it never
 moves money — so there are no transaction-execution records that a financial
@@ -95,7 +95,7 @@ erasure request should also purge backups per their own policy. *Operator.*
 
 ## 5. Secret rotation (disposal of credentials)
 
-Third-party secrets (Plaid keys, Anthropic key, `BREADCRUMBS_ENCRYPTION_KEY`)
+Third-party secrets (Plaid keys, Anthropic key, `BREADCRUMBZ_ENCRYPTION_KEY`)
 are rotated **on suspected compromise** and **on personnel change**, per policy
 §10 and the incident-response runbook. Rotation is an **Operator** action
 (secrets live in the environment); moving the at-rest key into a secrets

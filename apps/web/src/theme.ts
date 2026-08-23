@@ -1,5 +1,5 @@
 /**
- * Theme management for Breadcrumbs.
+ * Theme management for Breadcrumbz.
  *
  * Three user-visible choices:
  *   "light"  — always use light tokens, even when the OS is dark

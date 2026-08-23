@@ -7,18 +7,18 @@
  * product whose spending screen depends on an LLM being reachable is a worse
  * product than one where the LLM is a layer on top.
  *
- * Two providers, chosen by `BREADCRUMBS_AGENT_PROVIDER`:
+ * Two providers, chosen by `BREADCRUMBZ_AGENT_PROVIDER`:
  *
  *   anthropic  (default) The hosted Claude model. Enabled by ANTHROPIC_API_KEY.
  *              Can also transcribe PDF statements.
  *   local      An OpenAI-compatible model served on this machine. Enabled by
- *              BREADCRUMBS_LOCAL_AGENT_BASE_URL, which must be a loopback address
+ *              BREADCRUMBZ_LOCAL_AGENT_BASE_URL, which must be a loopback address
  *              (enforced in `provider.ts`) so the assistant cannot reach the
  *              internet. It answers chat AND transcribes digital PDFs offline —
  *              the server extracts the text layer and the local model reads it.
  *
  * Chat and statement extraction are two different jobs and can run on two
- * different providers (`BREADCRUMBS_EXTRACTION_PROVIDER`, defaulting to the chat
+ * different providers (`BREADCRUMBZ_EXTRACTION_PROVIDER`, defaulting to the chat
  * provider). Extraction is a narrow, well-defined task — statement text into
  * rows — so it can be pointed at a small, cheap specialist while chat runs
  * on-device, or vice-versa. That independence has a privacy consequence: with a
@@ -52,7 +52,7 @@ export type AgentConfig = {
   extractionModel?: string;
 
   /** The provider that reads PDF/text statements, resolved independently of the
-   *  chat provider (`BREADCRUMBS_EXTRACTION_PROVIDER`). Defaults to `provider`,
+   *  chat provider (`BREADCRUMBZ_EXTRACTION_PROVIDER`). Defaults to `provider`,
    *  so an unset var is a pure no-op. `loadAgentConfig` always sets it; optional
    *  only so a hand-built config (tests) can omit it and fall back to `provider`.
    *
@@ -81,7 +81,7 @@ export type AgentConfig = {
   /** Whether the statement-extract route is registered: true when the extraction
    *  provider has the credentials it needs (a hosted key, or a local base URL).
    *  Both providers transcribe — the local one reads a digital PDF's text layer —
-   *  so this is off only when an explicit `BREADCRUMBS_EXTRACTION_PROVIDER` is
+   *  so this is off only when an explicit `BREADCRUMBZ_EXTRACTION_PROVIDER` is
    *  missing its credential. */
   supportsStatementExtraction: boolean;
 };
@@ -140,28 +140,28 @@ type ChatLeg = {
 };
 
 function loadChatLeg(env: NodeJS.ProcessEnv): ChatLeg | undefined {
-  const provider = normalizeProvider(env.BREADCRUMBS_AGENT_PROVIDER, "anthropic");
+  const provider = normalizeProvider(env.BREADCRUMBZ_AGENT_PROVIDER, "anthropic");
 
   if (provider === "local") {
-    const localBaseUrl = env.BREADCRUMBS_LOCAL_AGENT_BASE_URL?.trim();
+    const localBaseUrl = env.BREADCRUMBZ_LOCAL_AGENT_BASE_URL?.trim();
     if (!localBaseUrl) return undefined;
-    const model = env.BREADCRUMBS_LOCAL_AGENT_MODEL?.trim() || env.BREADCRUMBS_AGENT_MODEL?.trim() || "local-model";
+    const model = env.BREADCRUMBZ_LOCAL_AGENT_MODEL?.trim() || env.BREADCRUMBZ_AGENT_MODEL?.trim() || "local-model";
     return {
       provider: "local",
       localBaseUrl,
-      allowNonLoopback: env.BREADCRUMBS_LOCAL_AGENT_ALLOW_NONLOOPBACK?.trim() === "true",
+      allowNonLoopback: env.BREADCRUMBZ_LOCAL_AGENT_ALLOW_NONLOOPBACK?.trim() === "true",
       model,
     };
   }
 
   const apiKey = env.ANTHROPIC_API_KEY?.trim();
   if (!apiKey) return undefined;
-  const model = env.BREADCRUMBS_AGENT_MODEL?.trim() || DEFAULT_MODEL;
+  const model = env.BREADCRUMBZ_AGENT_MODEL?.trim() || DEFAULT_MODEL;
   return { provider: "anthropic", apiKey, model };
 }
 
 /** Everything the EXTRACTION provider needs, resolved from its own env vars and
- *  defaulting to the chat leg so an unset `BREADCRUMBS_EXTRACTION_PROVIDER` is a
+ *  defaulting to the chat leg so an unset `BREADCRUMBZ_EXTRACTION_PROVIDER` is a
  *  pure no-op (every field mirrors chat — backward compatible). */
 type ExtractionLeg = {
   provider: AgentProvider;
@@ -173,7 +173,7 @@ type ExtractionLeg = {
 };
 
 function resolveExtraction(env: NodeJS.ProcessEnv, chat: ChatLeg): ExtractionLeg {
-  const provider = normalizeProvider(env.BREADCRUMBS_EXTRACTION_PROVIDER, chat.provider);
+  const provider = normalizeProvider(env.BREADCRUMBZ_EXTRACTION_PROVIDER, chat.provider);
 
   if (provider === "anthropic") {
     // Reuse ANTHROPIC_API_KEY — there is no separate extraction key. When chat is
@@ -185,9 +185,9 @@ function resolveExtraction(env: NodeJS.ProcessEnv, chat: ChatLeg): ExtractionLeg
     // mixed config (local chat) there is no hosted chat model to borrow, so fall
     // back to a small, cheap specialist (not the big chat default) — this split
     // exists so extraction need not run a big model, and the config is entered to
-    // save money. The operator can still override with BREADCRUMBS_EXTRACTION_MODEL.
+    // save money. The operator can still override with BREADCRUMBZ_EXTRACTION_MODEL.
     const model =
-      env.BREADCRUMBS_EXTRACTION_MODEL?.trim() ||
+      env.BREADCRUMBZ_EXTRACTION_MODEL?.trim() ||
       (chat.provider === "anthropic" ? chat.model : DEFAULT_HOSTED_EXTRACTION_MODEL);
     // Explicitly requesting a hosted extractor with no key on hand leaves
     // extraction OFF (route unregistered) rather than silently falling back —
@@ -196,16 +196,16 @@ function resolveExtraction(env: NodeJS.ProcessEnv, chat: ChatLeg): ExtractionLeg
   }
 
   // provider === "local"
-  const explicitUrl = env.BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL?.trim();
+  const explicitUrl = env.BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL?.trim();
   // Reuse the chat model's endpoint when extraction shares the local provider and
   // no separate URL is given — the common "same Ollama, bigger extraction model".
   const localBaseUrl = explicitUrl || (chat.provider === "local" ? chat.localBaseUrl : undefined);
   // Inherit the loopback escape hatch ONLY when reusing the chat endpoint; a
   // distinct extraction URL must opt in on its own.
   const inheritedHatch = !explicitUrl && chat.provider === "local" ? Boolean(chat.allowNonLoopback) : false;
-  const allowNonLoopback = env.BREADCRUMBS_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK?.trim() === "true" || inheritedHatch;
+  const allowNonLoopback = env.BREADCRUMBZ_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK?.trim() === "true" || inheritedHatch;
   const model =
-    env.BREADCRUMBS_LOCAL_EXTRACTION_MODEL?.trim() || (chat.provider === "local" ? chat.model : "local-model");
+    env.BREADCRUMBZ_LOCAL_EXTRACTION_MODEL?.trim() || (chat.provider === "local" ? chat.model : "local-model");
   return { provider, localBaseUrl, allowNonLoopback, model, supported: Boolean(localBaseUrl) };
 }
 
@@ -213,7 +213,7 @@ function resolveExtraction(env: NodeJS.ProcessEnv, chat: ChatLeg): ExtractionLeg
  * Operator-facing warnings about the resolved agent config — logged once at
  * startup (see `server.ts`). Two cases both centre on the extraction split:
  *
- *  1. An explicit `BREADCRUMBS_EXTRACTION_PROVIDER` whose credential is missing:
+ *  1. An explicit `BREADCRUMBZ_EXTRACTION_PROVIDER` whose credential is missing:
  *     chat still works, but statement import is silently off until it is fixed.
  *     (Detectable from the config alone: a defaulted extraction leg mirrors the
  *     chat creds, so `supported` is false ONLY when a provider was named.)
@@ -228,8 +228,8 @@ export function describeAgentConfigConcerns(config: AgentConfig): string[] {
   if (!config.supportsStatementExtraction) {
     warnings.push(
       extractionProvider === "anthropic"
-        ? "BREADCRUMBS_EXTRACTION_PROVIDER=anthropic is set but ANTHROPIC_API_KEY is missing — statement extraction is disabled (chat still works)."
-        : "BREADCRUMBS_EXTRACTION_PROVIDER=local is set but BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL is missing — statement extraction is disabled (chat still works).",
+        ? "BREADCRUMBZ_EXTRACTION_PROVIDER=anthropic is set but ANTHROPIC_API_KEY is missing — statement extraction is disabled (chat still works)."
+        : "BREADCRUMBZ_EXTRACTION_PROVIDER=local is set but BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL is missing — statement extraction is disabled (chat still works).",
     );
   } else if (config.provider === "local" && extractionProvider === "anthropic") {
     warnings.push(
