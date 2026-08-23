@@ -51,6 +51,15 @@ services:
       PLAID_CLIENT_NAME: ${PLAID_CLIENT_NAME:-Breadcrumbs}
       PLAID_COUNTRY_CODES: ${PLAID_COUNTRY_CODES:-US}
       PLAID_REDIRECT_URI: ${PLAID_REDIRECT_URI:-}
+      # Public HTTPS URL Plaid posts webhooks to, e.g.
+      # https://yourdomain.com/api/plaid/webhook. Enables real-time transaction
+      # updates and re-auth flagging. Leave blank to run without webhooks.
+      PLAID_WEBHOOK: ${PLAID_WEBHOOK:-}
+      # Encrypts Plaid access tokens and imported financial data at rest
+      # (AES-256-GCM). Passed through from .env — never baked into the image.
+      # Without it, data is protected by file permissions only and the API warns
+      # on boot. Generate with: openssl rand -base64 32
+      BREADCRUMBS_ENCRYPTION_KEY: ${BREADCRUMBS_ENCRYPTION_KEY:-}
     volumes:
       # Imported statements persist across rebuilds. Financial data should not
       # vanish because an image was rebuilt.
