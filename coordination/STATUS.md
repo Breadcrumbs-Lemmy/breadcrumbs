@@ -17,8 +17,12 @@ Last updated: 2026-08-23
 > `plaid-routes.ts` + `plaid/token-store.ts` + `http/spending-routes.ts`; web `services/api.ts` +
 > `screens/SpendingScreen.tsx` + new `components/CoverageRail.tsx` + `model/calendar.ts`. Verified:
 > core 323/323 + server 427/427 + web 121 tests green, all typechecks + full `pnpm build` clean.
-> **Not** browser-verified live yet, and backfill runs synchronously (background-job + progress is
-> the next increment). Full record: `HANDOFFS.md` H-098.
+> **Live API runtime pass** (server on :8799, seeded 3mo CSV): span summary aggregates exactly,
+> both span validations 400, non-span path unchanged, `GET /api/plaid/coverage` returns the
+> `floor=today−24mo` shape — 17/18 assertions (the 1 miss was a faulty test expectation, not a bug).
+> **Still owed:** full browser click-through of the rail + a real Plaid-sandbox backfill (Link's
+> OOPIF can't be driven headlessly here). Backfill also runs synchronously (background-job +
+> progress is the next increment). Full record: `HANDOFFS.md` H-098.
 
 > **UI validation sweep merged to `main` 2026-08-16 (`[UI: Claude]`, `apps/web` only; `H-094`, PR #18).**
 > A full pass over the reconciled validation findings: **20 UI bugs fixed, 1 evaluated and
