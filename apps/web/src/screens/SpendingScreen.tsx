@@ -14,11 +14,14 @@
  *
  * Coverage Calendar:
  *   For week/month/year grains the old period-Chip row is replaced by a
- *   CoverageRail — a horizontal strip of time-bucket cells spanning back to
- *   Plaid's ~24-month floor. Filled cells have data; ghost cells are within
- *   reach but not yet pulled. The user selects a contiguous range; if that
- *   range includes ghost cells (and a bank is connected) a backfill CTA
- *   appears. Statement periods keep their original Chip-based navigation.
+ *   SpendingCalendar — one fixed calendar grid that zooms with the toggle
+ *   (years → a year's months → a month's weeks) rather than a long list. Cells
+ *   with synced data render solid; cells within Plaid's ~24-month reach but not
+ *   yet pulled render as "ghost". The user selects a contiguous range at the
+ *   current zoom; if it includes ghost cells (and a bank is connected) a
+ *   backfill CTA appears. The calendar owns its own view and selection and
+ *   reports the resolved {from, to} span up here. Statement periods keep their
+ *   original Chip-based navigation.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SpendingSummary } from "@ai-fin-os/core";
@@ -36,15 +39,15 @@ import {
   type PlaidCoverage,
 } from "../services/api";
 import { PERIOD_LABELS, isPeriodSupported, type PeriodKind } from "../model/period";
-import { buildBuckets, isCovered, spanFromSelection, seriesKeyToStartDate } from "../model/calendar";
+import { seriesKeyToStartDate } from "../model/calendar";
 import type { Grain } from "../model/calendar";
 import { useAssistantView } from "../services/assistant-scope";
 import { categoryColor } from "../model/category-color";
 import { formatMoney } from "../format/money";
 import { banksAndAccounts } from "../format/counts";
 import { Bar, Card, Chip, CountUpMoney, Delta, Segmented, SectionLabel } from "../components/ui";
-import { CoverageRail } from "../components/CoverageRail";
-import type { CoverageSelection } from "../components/CoverageRail";
+import { SpendingCalendar } from "../components/SpendingCalendar";
+import type { CalendarSpan, FocusSeed } from "../components/SpendingCalendar";
 import { LogoMark } from "../components/Logo";
 import { issuerLabel } from "../components/BankCard";
 
@@ -95,27 +98,18 @@ export function SpendingScreen({
 
   // --- Coverage Calendar state -------------------------------------------
   const [coverage, setCoverage] = useState<PlaidCoverage | null>(null);
-  /** The user's current bucket-range selection: [startIdx, endIdx]. */
-  const [selection, setSelection] = useState<CoverageSelection | null>(null);
+  /** The resolved {from,to} span the calendar last reported. */
+  const [span, setSpan] = useState<CalendarSpan | null>(null);
+  /** Seeds the calendar's focused year/month when zooming or drilling. */
+  const [focusSeed, setFocusSeed] = useState<FocusSeed | null>(null);
   /** True while a Plaid backfill POST is in flight. */
   const [backfilling, setBackfilling] = useState(false);
   /** Series points for the multi-bucket trend strip. */
   const [trendPoints, setTrendPoints] = useState<SeriesPoint[] | null>(null);
 
-  // Tracks whether we've initialized the default selection for the current period.
-  const selectionInitialized = useRef(false);
-
   // ---- Helpers ----------------------------------------------------------------
 
   const isRailPeriod = period !== "statement";
-
-  const buckets = useMemo(
-    () =>
-      isRailPeriod && coverage
-        ? buildBuckets(period as Grain, coverage.floor, coverage.today)
-        : [],
-    [isRailPeriod, period, coverage],
-  );
 
   const statementReady = (statementAccounts?.length ?? 0) > 0;
   const supported = useCallback(
@@ -151,34 +145,8 @@ export function SpendingScreen({
     };
   }, []);
 
-  // 3. Reset selection initializer when period changes, so the next Effect
-  //    picks a fresh default for the new grain.
-  useEffect(() => {
-    selectionInitialized.current = false;
-    setSelection(null);
-    setTrendPoints(null);
-  }, [period]);
-
-  // 4. Set default selection to the most-recent covered bucket once buckets
-  //    are ready and we haven't chosen one yet for this period.
-  useEffect(() => {
-    if (selectionInitialized.current || buckets.length === 0) return;
-    const es = coverage?.earliestSynced ?? null;
-    const ls = coverage?.latestSynced ?? null;
-    // Walk from the end; the last covered bucket is the most-recent synced one.
-    let defaultIdx = buckets.length - 1;
-    for (let i = buckets.length - 1; i >= 0; i--) {
-      const b = buckets[i];
-      if (b && isCovered(b, es, ls)) {
-        defaultIdx = i;
-        break;
-      }
-    }
-    selectionInitialized.current = true;
-    setSelection([defaultIdx, defaultIdx]);
-  }, [buckets, coverage]);
-
-  // 5a. Load summary for rail periods (week / month / year) using from/to.
+  // 3. Load summary for rail periods (week / month / year) using the calendar's
+  //    reported {from, to} span.
   useEffect(() => {
     if (!isRailPeriod) return;
     if (!supported(period)) {
@@ -186,11 +154,9 @@ export function SpendingScreen({
       datasetRef.current = null;
       return;
     }
-    if (selection === null || buckets.length === 0) return;
+    if (span === null) return;
 
-    const lo = Math.min(selection[0], selection[1]);
-    const hi = Math.max(selection[0], selection[1]);
-    const { from, to } = spanFromSelection(buckets, lo, hi);
+    const { from, to } = span;
     if (!from || !to) return;
 
     const datasetKey = `${period}|${from}|${to}`;
@@ -235,9 +201,9 @@ export function SpendingScreen({
     return () => {
       cancelled = true;
     };
-  }, [isRailPeriod, period, selection, accountId, buckets, supported]);
+  }, [isRailPeriod, period, span, accountId, supported]);
 
-  // 5b. Load summary for statement periods (original logic preserved).
+  // 4. Load summary for statement periods (original logic preserved).
   useEffect(() => {
     if (isRailPeriod) return;
     if (!supported(period)) {
@@ -262,7 +228,7 @@ export function SpendingScreen({
     };
   }, [isRailPeriod, period, monthKey, accountId, supported, statementAccountId]);
 
-  // 6. Snapshot the all-accounts roster from unscoped loads so the picker
+  // 5. Snapshot the all-accounts roster from unscoped loads so the picker
   //    never collapses when a filter is applied.
   useEffect(() => {
     if (outcome?.kind === "ready" && accountId === null && period !== "statement") {
@@ -274,17 +240,15 @@ export function SpendingScreen({
     }
   }, [outcome, accountId, period]);
 
-  // 7. Load per-bucket trend data when multiple buckets are selected.
+  // 6. Load per-sub-period trend data when the span covers more than one unit.
   useEffect(() => {
-    if (!selection || selection[0] === selection[1]) {
+    if (!span || !span.multi) {
       setTrendPoints(null);
       return;
     }
-    if (!isRailPeriod || buckets.length === 0) return;
+    if (!isRailPeriod) return;
 
-    const lo = Math.min(selection[0], selection[1]);
-    const hi = Math.max(selection[0], selection[1]);
-    const { from, to } = spanFromSelection(buckets, lo, hi);
+    const { from, to } = span;
     if (!from || !to) return;
 
     let cancelled = false;
@@ -302,7 +266,7 @@ export function SpendingScreen({
     return () => {
       cancelled = true;
     };
-  }, [isRailPeriod, period, selection, buckets]);
+  }, [isRailPeriod, period, span]);
 
   // ---- Backfill handler -------------------------------------------------------
 
@@ -372,9 +336,8 @@ export function SpendingScreen({
       : null,
   );
 
-  // Whether the selection spans more than one bucket (shows trend strip).
-  const isMultiBucket =
-    selection !== null && Math.abs(selection[0] - selection[1]) > 0;
+  // Whether the span covers more than one unit (shows the trend strip).
+  const isMultiBucket = span?.multi ?? false;
 
   return (
     <>
@@ -390,6 +353,9 @@ export function SpendingScreen({
                 setMonthKey(null);
                 setExpanded(false);
                 setAccountId(null);
+                // Manual toggle → let the calendar pick its own default focus.
+                setFocusSeed(null);
+                setSpan(null);
               }}
               options={PERIODS.map((p) => ({
                 value: p,
@@ -419,17 +385,35 @@ export function SpendingScreen({
           )}
         </div>
 
-        {/* Coverage Rail — replaces the Chip row for week/month/year. */}
+        {/* Coverage Calendar — a zooming grid, replaces the Chip row for
+            week/month/year. Statement keeps its own Chip navigation above. */}
         {isRailPeriod && (
-          <CoverageRail
-            grain={period as Grain}
-            buckets={buckets}
+          <SpendingCalendar
+            unit={period as Grain}
             coverage={coverage}
-            selection={selection}
-            onSelect={(range) => {
-              setSelection(range);
+            focusSeed={focusSeed}
+            onSelect={(next) => {
+              setSpan(next);
               setAccountId(null);
               setExpanded(false);
+            }}
+            onDrillToWeeks={(year, month) => {
+              setFocusSeed({ year, month });
+              setPeriod("week");
+              setExpanded(false);
+              setAccountId(null);
+            }}
+            onZoomToMonths={(year) => {
+              setFocusSeed({ year });
+              setPeriod("month");
+              setExpanded(false);
+              setAccountId(null);
+            }}
+            onZoomToYears={() => {
+              setFocusSeed(null);
+              setPeriod("year");
+              setExpanded(false);
+              setAccountId(null);
             }}
             onBackfill={handleBackfill}
             backfilling={backfilling}
@@ -482,22 +466,9 @@ export function SpendingScreen({
           <div className="space-y-5 lg:col-span-7 xl:col-span-8">
             <Figures summary={summary} accountId={accountId} />
 
-            {/* Trend strip: mini per-bucket bars when a range is selected. */}
+            {/* Trend strip: mini per-sub-period bars across a multi-unit span. */}
             {isMultiBucket && trendPoints && trendPoints.length > 0 && (
-              <TrendStrip
-                points={trendPoints}
-                onDrillIn={(pointKey) => {
-                  // Find the matching bucket by start date and drill into it.
-                  const startDate = seriesKeyToStartDate(pointKey);
-                  if (!startDate) return;
-                  const idx = buckets.findIndex((b) => b.startDate === startDate);
-                  if (idx >= 0) {
-                    setSelection([idx, idx]);
-                    setExpanded(false);
-                    setAccountId(null);
-                  }
-                }}
-              />
+              <TrendStrip points={trendPoints} />
             )}
 
             <div>
@@ -614,13 +585,7 @@ export function SpendingScreen({
 // TrendStrip — per-bucket spending bars for a multi-bucket selection
 // ---------------------------------------------------------------------------
 
-function TrendStrip({
-  points,
-  onDrillIn,
-}: {
-  points: SeriesPoint[];
-  onDrillIn: (key: string) => void;
-}) {
+function TrendStrip({ points }: { points: SeriesPoint[] }) {
   const maxOut = Math.max(...points.map((p) => p.totalOutflowCents), 1);
 
   return (
@@ -632,16 +597,14 @@ function TrendStrip({
         {points.map((p) => {
           const pct = (p.totalOutflowCents / maxOut) * 100;
           return (
-            <button
+            <div
               key={p.key}
-              type="button"
-              onClick={() => onDrillIn(p.key)}
               title={`${p.label}: ${formatMoney(p.totalOutflowCents)}`}
-              className="group flex flex-shrink-0 flex-col items-center gap-1.5 focus-visible:outline-none"
+              className="flex flex-shrink-0 flex-col items-center gap-1.5"
             >
               <div className="flex h-[40px] w-[36px] items-end">
                 <div
-                  className="w-full rounded-sm transition-opacity group-hover:opacity-80 group-focus-visible:ring-2 group-focus-visible:ring-accent"
+                  className="w-full rounded-sm"
                   style={{
                     height: `${Math.max(pct, 4)}%`,
                     background: "var(--accent)",
@@ -652,7 +615,7 @@ function TrendStrip({
               <span className="truncate text-meta text-ink-tertiary" style={{ maxWidth: 36 }}>
                 {p.label}
               </span>
-            </button>
+            </div>
           );
         })}
       </div>

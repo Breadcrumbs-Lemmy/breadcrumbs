@@ -1,118 +1,116 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildBuckets,
+  defaultCellIndex,
   isCovered,
+  monthCells,
   seriesKeyToStartDate,
-  spanFromSelection,
+  spanFromCells,
+  weekRows,
+  yearCells,
+  type Cell,
 } from "./calendar";
 
 // ---------------------------------------------------------------------------
-// buildBuckets — month grain
+// yearCells
 // ---------------------------------------------------------------------------
-describe("buildBuckets — month", () => {
-  it("produces one bucket per calendar month from floor to today inclusive", () => {
-    const buckets = buildBuckets("month", "2026-06-15", "2026-08-23");
-    expect(buckets.map((b) => b.key)).toEqual(["2026-06", "2026-07", "2026-08"]);
+describe("yearCells", () => {
+  it("produces one cell per year from floor to today inclusive", () => {
+    const cells = yearCells("2024-06-01", "2026-08-23");
+    expect(cells.map((c) => c.key)).toEqual(["2024", "2025", "2026"]);
   });
 
-  it("labels the current-year month with just the short name", () => {
-    const buckets = buildBuckets("month", "2026-06-01", "2026-06-30");
-    expect(buckets[0]?.label).toBe("Jun");
+  it("uses the year as both key and label and is always selectable", () => {
+    const cells = yearCells("2025-01-01", "2025-12-31");
+    expect(cells[0]?.key).toBe("2025");
+    expect(cells[0]?.label).toBe("2025");
+    expect(cells[0]?.selectable).toBe(true);
   });
 
-  it("labels a past-year month with short name + year", () => {
-    const buckets = buildBuckets("month", "2025-11-01", "2026-01-31");
-    const nov = buckets.find((b) => b.key === "2025-11");
-    expect(nov?.label).toBe("Nov 2025");
+  it("clamps the floor year's start and the current year's end", () => {
+    const cells = yearCells("2024-06-15", "2026-08-23");
+    expect(cells[0]?.startDate).toBe("2024-06-15"); // clamped to floor
+    expect(cells[0]?.endDate).toBe("2024-12-31");
+    expect(cells[2]?.startDate).toBe("2026-01-01");
+    expect(cells[2]?.endDate).toBe("2026-08-23"); // clamped to today
   });
+});
 
-  it("sets correct start and end dates for a 31-day month", () => {
-    const buckets = buildBuckets("month", "2026-01-01", "2026-01-31");
-    expect(buckets[0]?.startDate).toBe("2026-01-01");
-    expect(buckets[0]?.endDate).toBe("2026-01-31");
-  });
-
-  it("computes the correct end date for February in a non-leap year", () => {
-    const buckets = buildBuckets("month", "2026-02-01", "2026-02-28");
-    expect(buckets[0]?.endDate).toBe("2026-02-28");
-  });
-
-  it("computes the correct end date for February in a leap year", () => {
-    const buckets = buildBuckets("month", "2024-02-01", "2024-02-29");
-    expect(buckets[0]?.endDate).toBe("2024-02-29");
-  });
-
-  it("handles floor mid-month (starts at the given floor month, not floor day)", () => {
-    // Floor is mid-June; we still get a June bucket
-    const buckets = buildBuckets("month", "2026-06-15", "2026-07-31");
-    expect(buckets[0]?.key).toBe("2026-06");
-    expect(buckets[0]?.startDate).toBe("2026-06-01");
-  });
-
-  it("spans across year boundaries", () => {
-    const buckets = buildBuckets("month", "2025-11-01", "2026-02-28");
-    expect(buckets.map((b) => b.key)).toEqual([
-      "2025-11",
-      "2025-12",
-      "2026-01",
-      "2026-02",
+// ---------------------------------------------------------------------------
+// monthCells
+// ---------------------------------------------------------------------------
+describe("monthCells", () => {
+  it("always returns 12 cells for the year", () => {
+    const cells = monthCells(2026, "2025-01-01", "2026-08-23");
+    expect(cells).toHaveLength(12);
+    expect(cells.map((c) => c.label)).toEqual([
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ]);
   });
+
+  it("marks months outside [floor, today] as not selectable", () => {
+    const cells = monthCells(2026, "2026-06-15", "2026-08-23");
+    // Jan–May are before the floor month; Sep–Dec are in the future.
+    expect(cells[0]?.selectable).toBe(false); // Jan
+    expect(cells[4]?.selectable).toBe(false); // May
+    expect(cells[5]?.selectable).toBe(true); // Jun
+    expect(cells[7]?.selectable).toBe(true); // Aug
+    expect(cells[8]?.selectable).toBe(false); // Sep (future)
+  });
+
+  it("clamps the floor month's start and today's month end", () => {
+    const cells = monthCells(2026, "2026-06-15", "2026-08-23");
+    expect(cells[5]?.startDate).toBe("2026-06-15"); // Jun clamped to floor
+    expect(cells[5]?.endDate).toBe("2026-06-30");
+    expect(cells[7]?.startDate).toBe("2026-08-01");
+    expect(cells[7]?.endDate).toBe("2026-08-23"); // Aug clamped to today
+  });
+
+  it("computes February end dates correctly (leap and non-leap)", () => {
+    expect(monthCells(2026, "2026-01-01", "2026-12-31")[1]?.endDate).toBe("2026-02-28");
+    expect(monthCells(2024, "2024-01-01", "2024-12-31")[1]?.endDate).toBe("2024-02-29");
+  });
 });
 
 // ---------------------------------------------------------------------------
-// buildBuckets — year grain
+// weekRows
 // ---------------------------------------------------------------------------
-describe("buildBuckets — year", () => {
-  it("produces one bucket per calendar year", () => {
-    const buckets = buildBuckets("year", "2024-06-01", "2026-08-23");
-    expect(buckets.map((b) => b.key)).toEqual(["2024", "2025", "2026"]);
+describe("weekRows", () => {
+  // August 2026: Aug 1 is a Saturday, so the first Sun–Sat row is Jul 26–Aug 1.
+  it("lays out a month as Sun–Sat rows, each with seven days", () => {
+    const rows = weekRows(2026, 7, "2025-01-01", "2026-08-31");
+    expect(rows).toHaveLength(6);
+    for (const row of rows) expect(row.days).toHaveLength(7);
   });
 
-  it("uses year as both key and label", () => {
-    const buckets = buildBuckets("year", "2025-01-01", "2025-12-31");
-    expect(buckets[0]?.key).toBe("2025");
-    expect(buckets[0]?.label).toBe("2025");
+  it("labels rows by their in-month day numbers", () => {
+    const rows = weekRows(2026, 7, "2025-01-01", "2026-08-31");
+    expect(rows.map((r) => r.label)).toEqual(["1", "2–8", "9–15", "16–22", "23–29", "30–31"]);
   });
 
-  it("sets Jan 1 as startDate and Dec 31 as endDate", () => {
-    const buckets = buildBuckets("year", "2025-01-01", "2025-12-31");
-    expect(buckets[0]?.startDate).toBe("2025-01-01");
-    expect(buckets[0]?.endDate).toBe("2025-12-31");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildBuckets — week grain
-// ---------------------------------------------------------------------------
-describe("buildBuckets — week", () => {
-  it("starts on the Monday at or before floor (floor is a Wednesday)", () => {
-    // 2026-08-19 is a Wednesday; Monday of that week is 2026-08-17
-    const buckets = buildBuckets("week", "2026-08-19", "2026-08-23");
-    expect(buckets[0]?.startDate).toBe("2026-08-17");
+  it("clamps each row's window to the focused month", () => {
+    const rows = weekRows(2026, 7, "2025-01-01", "2026-08-31");
+    // First row spills into July but its window is clamped to Aug 1 only.
+    expect(rows[0]?.startDate).toBe("2026-08-01");
+    expect(rows[0]?.endDate).toBe("2026-08-01");
+    expect(rows[1]?.startDate).toBe("2026-08-02");
+    expect(rows[1]?.endDate).toBe("2026-08-08");
   });
 
-  it("labels weeks as 'Wk of D Mon'", () => {
-    const buckets = buildBuckets("week", "2026-08-17", "2026-08-23");
-    expect(buckets[0]?.label).toBe("Wk of 17 Aug");
+  it("flags spill-over days from the adjacent month", () => {
+    const rows = weekRows(2026, 7, "2025-01-01", "2026-08-31");
+    // Row 0 starts on Sunday Jul 26 (previous month).
+    expect(rows[0]?.days[0]).toMatchObject({ day: 26, date: "2026-07-26", inMonth: false });
+    expect(rows[0]?.days[6]).toMatchObject({ day: 1, date: "2026-08-01", inMonth: true });
   });
 
-  it("week key includes the Monday date prefixed with w-", () => {
-    const buckets = buildBuckets("week", "2026-08-17", "2026-08-23");
-    expect(buckets[0]?.key).toBe("w-2026-08-17");
-  });
-
-  it("clamps the current week endDate to today", () => {
-    // 2026-08-17 is a Monday; today is 2026-08-19 (Wednesday) so the week
-    // hasn't finished — endDate should be 2026-08-19, not 2026-08-23.
-    const buckets = buildBuckets("week", "2026-08-17", "2026-08-19");
-    expect(buckets[0]?.endDate).toBe("2026-08-19");
-  });
-
-  it("full week's endDate is Sunday", () => {
-    // Floor on Monday 2026-08-17, today is Sunday 2026-08-30 (two weeks later)
-    const buckets = buildBuckets("week", "2026-08-17", "2026-08-30");
-    expect(buckets[0]?.endDate).toBe("2026-08-23"); // full first week
+  it("clamps and disables rows relative to today", () => {
+    // Today is Aug 23 (a Sunday). The Aug 23–29 row is clamped to Aug 23 and
+    // still selectable; the Aug 30–31 row is entirely in the future.
+    const rows = weekRows(2026, 7, "2025-01-01", "2026-08-23");
+    expect(rows[4]?.endDate).toBe("2026-08-23");
+    expect(rows[4]?.selectable).toBe(true);
+    expect(rows[5]?.selectable).toBe(false);
   });
 });
 
@@ -120,72 +118,73 @@ describe("buildBuckets — week", () => {
 // isCovered
 // ---------------------------------------------------------------------------
 describe("isCovered", () => {
-  const jun: import("./calendar").Bucket = {
-    key: "2026-06",
-    label: "Jun",
-    startDate: "2026-06-01",
-    endDate: "2026-06-30",
-  };
+  const jun = { startDate: "2026-06-01", endDate: "2026-06-30" };
 
-  it("returns true when bucket is fully inside the synced range", () => {
+  it("returns true when the cell is fully inside the synced range", () => {
     expect(isCovered(jun, "2026-01-01", "2026-12-31")).toBe(true);
   });
 
-  it("returns true when bucket partially overlaps at the end", () => {
-    // latestSynced falls inside June
+  it("returns true when the cell partially overlaps at either edge", () => {
     expect(isCovered(jun, "2026-01-01", "2026-06-15")).toBe(true);
-  });
-
-  it("returns true when bucket partially overlaps at the start", () => {
-    // earliestSynced falls inside June
     expect(isCovered(jun, "2026-06-15", "2026-12-31")).toBe(true);
   });
 
-  it("returns false when bucket is entirely before earliestSynced", () => {
-    const jan2024 = { key: "2024-01", label: "Jan 2024", startDate: "2024-01-01", endDate: "2024-01-31" };
-    expect(isCovered(jan2024, "2025-01-01", "2026-12-31")).toBe(false);
-  });
-
-  it("returns false when bucket is entirely after latestSynced", () => {
+  it("returns false when the cell is entirely outside the synced range", () => {
     expect(isCovered(jun, "2024-01-01", "2026-05-31")).toBe(false);
+    expect(isCovered({ startDate: "2024-01-01", endDate: "2024-01-31" }, "2025-01-01", "2026-12-31")).toBe(false);
   });
 
-  it("returns false when earliestSynced is null", () => {
+  it("returns false when either bound is null", () => {
     expect(isCovered(jun, null, "2026-12-31")).toBe(false);
-  });
-
-  it("returns false when latestSynced is null", () => {
     expect(isCovered(jun, "2026-01-01", null)).toBe(false);
-  });
-
-  it("returns false when both bounds are null", () => {
     expect(isCovered(jun, null, null)).toBe(false);
   });
 });
 
 // ---------------------------------------------------------------------------
-// spanFromSelection
+// spanFromCells
 // ---------------------------------------------------------------------------
-describe("spanFromSelection", () => {
-  const buckets = buildBuckets("month", "2026-06-01", "2026-08-31");
-  // buckets: [2026-06, 2026-07, 2026-08]
+describe("spanFromCells", () => {
+  // Jun–Aug 2026, all selectable.
+  const cells = monthCells(2026, "2026-01-01", "2026-08-31").slice(5, 8);
 
-  it("returns start of first and end of last bucket for a forward range", () => {
-    const { from, to } = spanFromSelection(buckets, 0, 2);
+  it("returns start of first and end of last cell for a forward range", () => {
+    const { from, to } = spanFromCells(cells, 0, 2);
     expect(from).toBe("2026-06-01");
     expect(to).toBe("2026-08-31");
   });
 
   it("auto-orders when indices are reversed", () => {
-    const { from, to } = spanFromSelection(buckets, 2, 0);
+    const { from, to } = spanFromCells(cells, 2, 0);
     expect(from).toBe("2026-06-01");
     expect(to).toBe("2026-08-31");
   });
 
-  it("returns single bucket bounds for same-index selection", () => {
-    const { from, to } = spanFromSelection(buckets, 1, 1);
+  it("returns single-cell bounds for a same-index selection", () => {
+    const { from, to } = spanFromCells(cells, 1, 1);
     expect(from).toBe("2026-07-01");
     expect(to).toBe("2026-07-31");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// defaultCellIndex
+// ---------------------------------------------------------------------------
+describe("defaultCellIndex", () => {
+  const cells = monthCells(2026, "2025-01-01", "2026-08-23"); // Jan–Aug selectable
+
+  it("picks the most recent covered, selectable cell", () => {
+    // Synced Jun–Jul → the last covered month is Jul (index 6).
+    expect(defaultCellIndex(cells, "2026-06-01", "2026-07-31")).toBe(6);
+  });
+
+  it("falls back to the most recent selectable cell when nothing is covered", () => {
+    // No sync → most recent selectable month is Aug (index 7).
+    expect(defaultCellIndex(cells, null, null)).toBe(7);
+  });
+
+  it("returns -1 for an empty grid", () => {
+    expect(defaultCellIndex([] as Cell[], null, null)).toBe(-1);
   });
 });
 
@@ -193,18 +192,17 @@ describe("spanFromSelection", () => {
 // seriesKeyToStartDate
 // ---------------------------------------------------------------------------
 describe("seriesKeyToStartDate", () => {
-  it("converts month key to first of month", () => {
+  it("converts a month key to the first of the month", () => {
     expect(seriesKeyToStartDate("2026-08")).toBe("2026-08-01");
   });
 
-  it("converts year key to Jan 1", () => {
+  it("converts a year key to Jan 1", () => {
     expect(seriesKeyToStartDate("2026")).toBe("2026-01-01");
   });
 
-  it("converts ISO week key to its Monday", () => {
-    // 2026-W34: week 34 of 2026.
-    // Jan 4 2026 is a Sunday (day=0). week1Mon = Jan 4 - 6 = Dec 29 2025.
-    // Week 34 Monday = Dec 29 + 33*7 = Dec 29 + 231 days = 2026-08-17.
+  it("converts an ISO week key to its Monday", () => {
+    // 2026-W34: Jan 4 2026 is a Sunday, so week 1's Monday is Dec 29 2025;
+    // week 34's Monday = Dec 29 + 33*7 = 2026-08-17.
     expect(seriesKeyToStartDate("2026-W34")).toBe("2026-08-17");
   });
 
