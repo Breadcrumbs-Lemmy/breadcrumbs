@@ -395,10 +395,11 @@
     aspect-ratio: 1 / 1;
   }
 
-  /* Hovering the mark itself, or anywhere on the full lockup, starts the
-     spill. Ease-in timing gives the coins gravity. */
-  .logo-holder:hover .logo-drop,
-  .logo-lockup:hover .logo-drop {
+  /* Hovering the mark itself, or anywhere on the full lockup, starts the spill;
+     the `logo-spilling` class is toggled by JS (useSpillHover in Logo.tsx), which
+     keeps it on for a short linger after the pointer leaves so the fall tapers
+     off instead of cutting dead. Ease-in timing gives the coins gravity. */
+  .logo-spilling .logo-drop {
     animation: logo-coin-fall var(--dur) cubic-bezier(0.5, 0.05, 0.8, 0.25) var(--delay) infinite;
   }
 

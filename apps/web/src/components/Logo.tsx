@@ -20,7 +20,7 @@
  * chromatic wit — bread in honey, crumbs in teal — lives in the wordmark.
  */
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 type LogoProps = {
   /** "full" = mark + wordmark lockup; "mark" = the glyph alone. */
@@ -52,6 +52,48 @@ type LogoProps = {
 
 /** Hard cap on coins per spill — enough for a lively shower, not a slot machine. */
 const MAX_SPILL = 14;
+
+/**
+ * How long the spill keeps falling after the pointer leaves. The coins loop
+ * (CSS `infinite`), so without this the shower cuts dead the instant hover ends;
+ * a short linger lets the in-flight coins finish their drop and read as a natural
+ * tail-off rather than a hard stop. Collapsed to 0 by the reduced-motion guard.
+ */
+const SPILL_LINGER_MS = 650;
+
+/**
+ * Hover state for the coin spill, with a lingering stop. Enter is instant; leave
+ * is deferred by SPILL_LINGER_MS (re-entering cancels a pending stop) so the fall
+ * tapers off instead of vanishing the moment the pointer leaves. The `active`
+ * flag drives BOTH the mount of the spill overlay and the CSS animation (via the
+ * `logo-spilling` class) so JS owns the full timing — the old `:hover` selector
+ * couldn't be delayed. Returns undefined handlers when disabled so the wrapper
+ * adds no listeners at all.
+ */
+function useSpillHover(enabled: boolean) {
+  const [active, setActive] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  if (!enabled) return { active: false, onMouseEnter: undefined, onMouseLeave: undefined };
+  const reduced =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  return {
+    active,
+    onMouseEnter: () => {
+      window.clearTimeout(timer.current);
+      setActive(true);
+    },
+    onMouseLeave: () => {
+      window.clearTimeout(timer.current);
+      if (reduced) {
+        setActive(false);
+        return;
+      }
+      timer.current = window.setTimeout(() => setActive(false), SPILL_LINGER_MS);
+    },
+  };
+}
 
 /**
  * Sparkle points on the coin's rim (r=16 about 20,20), each with the delay at
@@ -143,9 +185,10 @@ export function LogoMark({
   sparkle = beacon,
 }: Pick<LogoProps, "size" | "animated" | "beacon" | "spill" | "spillCount" | "sparkle">) {
   const coins = Math.max(0, Math.min(MAX_SPILL, Math.round(spillCount)));
-  // Mount the spill only while hovered so each hover re-rolls a fresh random set.
-  const [hovered, setHovered] = useState(false);
   const spilling = spill && coins > 0;
+  // Mount the spill only while active so each hover re-rolls a fresh random set;
+  // the linger keeps it falling briefly after the pointer leaves.
+  const hover = useSpillHover(spilling);
 
   // Ambient gold glitter. At random intervals (7–20s) a light sweeps once around
   // the coin's rim; the group is mounted only for that burst so each one runs
@@ -168,9 +211,9 @@ export function LogoMark({
   }, [shimmer]);
   return (
     <span
-      className="logo-holder"
-      onMouseEnter={spilling ? () => setHovered(true) : undefined}
-      onMouseLeave={spilling ? () => setHovered(false) : undefined}
+      className={`logo-holder${hover.active ? " logo-spilling" : ""}`}
+      onMouseEnter={hover.onMouseEnter}
+      onMouseLeave={hover.onMouseLeave}
     >
       <svg
         width={size}
@@ -269,7 +312,7 @@ export function LogoMark({
       {/* Coins spill from the "b" coin on hover, each on its own random path,
           then fade — gated on `spill` (which follows `beacon` unless set on its
           own). Mounted only while hovered so every hover falls differently. */}
-      {spilling && hovered && <CoinSpill count={coins} spread="mark" />}
+      {spilling && hover.active && <CoinSpill count={coins} spread="mark" />}
     </span>
   );
 }
@@ -289,7 +332,8 @@ export function Logo({
   // mark-variant early return) to keep hook order stable; the mark variant lets
   // its inner LogoMark own the spill instead.
   const coins = Math.max(0, Math.min(MAX_SPILL, Math.round(spillCount)));
-  const [hovered, setHovered] = useState(false);
+  const spilling = spill && coins > 0;
+  const hover = useSpillHover(spilling);
 
   if (variant === "mark") {
     // No wordmark to spill across, so the coins stay on the mark (the "b").
@@ -309,13 +353,15 @@ export function Logo({
 
   // Full lockup: the mark keeps its beacon crumb, but the hover coin-spill lifts
   // up to the lockup so coins drop from all along "breadcrumbs", not just the
-  // "b". Mounted only while hovered so every hover falls in a fresh pattern.
-  const spilling = spill && coins > 0;
+  // "b". Mounted only while active so every hover falls in a fresh pattern; the
+  // linger keeps it falling briefly after the pointer leaves.
   return (
     <span
-      className={`logo-lockup inline-flex items-center gap-2 ${className}`}
-      onMouseEnter={spilling ? () => setHovered(true) : undefined}
-      onMouseLeave={spilling ? () => setHovered(false) : undefined}
+      className={`logo-lockup inline-flex items-center gap-2${
+        hover.active ? " logo-spilling" : ""
+      } ${className}`}
+      onMouseEnter={hover.onMouseEnter}
+      onMouseLeave={hover.onMouseLeave}
     >
       <LogoMark
         size={size}
@@ -326,7 +372,7 @@ export function Logo({
         sparkle={sparkle}
       />
       <Wordmark className={wordmarkClassName} />
-      {spilling && hovered && <CoinSpill count={coins} spread="wide" />}
+      {spilling && hover.active && <CoinSpill count={coins} spread="wide" />}
     </span>
   );
 }
