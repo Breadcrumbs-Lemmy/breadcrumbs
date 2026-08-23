@@ -193,7 +193,7 @@ function freshPlaidFreshness(syncedAt: Date): Freshness {
 function importedPlaidUncertainty(confidence: number, confidenceReason: string): Uncertainty {
   return {
     confidence,
-    confidenceReason: `Imported from Plaid Sandbox. ${confidenceReason}`,
+    confidenceReason: `Imported from Plaid. ${confidenceReason}`,
     isEstimated: confidence < 0.9,
     estimateMethod: confidence < 0.9 ? "category_average" : undefined,
   };

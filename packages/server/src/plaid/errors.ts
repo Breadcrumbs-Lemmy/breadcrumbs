@@ -26,7 +26,7 @@ export function toPlaidAdapterError(error: unknown, fallbackCode: string): Plaid
 
   return new PlaidAdapterError({
     code: plaidCode,
-    message: "Plaid Sandbox request failed.",
+    message: "Plaid request failed.",
     statusCode,
     plaidRequestId: requestId,
   });

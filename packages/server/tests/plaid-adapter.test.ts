@@ -11,6 +11,7 @@ import {
 } from "../src/plaid/adapter";
 import type { PlaidClientLike } from "../src/plaid/adapter";
 import type { PlaidConfig } from "../src/plaid/config";
+import { toPlaidAdapterError } from "../src/plaid/errors";
 import { InMemoryPlaidTokenStore } from "../src/plaid/token-store";
 
 const config: PlaidConfig = {
@@ -21,7 +22,7 @@ const config: PlaidConfig = {
   countryCodes: ["US"],
 };
 
-describe("Plaid Sandbox adapter", () => {
+describe("Plaid adapter", () => {
   it("creates a Link token with the minimal read-only product set", async () => {
     const client = mockClient({
       linkTokenCreate: vi.fn().mockResolvedValue({
@@ -230,6 +231,12 @@ describe("Plaid Sandbox adapter", () => {
     });
     expect(result.rawCount).toBe(3);
     expect(result.pendingExcludedCount).toBe(1);
+    // Env-neutral provenance: the stamp must never say "Sandbox" (it rides into
+    // the UI and the assistant's context, and is wrong on a production sync).
+    for (const transaction of result.transactions) {
+      expect(transaction.uncertainty.confidenceReason).toMatch(/^Imported from Plaid\. /);
+      expect(transaction.uncertainty.confidenceReason).not.toMatch(/Sandbox/);
+    }
     expect(result.transactions).toMatchObject([
       {
         id: "plaid:transaction:tx-outflow",
@@ -311,6 +318,17 @@ describe("Plaid Sandbox adapter", () => {
 
     expect(transactionsGet).toHaveBeenCalledTimes(2);
     expect(result.rawCount).toBe(1);
+  });
+
+  it("surfaces an environment-neutral error message (never mentions Sandbox)", () => {
+    const error = toPlaidAdapterError(
+      { response: { status: 400, data: { error_code: "INVALID_ACCESS_TOKEN", request_id: "req-err" } } },
+      "TRANSACTIONS_GET_FAILED",
+    );
+    expect(error.safe.message).toBe("Plaid request failed.");
+    expect(error.safe.message).not.toMatch(/Sandbox/);
+    expect(error.safe.code).toBe("INVALID_ACCESS_TOKEN");
+    expect(error.safe.statusCode).toBe(400);
   });
 
   it("maps a conservative canonical snapshot without declaring total coverage by default", async () => {

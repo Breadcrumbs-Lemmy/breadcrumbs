@@ -79,7 +79,7 @@ export async function createLinkToken(
       country_codes: [CountryCode.Us],
       products: [Products.Transactions],
       user: {
-        client_user_id: input.clientUserId ?? "sandbox-local-user",
+        client_user_id: input.clientUserId ?? "breadcrumbs-user",
       },
       redirect_uri: config.redirectUri,
       webhook: config.webhook,
