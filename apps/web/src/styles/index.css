@@ -336,35 +336,54 @@
     opacity: 0;
     transform-origin: 50% 50%;
     will-change: transform, opacity;
-    /* Struck gold: a bright warm catchlight top-left ramping down to a dark
-       bronze edge. That highlight-to-shadow contrast is what reads as a rounded,
-       lit metal disc even at ~8px on screen. */
-    background: radial-gradient(
-      circle at 36% 30%,
-      #fff7db 0%,
-      #f7dd95 20%,
-      #e6ac52 48%,
-      #bd7a3b 74%,
-      #6f4218 100%
-    );
+    /* Struck gold with a milled (reeded) rim. The repeating-conic ticks are the
+       ridged edge of a coin — the single strongest "this is minted metal, not a
+       gold dot" cue at this size; they show only on the rim because the raised
+       inner field (::before) caps the centre. Under them a bright warm catchlight
+       top-left ramps to a dark bronze edge — the highlight-to-shadow contrast
+       that reads as a rounded, lit disc even at ~8px. */
+    background:
+      repeating-conic-gradient(
+        from 0deg,
+        rgba(84, 50, 14, 0.55) 0deg 3.6deg,
+        rgba(255, 245, 212, 0.4) 3.6deg 7.2deg
+      ),
+      radial-gradient(
+        circle at 36% 30%,
+        #fff7db 0%,
+        #f7dd95 20%,
+        #e6ac52 48%,
+        #bd7a3b 74%,
+        #6f4218 100%
+      );
     box-shadow:
       inset 0 0.5px 0.6px rgba(255, 247, 220, 0.75),
       inset 0 -1px 1.4px rgba(74, 44, 16, 0.6),
-      inset 0 0 0 0.6px rgba(120, 72, 24, 0.5),
+      inset 0 0 0 0.6px rgba(120, 72, 24, 0.6),
       0 1px 2px rgba(20, 16, 10, 0.32);
   }
-  /* The raised inner field of the strike, a hair in from the milled rim. */
+  /* The raised inner field — the coin's struck "table", a step in from the milled
+     rim. A shade lighter than the blank and opaque enough to cap the reeding at
+     the centre, with its own catchlight, a dark inset ring that cuts the step
+     down to the rim, and a hair of drop so the field reads as raised metal. That
+     two-tier profile (reeded rim → stepped field) is what separates a coin from a
+     plain disc. */
   .logo-drop::before {
     content: "";
     position: absolute;
-    inset: 16%;
+    inset: 15%;
     border-radius: 50%;
     background: radial-gradient(
       circle at 42% 34%,
-      rgba(255, 246, 214, 0.55),
-      rgba(150, 96, 30, 0.04) 72%
+      #ffefc2 0%,
+      #f2d081 36%,
+      #d29c4a 74%,
+      #a9762f 100%
     );
-    box-shadow: inset 0 0 0 0.5px rgba(110, 66, 20, 0.42);
+    box-shadow:
+      inset 0 0.6px 0.5px rgba(255, 247, 220, 0.65),
+      inset 0 0 0 0.5px rgba(94, 56, 18, 0.6),
+      0 0.5px 0.5px rgba(52, 30, 10, 0.4);
   }
   /* A hard specular glint over the top-left, fixed to the face so it swings
      round with the coin as it tumbles. */
