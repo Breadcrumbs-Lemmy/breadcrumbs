@@ -210,3 +210,11 @@ function dollarsToCents(amount: number): number {
 function plaidEntityId(kind: "account" | "transaction", plaidId: string): string {
   return `plaid:${kind}:${plaidId}`;
 }
+
+/** The internal id for a Plaid transaction — the same namespacing
+ *  `mapPlaidTransaction` applies. Used to translate a `/transactions/sync`
+ *  `removed` entry (which carries only the raw Plaid transaction_id) into the id
+ *  the store keys on, so a delete matches the row it should. */
+export function plaidTransactionEntityId(plaidTransactionId: string): string {
+  return plaidEntityId("transaction", plaidTransactionId);
+}

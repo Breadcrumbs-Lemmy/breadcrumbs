@@ -22,6 +22,7 @@ export {
   getAccountsAndBalances,
   getCanonicalSnapshot,
   getTransactions,
+  syncTransactions,
 } from "./plaid/adapter";
 export { createPlaidClient } from "./plaid/client";
 export { FieldCipher, FieldCipherKeyError, loadFieldCipher } from "./crypto/field-cipher";
@@ -60,6 +61,7 @@ export type {
   PlaidConnectionResult,
   PlaidLinkTokenResult,
   PlaidSnapshotResult,
+  PlaidSyncResult,
   PlaidTransactionsResult,
 } from "./plaid/adapter";
 export type { PlaidConfig } from "./plaid/config";

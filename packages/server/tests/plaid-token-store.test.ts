@@ -92,6 +92,24 @@ describe("FilePlaidTokenStore", () => {
     expect(loaded?.lastSyncedAt).toBe(syncedAt);
   });
 
+  it("persists the /transactions/sync cursor so the next sync resumes from it", async () => {
+    const store = new FilePlaidTokenStore(filePath);
+    const saved = await store.save({ userId: "usr_alice", itemId: "item-a", accessToken: "tok-a" });
+    expect(saved.transactionsCursor).toBeUndefined();
+
+    await store.markSynced(saved.connectionId, "2026-08-08T12:00:00.000Z", "cursor-page-1");
+
+    const afterRestart = new FilePlaidTokenStore(filePath);
+    const loaded = await afterRestart.get(saved.connectionId);
+    expect(loaded?.transactionsCursor).toBe("cursor-page-1");
+
+    // A later markSynced with no cursor argument leaves the stored cursor intact.
+    await afterRestart.markSynced(saved.connectionId, "2026-08-09T12:00:00.000Z");
+    const again = await new FilePlaidTokenStore(filePath).get(saved.connectionId);
+    expect(again?.transactionsCursor).toBe("cursor-page-1");
+    expect(again?.lastSyncedAt).toBe("2026-08-09T12:00:00.000Z");
+  });
+
   it("deletes a connection durably", async () => {
     const store = new FilePlaidTokenStore(filePath);
     const saved = await store.save({ userId: "usr_alice", itemId: "item-a", accessToken: "tok-a" });

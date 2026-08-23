@@ -34,7 +34,7 @@ function txn(id: string, amountCents: number, merchantName = "Coffee Shop", post
     amountCents,
     currency: "USD",
     category: "coffee_snacks",
-    flowType: "expense",
+    flowType: "SPEND",
     freshness: { status: "fresh", asOf: "2026-08-01T00:00:00Z", source: "plaid", ageHours: 0, warnings: [] },
     uncertainty: { confidence: 1, confidenceReason: "Imported from Plaid.", isEstimated: false },
     source: "plaid",

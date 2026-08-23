@@ -15,13 +15,22 @@ export type StoredPlaidConnection = {
   institutionName?: string;
   createdAt: string;
   lastSyncedAt?: string;
+  /** Opaque Plaid `/transactions/sync` cursor. Absent until the first sync, when
+   *  a full history is pulled and the returned `next_cursor` is stored; every
+   *  later sync resumes from here and receives only the delta. Not a secret (it
+   *  encodes no account data), so it rides alongside the encrypted access token
+   *  in plaintext. */
+  transactionsCursor?: string;
 };
 
 export interface PlaidTokenStore {
   save(input: { userId?: string; itemId: string; accessToken: string; institutionName?: string }): Promise<StoredPlaidConnection>;
   get(connectionId: string): Promise<StoredPlaidConnection | undefined>;
   listForUser(userId: string): Promise<StoredPlaidConnection[]>;
-  markSynced(connectionId: string, at: string): Promise<void>;
+  /** Stamp the last-synced time, and — when a sync ran — persist the new
+   *  `/transactions/sync` cursor so the next sync resumes from it. Passing
+   *  `undefined` for the cursor leaves the stored one untouched. */
+  markSynced(connectionId: string, at: string, cursor?: string): Promise<void>;
   delete(connectionId: string): Promise<void>;
   /** Remove every connection (and its stored access token) belonging to a user.
    *  Used when an account is deleted, so no orphaned bank credential survives. */
@@ -58,9 +67,11 @@ export class InMemoryPlaidTokenStore implements PlaidTokenStore {
     return [...this.connections.values()].filter((c) => c.userId === userId).map((c) => ({ ...c }));
   }
 
-  async markSynced(connectionId: string, at: string): Promise<void> {
+  async markSynced(connectionId: string, at: string, cursor?: string): Promise<void> {
     const found = this.connections.get(connectionId);
-    if (found) found.lastSyncedAt = at;
+    if (!found) return;
+    found.lastSyncedAt = at;
+    if (cursor !== undefined) found.transactionsCursor = cursor;
   }
 
   async delete(connectionId: string): Promise<void> {
@@ -131,13 +142,14 @@ export class FilePlaidTokenStore implements PlaidTokenStore {
     return (await this.store.all()).filter((c) => c.userId === userId).map((c) => this.decode(c));
   }
 
-  async markSynced(connectionId: string, at: string): Promise<void> {
+  async markSynced(connectionId: string, at: string, cursor?: string): Promise<void> {
     const found = await this.store.get(connectionId);
     if (!found) return;
     // Round-trip through decode/encode so a legacy plaintext record is migrated
     // to ciphertext on this write, and the token is never left in plaintext.
     const connection = this.decode(found);
     connection.lastSyncedAt = at;
+    if (cursor !== undefined) connection.transactionsCursor = cursor;
     await this.store.put(connectionId, this.encode(connection));
   }
 
