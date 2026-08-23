@@ -1,52 +1,30 @@
 /**
- * Calendar grid helpers for the Spending page's SpendingCalendar.
+ * Calendar helpers for the Spending page's collapsible date-range picker.
  *
- * Pure date/grid utilities — no aggregation, no API calls, no React.
- * All date arithmetic is in UTC to avoid timezone drift.
+ * Pure date utilities — no aggregation, no API calls, no React. All date
+ * arithmetic is in UTC to avoid timezone drift.
  *
- * The calendar is a single, fixed grid that zooms with the Week/Month/Year
- * toggle rather than a long scrolling list:
- *   • Year  → a grid of years           (yearCells)
- *   • Month → a 12-month grid of a year (monthCells)
- *   • Week  → the day/week grid of one month (weekRows)
- *
- * Each cell carries a clamped [startDate, endDate] window so a contiguous
- * selection maps directly to a summary span, and is marked "covered" (data
- * already synced) or "ghost" (within Plaid's reach but not yet pulled).
+ * The Spending calendar is a single, consistent month day-grid (independent of
+ * the Week/Month/Year filter). The user opens it from a button, navigates
+ * month to month, and picks a contiguous day range; a day carries a "covered"
+ * flag (data already synced) so unsynced spans can offer a Plaid backfill.
  */
 
-export type Grain = "week" | "month" | "year";
-
-/** A selectable calendar cell (a year, a month, or a week-row). */
-export type Cell = {
-  /** Stable, sortable key used as React key and for selection tracking. */
-  key: string;
-  /** Short in-grid label. E.g. "2025", "Aug", "3–9". */
-  label: string;
-  /** First day of the cell's window, YYYY-MM-DD (UTC), clamped to [floor,today]. */
-  startDate: string;
-  /** Last day of the cell's window, YYYY-MM-DD (UTC), clamped to [floor,today]. */
-  endDate: string;
-  /** False when the cell falls entirely outside [floor, today] — rendered
-   *  disabled (out of Plaid's reach or in the future). */
-  selectable: boolean;
-};
-
-/** One day inside a week-row, for rendering the month's day grid. */
+/** One day cell in the month grid. */
 export type DayCell = {
   /** Day-of-month number (1–31). */
   day: number;
   /** ISO date, YYYY-MM-DD (UTC). */
   date: string;
-  /** True when the day belongs to the focused month (vs a spill-over day from
+  /** True when the day belongs to the rendered month (vs a spill-over day from
    *  the adjacent month shown to complete the Sun–Sat row). */
   inMonth: boolean;
-  /** False when the day is outside [floor, today]. */
+  /** False when the day is outside [floor, today] — not selectable. */
   selectable: boolean;
 };
 
-/** A week-row cell plus its seven day cells for the calendar grid. */
-export type WeekRow = Cell & { days: DayCell[] };
+/** A named quick-range preset. */
+export type PresetRange = { label: string; from: string; to: string };
 
 // ---------------------------------------------------------------------------
 // Internal date helpers (UTC-only)
@@ -59,13 +37,6 @@ function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Clamp an ISO date string into the inclusive [lo, hi] window. */
-function clampStr(value: string, lo: string, hi: string): string {
-  if (value < lo) return lo;
-  if (value > hi) return hi;
-  return value;
-}
-
 const SHORT_MONTHS: readonly string[] = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -75,80 +46,25 @@ export function shortMonth(monthIndex: number): string {
   return SHORT_MONTHS[monthIndex] ?? "";
 }
 
-/** Full "August 2026" style label for a focused month. */
+/** Full "August 2026" style title for a focused month. */
 export function monthTitle(year: number, month: number): string {
   return `${shortMonth(month)} ${year}`;
 }
 
 // ---------------------------------------------------------------------------
-// Grid builders
+// Month grid
 
 /**
- * Every year from Plaid's floor to today, oldest-first. The floor year's cell
- * starts at `floor`; the current year's cell ends at `today`.
+ * Lay out one month as Sun–Sat rows of day cells. Spill-over days from the
+ * adjacent months are included (flagged `inMonth: false`) to complete the first
+ * and last rows. Days outside [floor, today] are `selectable: false`.
  */
-export function yearCells(floor: string, today: string): Cell[] {
-  const floorYear = toUTCDate(floor).getUTCFullYear();
-  const todayYear = toUTCDate(today).getUTCFullYear();
-  const cells: Cell[] = [];
-
-  for (let year = floorYear; year <= todayYear; year++) {
-    const rawStart = `${year}-01-01`;
-    const rawEnd = `${year}-12-31`;
-    cells.push({
-      key: String(year),
-      label: String(year),
-      startDate: clampStr(rawStart, floor, today),
-      endDate: clampStr(rawEnd, floor, today),
-      selectable: true,
-    });
-  }
-
-  return cells;
-}
-
-/**
- * The 12 months of `year` (Jan–Dec). Months entirely outside [floor, today]
- * are returned with `selectable: false` so the grid stays a fixed 12 cells but
- * out-of-reach / future months render disabled.
- */
-export function monthCells(year: number, floor: string, today: string): Cell[] {
-  const cells: Cell[] = [];
-
-  for (let month = 0; month < 12; month++) {
-    const mm = String(month + 1).padStart(2, "0");
-    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    const rawStart = `${year}-${mm}-01`;
-    const rawEnd = `${year}-${mm}-${String(lastDay).padStart(2, "0")}`;
-    // Selectable when the month's window overlaps [floor, today].
-    const selectable = rawStart <= today && rawEnd >= floor;
-
-    cells.push({
-      key: `${year}-${mm}`,
-      label: shortMonth(month),
-      startDate: clampStr(rawStart, floor, today),
-      endDate: clampStr(rawEnd, floor, today),
-      selectable,
-    });
-  }
-
-  return cells;
-}
-
-/**
- * The week-rows of one month, as a Sun–Sat calendar grid. Each row spans seven
- * day cells (spill-over days from adjacent months included to complete the
- * row), but the row's selectable [startDate, endDate] is clamped to the month
- * AND to [floor, today] so selecting a week never pulls a neighbouring month's
- * spending. Rows fully outside [floor, today] are `selectable: false`.
- */
-export function weekRows(
+export function monthGrid(
   year: number,
   month: number,
   floor: string,
   today: string,
-): WeekRow[] {
-  const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+): DayCell[][] {
   const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const monthEnd = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
@@ -157,48 +73,21 @@ export function weekRows(
   const cursor = new Date(Date.UTC(year, month, 1));
   cursor.setUTCDate(cursor.getUTCDate() - firstDow);
 
-  const rows: WeekRow[] = [];
-
-  // Stop once a row begins after the month ends.
+  const rows: DayCell[][] = [];
   while (toDateStr(cursor) <= monthEnd) {
-    const days: DayCell[] = [];
+    const row: DayCell[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(cursor);
       d.setUTCDate(cursor.getUTCDate() + i);
       const date = toDateStr(d);
-      const inMonth = d.getUTCMonth() === month && d.getUTCFullYear() === year;
-      days.push({
+      row.push({
         day: d.getUTCDate(),
         date,
-        inMonth,
+        inMonth: d.getUTCMonth() === month && d.getUTCFullYear() === year,
         selectable: date >= floor && date <= today,
       });
     }
-
-    // Row window clamped to the month, then to [floor, today].
-    const rowStart = days[0]!.date;
-    const rowEnd = days[6]!.date;
-    const inMonthStart = rowStart < monthStart ? monthStart : rowStart;
-    const inMonthEnd = rowEnd > monthEnd ? monthEnd : rowEnd;
-    const clampedStart = clampStr(inMonthStart, floor, today);
-    const clampedEnd = clampStr(inMonthEnd, floor, today);
-    const selectable = inMonthStart <= today && inMonthEnd >= floor;
-
-    // Label from the in-month day numbers, e.g. "1–2" or "3–9".
-    const inMonthDays = days.filter((d) => d.inMonth).map((d) => d.day);
-    const firstNum = inMonthDays[0]!;
-    const lastNum = inMonthDays[inMonthDays.length - 1]!;
-    const label = firstNum === lastNum ? `${firstNum}` : `${firstNum}–${lastNum}`;
-
-    rows.push({
-      key: `w-${rowStart}`,
-      label,
-      startDate: clampedStart,
-      endDate: clampedEnd,
-      selectable,
-      days,
-    });
-
+    rows.push(row);
     cursor.setUTCDate(cursor.getUTCDate() + 7);
   }
 
@@ -206,64 +95,81 @@ export function weekRows(
 }
 
 // ---------------------------------------------------------------------------
+// Coverage
 
 /**
- * True when the cell's date range overlaps the [earliestSynced, latestSynced]
- * window. A null boundary means no data synced — always returns false.
+ * True when a date range overlaps the [earliestSynced, latestSynced] window.
+ * A null boundary means no data synced — always returns false. For a single
+ * day, pass the same date as both bounds.
  *
- * Overlap test: cell.startDate ≤ latestSynced AND cell.endDate ≥ earliestSynced.
+ * Overlap test: startDate ≤ latestSynced AND endDate ≥ earliestSynced.
  */
 export function isCovered(
-  cell: { startDate: string; endDate: string },
+  range: { startDate: string; endDate: string },
   earliestSynced: string | null,
   latestSynced: string | null,
 ): boolean {
   if (!earliestSynced || !latestSynced) return false;
-  return cell.startDate <= latestSynced && cell.endDate >= earliestSynced;
+  return range.startDate <= latestSynced && range.endDate >= earliestSynced;
 }
 
-/**
- * Derive the {from, to} date span for a contiguous [startIndex, endIndex]
- * selection into a cells array. Automatically orders lo ≤ hi.
- */
-export function spanFromCells(
-  cells: Array<{ startDate: string; endDate: string }>,
-  startIndex: number,
-  endIndex: number,
-): { from: string; to: string } {
-  const lo = Math.min(startIndex, endIndex);
-  const hi = Math.max(startIndex, endIndex);
-  return {
-    from: cells[lo]?.startDate ?? "",
-    to: cells[hi]?.endDate ?? "",
-  };
-}
-
-/**
- * Pick a sensible default selection index for a freshly-built grid: the most
- * recent cell that has synced data, or — when nothing is covered — the most
- * recent selectable cell. Returns -1 for an empty grid.
- */
-export function defaultCellIndex(
-  cells: Cell[],
+/** True when any day in the inclusive [from, to] range is NOT yet synced. */
+export function rangeHasUnsynced(
+  from: string,
+  to: string,
   earliestSynced: string | null,
   latestSynced: string | null,
-): number {
-  if (cells.length === 0) return -1;
-  for (let i = cells.length - 1; i >= 0; i--) {
-    if (cells[i]!.selectable && isCovered(cells[i]!, earliestSynced, latestSynced)) {
-      return i;
-    }
-  }
-  for (let i = cells.length - 1; i >= 0; i--) {
-    if (cells[i]!.selectable) return i;
-  }
-  return cells.length - 1;
+): boolean {
+  if (!from || !to) return false;
+  // Nothing synced at all → the whole range is unsynced.
+  if (!earliestSynced || !latestSynced) return true;
+  // A day is uncovered when it falls before the synced window or after it.
+  return from < earliestSynced || to > latestSynced;
 }
+
+// ---------------------------------------------------------------------------
+// Range formatting + presets
+
+/** Human label for a selected range, e.g. "Aug 5, 2026" or "Jun 1 – Aug 23, 2026". */
+export function formatRange(from: string, to: string): string {
+  if (!from || !to) return "";
+  const fMonth = shortMonth(Number(from.slice(5, 7)) - 1);
+  const fDay = Number(from.slice(8, 10));
+  const fYear = from.slice(0, 4);
+  const tMonth = shortMonth(Number(to.slice(5, 7)) - 1);
+  const tDay = Number(to.slice(8, 10));
+  const tYear = to.slice(0, 4);
+
+  if (from === to) return `${fMonth} ${fDay}, ${fYear}`;
+  if (fYear === tYear) return `${fMonth} ${fDay} – ${tMonth} ${tDay}, ${tYear}`;
+  return `${fMonth} ${fDay}, ${fYear} – ${tMonth} ${tDay}, ${tYear}`;
+}
+
+/**
+ * Quick-range presets for looking back, each clamped to Plaid's floor. All end
+ * at today. "Last N days" is inclusive of today (N days total).
+ */
+export function presetRanges(floor: string, today: string): PresetRange[] {
+  const back = (days: number): string => {
+    const d = toUTCDate(today);
+    d.setUTCDate(d.getUTCDate() - (days - 1));
+    return toDateStr(d);
+  };
+  const clampFloor = (s: string): string => (s < floor ? floor : s);
+  const yearStart = `${today.slice(0, 4)}-01-01`;
+
+  return [
+    { label: "Last 30 days", from: clampFloor(back(30)), to: today },
+    { label: "Last 90 days", from: clampFloor(back(90)), to: today },
+    { label: "This year", from: clampFloor(yearStart), to: today },
+  ];
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Convert a backend spending-series key (returned by `fetchSpendingSeries`) to
- * its ISO start date so series points can be filtered to a selection date range.
+ * its ISO start date so series points can be filtered to a selected range.
  *
  * Handles:
  *   "2026-08"  → "2026-08-01"   (month)

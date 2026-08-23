@@ -13,15 +13,13 @@
  * deriving anything financial.
  *
  * Coverage Calendar:
- *   For week/month/year grains the old period-Chip row is replaced by a
- *   SpendingCalendar — one fixed calendar grid that zooms with the toggle
- *   (years → a year's months → a month's weeks) rather than a long list. Cells
- *   with synced data render solid; cells within Plaid's ~24-month reach but not
- *   yet pulled render as "ghost". The user selects a contiguous range at the
- *   current zoom; if it includes ghost cells (and a bank is connected) a
- *   backfill CTA appears. The calendar owns its own view and selection and
- *   reports the resolved {from, to} span up here. Statement periods keep their
- *   original Chip-based navigation.
+ *   The Week/Month/Year toggle drives the default view — the latest period,
+ *   with its month-over-month comparison intact. Independent of that toggle, a
+ *   single collapsible SpendingCalendar button lets the user look back: opening
+ *   it reveals a day-grid range picker (one consistent calendar, not tied to the
+ *   grain) for selecting any contiguous range and pulling older Plaid history.
+ *   Applying a range overrides the default view via the span path; Clear returns
+ *   to the latest period. Statement periods keep their original Chip navigation.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SpendingSummary } from "@ai-fin-os/core";
@@ -40,14 +38,13 @@ import {
 } from "../services/api";
 import { PERIOD_LABELS, isPeriodSupported, type PeriodKind } from "../model/period";
 import { seriesKeyToStartDate } from "../model/calendar";
-import type { Grain } from "../model/calendar";
 import { useAssistantView } from "../services/assistant-scope";
 import { categoryColor } from "../model/category-color";
 import { formatMoney } from "../format/money";
 import { banksAndAccounts } from "../format/counts";
 import { Bar, Card, Chip, CountUpMoney, Delta, Segmented, SectionLabel } from "../components/ui";
 import { SpendingCalendar } from "../components/SpendingCalendar";
-import type { CalendarSpan, FocusSeed } from "../components/SpendingCalendar";
+import type { DateRange } from "../components/SpendingCalendar";
 import { LogoMark } from "../components/Logo";
 import { issuerLabel } from "../components/BankCard";
 
@@ -98,10 +95,9 @@ export function SpendingScreen({
 
   // --- Coverage Calendar state -------------------------------------------
   const [coverage, setCoverage] = useState<PlaidCoverage | null>(null);
-  /** The resolved {from,to} span the calendar last reported. */
-  const [span, setSpan] = useState<CalendarSpan | null>(null);
-  /** Seeds the calendar's focused year/month when zooming or drilling. */
-  const [focusSeed, setFocusSeed] = useState<FocusSeed | null>(null);
+  /** The applied custom {from,to} range, or null when showing the latest
+   *  period for the current grain. */
+  const [customRange, setCustomRange] = useState<DateRange | null>(null);
   /** True while a Plaid backfill POST is in flight. */
   const [backfilling, setBackfilling] = useState(false);
   /** Series points for the multi-bucket trend strip. */
@@ -145,8 +141,11 @@ export function SpendingScreen({
     };
   }, []);
 
-  // 3. Load summary for rail periods (week / month / year) using the calendar's
-  //    reported {from, to} span.
+  // 3. Load summary for rail periods (week / month / year).
+  //    • Default (no custom range) → the latest period via `loadSpending`, with
+  //      its month-over-month comparison intact.
+  //    • Custom range applied from the calendar → the span path, which
+  //      aggregates [from, to] with comparison disabled by design.
   useEffect(() => {
     if (!isRailPeriod) return;
     if (!supported(period)) {
@@ -154,54 +153,66 @@ export function SpendingScreen({
       datasetRef.current = null;
       return;
     }
-    if (span === null) return;
-
-    const { from, to } = span;
-    if (!from || !to) return;
-
-    const datasetKey = `${period}|${from}|${to}`;
-    const sameDataset = datasetRef.current === datasetKey;
-    datasetRef.current = datasetKey;
-
-    if (sameDataset) setRefreshing(true);
-    else setOutcome(null);
 
     const scopedAccount = accountId ?? undefined;
     let cancelled = false;
 
-    void fetchSpendingSummary({ period, from, to, accountId: scopedAccount }).then((result) => {
-      if (cancelled) return;
-      setRefreshing(false);
+    if (customRange) {
+      const { from, to } = customRange;
+      if (!from || !to) return;
 
-      if (result.kind === "error") {
-        setOutcome({ kind: "error", message: result.message });
-        return;
-      }
-      if (result.kind === "unauthenticated") {
-        setOutcome({ kind: "error", message: "Authentication required." });
-        return;
-      }
-      if (result.kind === "invalid" || result.kind === "rejected") {
-        setOutcome({ kind: "error", message: "That request was rejected." });
-        return;
-      }
+      const datasetKey = `${period}|${from}|${to}|${scopedAccount ?? ""}`;
+      const sameDataset = datasetRef.current === datasetKey;
+      datasetRef.current = datasetKey;
+      if (sameDataset) setRefreshing(true);
+      else setOutcome(null);
 
-      const summary = result.data;
-      if (
-        summary.totalOutflowCents === 0 &&
-        summary.totalInflowCents === 0 &&
-        summary.accountTotals.length === 0
-      ) {
-        setOutcome({ kind: "empty" });
-        return;
-      }
-      setOutcome({ kind: "ready", summary, available: [] });
-    });
+      void fetchSpendingSummary({ period, from, to, accountId: scopedAccount }).then((result) => {
+        if (cancelled) return;
+        setRefreshing(false);
+
+        if (result.kind === "error") {
+          setOutcome({ kind: "error", message: result.message });
+          return;
+        }
+        if (result.kind === "unauthenticated") {
+          setOutcome({ kind: "error", message: "Authentication required." });
+          return;
+        }
+        if (result.kind === "invalid" || result.kind === "rejected") {
+          setOutcome({ kind: "error", message: "That request was rejected." });
+          return;
+        }
+
+        const summary = result.data;
+        if (
+          summary.totalOutflowCents === 0 &&
+          summary.totalInflowCents === 0 &&
+          summary.accountTotals.length === 0
+        ) {
+          setOutcome({ kind: "empty" });
+          return;
+        }
+        setOutcome({ kind: "ready", summary, available: [] });
+      });
+    } else {
+      const datasetKey = `${period}|latest|${scopedAccount ?? ""}`;
+      const sameDataset = datasetRef.current === datasetKey;
+      datasetRef.current = datasetKey;
+      if (sameDataset) setRefreshing(true);
+      else setOutcome(null);
+
+      void loadSpending(period, undefined, scopedAccount).then((next) => {
+        if (cancelled) return;
+        setOutcome(next);
+        setRefreshing(false);
+      });
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [isRailPeriod, period, span, accountId, supported]);
+  }, [isRailPeriod, period, customRange, accountId, supported]);
 
   // 4. Load summary for statement periods (original logic preserved).
   useEffect(() => {
@@ -240,15 +251,15 @@ export function SpendingScreen({
     }
   }, [outcome, accountId, period]);
 
-  // 6. Load per-sub-period trend data when the span covers more than one unit.
+  // 6. Load per-sub-period trend data when a custom range is applied — the
+  //    strip only reads as a trend across more than one sub-period.
   useEffect(() => {
-    if (!span || !span.multi) {
+    if (!isRailPeriod || !customRange) {
       setTrendPoints(null);
       return;
     }
-    if (!isRailPeriod) return;
 
-    const { from, to } = span;
+    const { from, to } = customRange;
     if (!from || !to) return;
 
     let cancelled = false;
@@ -260,13 +271,14 @@ export function SpendingScreen({
         const start = seriesKeyToStartDate(p.key);
         return start !== null && start >= from && start <= to;
       });
-      setTrendPoints(filtered.length > 0 ? filtered : null);
+      // Only a multi-bucket range reads as a trend.
+      setTrendPoints(filtered.length > 1 ? filtered : null);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [isRailPeriod, period, span]);
+  }, [isRailPeriod, period, customRange]);
 
   // ---- Backfill handler -------------------------------------------------------
 
@@ -336,8 +348,8 @@ export function SpendingScreen({
       : null,
   );
 
-  // Whether the span covers more than one unit (shows the trend strip).
-  const isMultiBucket = span?.multi ?? false;
+  // Whether the trend strip has multi-bucket data to show.
+  const isMultiBucket = (trendPoints?.length ?? 0) > 1;
 
   return (
     <>
@@ -353,9 +365,8 @@ export function SpendingScreen({
                 setMonthKey(null);
                 setExpanded(false);
                 setAccountId(null);
-                // Manual toggle → let the calendar pick its own default focus.
-                setFocusSeed(null);
-                setSpan(null);
+                // Switching grain returns to that grain's latest period.
+                setCustomRange(null);
               }}
               options={PERIODS.map((p) => ({
                 value: p,
@@ -385,35 +396,22 @@ export function SpendingScreen({
           )}
         </div>
 
-        {/* Coverage Calendar — a zooming grid, replaces the Chip row for
-            week/month/year. Statement keeps its own Chip navigation above. */}
+        {/* One calendar object — a collapsible day-range picker, independent of
+            the grain. Applying a range overrides the latest-period default.
+            Statement keeps its own Chip navigation above. */}
         {isRailPeriod && (
           <SpendingCalendar
-            unit={period as Grain}
             coverage={coverage}
-            focusSeed={focusSeed}
-            onSelect={(next) => {
-              setSpan(next);
+            value={customRange}
+            onApply={(range) => {
+              setCustomRange(range);
               setAccountId(null);
               setExpanded(false);
             }}
-            onDrillToWeeks={(year, month) => {
-              setFocusSeed({ year, month });
-              setPeriod("week");
-              setExpanded(false);
+            onClear={() => {
+              setCustomRange(null);
               setAccountId(null);
-            }}
-            onZoomToMonths={(year) => {
-              setFocusSeed({ year });
-              setPeriod("month");
               setExpanded(false);
-              setAccountId(null);
-            }}
-            onZoomToYears={() => {
-              setFocusSeed(null);
-              setPeriod("year");
-              setExpanded(false);
-              setAccountId(null);
             }}
             onBackfill={handleBackfill}
             backfilling={backfilling}
