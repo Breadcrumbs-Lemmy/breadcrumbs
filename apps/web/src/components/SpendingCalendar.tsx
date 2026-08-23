@@ -262,7 +262,7 @@ export function SpendingCalendar({
                   className="rounded-pill border px-2.5 py-1 text-meta transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   style={
                     active
-                      ? { background: "var(--ink)", color: "var(--text-inverse)", borderColor: "var(--ink)" }
+                      ? { background: "var(--text-primary)", color: "var(--text-inverse)", borderColor: "var(--text-primary)" }
                       : { borderColor: "var(--border-strong)", color: "var(--text-secondary)" }
                   }
                 >
@@ -495,7 +495,7 @@ function RangeCell({
     style = { background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", opacity: 0.4 };
   } else if (isEndpoint || inRange) {
     className = isEndpoint ? "cursor-pointer text-ink-inverse" : "cursor-pointer text-ink";
-    style = isEndpoint ? { background: "var(--ink)" } : { background: "var(--surface-sunken)" };
+    style = isEndpoint ? { background: "var(--text-primary)" } : { background: "var(--surface-sunken)" };
   } else if (covered) {
     className = "cursor-pointer text-ink hover:bg-surface-sunken";
     style = { background: "var(--surface-raised)", border: "1px solid var(--border-subtle)" };
@@ -555,7 +555,7 @@ function DayButton({
     style = { opacity: cell.inMonth ? 0.35 : 0.18 };
   } else if (isEndpoint) {
     className = "cursor-pointer font-medium text-ink-inverse";
-    style = { background: "var(--ink)" };
+    style = { background: "var(--text-primary)" };
   } else if (inRange) {
     className = "cursor-pointer text-ink";
     style = { background: "var(--surface-sunken)" };
