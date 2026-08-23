@@ -587,6 +587,9 @@ export type PlaidConnection = {
   institutionName: string;
   createdAt: string;
   lastSyncedAt?: string;
+  /** Set by the server when Plaid reported the bank login is broken and needs
+   *  Link re-run to repair it. The token is intact; only the login lapsed. */
+  reauthRequired?: boolean;
 };
 
 /** `GET /api/plaid/connections` — list all Plaid bank connections. */

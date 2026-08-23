@@ -21,16 +21,30 @@ export type StoredPlaidConnection = {
    *  encodes no account data), so it rides alongside the encrypted access token
    *  in plaintext. */
   transactionsCursor?: string;
+  /** Set when Plaid tells us the bank login is broken (`ITEM_LOGIN_REQUIRED`,
+   *  pending expiration) — the access token is intact but the user must re-run
+   *  Link to repair it. Surfaced to the UI so it can prompt, and cleared
+   *  automatically the next time a sync succeeds (proof the login works again). */
+  reauthRequired?: boolean;
 };
 
 export interface PlaidTokenStore {
   save(input: { userId?: string; itemId: string; accessToken: string; institutionName?: string }): Promise<StoredPlaidConnection>;
   get(connectionId: string): Promise<StoredPlaidConnection | undefined>;
   listForUser(userId: string): Promise<StoredPlaidConnection[]>;
+  /** Every connection for a Plaid `item_id`. A webhook names the item, not our
+   *  connection id, so this is how an inbound webhook maps to what to act on.
+   *  Normally one connection per item, but returns a list so re-links can't be
+   *  silently skipped. */
+  listByItemId(itemId: string): Promise<StoredPlaidConnection[]>;
   /** Stamp the last-synced time, and — when a sync ran — persist the new
    *  `/transactions/sync` cursor so the next sync resumes from it. Passing
-   *  `undefined` for the cursor leaves the stored one untouched. */
+   *  `undefined` for the cursor leaves the stored one untouched. A successful
+   *  sync also clears any `reauthRequired` flag: the token demonstrably works. */
   markSynced(connectionId: string, at: string, cursor?: string): Promise<void>;
+  /** Flag (or clear) that the bank login needs repairing via Plaid Link. Set on
+   *  an `ITEM_LOGIN_REQUIRED`-class webhook, cleared on a repair webhook. */
+  setReauthRequired(connectionId: string, required: boolean): Promise<void>;
   delete(connectionId: string): Promise<void>;
   /** Remove every connection (and its stored access token) belonging to a user.
    *  Used when an account is deleted, so no orphaned bank credential survives. */
@@ -67,11 +81,24 @@ export class InMemoryPlaidTokenStore implements PlaidTokenStore {
     return [...this.connections.values()].filter((c) => c.userId === userId).map((c) => ({ ...c }));
   }
 
+  async listByItemId(itemId: string): Promise<StoredPlaidConnection[]> {
+    return [...this.connections.values()].filter((c) => c.itemId === itemId).map((c) => ({ ...c }));
+  }
+
   async markSynced(connectionId: string, at: string, cursor?: string): Promise<void> {
     const found = this.connections.get(connectionId);
     if (!found) return;
     found.lastSyncedAt = at;
     if (cursor !== undefined) found.transactionsCursor = cursor;
+    // A successful sync proves the login works, so it retires any re-auth flag.
+    delete found.reauthRequired;
+  }
+
+  async setReauthRequired(connectionId: string, required: boolean): Promise<void> {
+    const found = this.connections.get(connectionId);
+    if (!found) return;
+    if (required) found.reauthRequired = true;
+    else delete found.reauthRequired;
   }
 
   async delete(connectionId: string): Promise<void> {
@@ -142,6 +169,10 @@ export class FilePlaidTokenStore implements PlaidTokenStore {
     return (await this.store.all()).filter((c) => c.userId === userId).map((c) => this.decode(c));
   }
 
+  async listByItemId(itemId: string): Promise<StoredPlaidConnection[]> {
+    return (await this.store.all()).filter((c) => c.itemId === itemId).map((c) => this.decode(c));
+  }
+
   async markSynced(connectionId: string, at: string, cursor?: string): Promise<void> {
     const found = await this.store.get(connectionId);
     if (!found) return;
@@ -150,6 +181,17 @@ export class FilePlaidTokenStore implements PlaidTokenStore {
     const connection = this.decode(found);
     connection.lastSyncedAt = at;
     if (cursor !== undefined) connection.transactionsCursor = cursor;
+    // A successful sync proves the login works, so it retires any re-auth flag.
+    delete connection.reauthRequired;
+    await this.store.put(connectionId, this.encode(connection));
+  }
+
+  async setReauthRequired(connectionId: string, required: boolean): Promise<void> {
+    const found = await this.store.get(connectionId);
+    if (!found) return;
+    const connection = this.decode(found);
+    if (required) connection.reauthRequired = true;
+    else delete connection.reauthRequired;
     await this.store.put(connectionId, this.encode(connection));
   }
 

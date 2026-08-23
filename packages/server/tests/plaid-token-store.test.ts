@@ -110,6 +110,32 @@ describe("FilePlaidTokenStore", () => {
     expect(again?.lastSyncedAt).toBe("2026-08-09T12:00:00.000Z");
   });
 
+  it("looks a connection up by its Plaid item id (how a webhook finds it)", async () => {
+    const store = new FilePlaidTokenStore(filePath);
+    const saved = await store.save({ userId: "usr_alice", itemId: "item-xyz", accessToken: "tok-a" });
+    await store.save({ userId: "usr_bob", itemId: "item-other", accessToken: "tok-b" });
+
+    const reader = new FilePlaidTokenStore(filePath);
+    const byItem = await reader.listByItemId("item-xyz");
+    expect(byItem.map((c) => c.connectionId)).toEqual([saved.connectionId]);
+    expect(byItem[0]?.accessToken).toBe("tok-a");
+    expect(await reader.listByItemId("item-missing")).toEqual([]);
+  });
+
+  it("flags re-auth durably and clears it on the next successful sync", async () => {
+    const store = new FilePlaidTokenStore(filePath);
+    const saved = await store.save({ userId: "usr_alice", itemId: "item-a", accessToken: "tok-a" });
+
+    await store.setReauthRequired(saved.connectionId, true);
+    expect((await new FilePlaidTokenStore(filePath).get(saved.connectionId))?.reauthRequired).toBe(true);
+
+    // A sync that succeeds is proof the login works again, so it retires the flag.
+    await store.markSynced(saved.connectionId, "2026-08-09T00:00:00.000Z", "cursor-1");
+    const after = await new FilePlaidTokenStore(filePath).get(saved.connectionId);
+    expect(after?.reauthRequired).toBeUndefined();
+    expect(after?.transactionsCursor).toBe("cursor-1");
+  });
+
   it("deletes a connection durably", async () => {
     const store = new FilePlaidTokenStore(filePath);
     const saved = await store.save({ userId: "usr_alice", itemId: "item-a", accessToken: "tok-a" });

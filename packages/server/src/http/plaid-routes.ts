@@ -30,12 +30,36 @@ import {
 import type { PlaidClientLike } from "../plaid/adapter";
 import type { PlaidConfig } from "../plaid/config";
 import type { PlaidTokenStore, StoredPlaidConnection } from "../plaid/token-store";
+import { createCachingKeyFetcher, verifyPlaidWebhook } from "../plaid/webhook";
 import { OWNER_USER_ID } from "../auth/types";
 import { authErrors } from "../auth/errors";
 import type { StatementImportStore } from "../local/store";
 import type { StatementImportStoreProvider } from "../local/store-provider";
 import { principalOf } from "../auth/middleware";
 import { registerSafeErrorHandler } from "./errors";
+
+/** Plaid `TRANSACTIONS` webhook codes that mean "there is a delta to pull". Each
+ *  is handled the same way — run a cursor sync, which is idempotent — so a spare
+ *  or duplicate delivery is a cheap no-op. */
+const TRANSACTIONS_SYNC_CODES = new Set([
+  "SYNC_UPDATES_AVAILABLE",
+  "INITIAL_UPDATE",
+  "HISTORICAL_UPDATE",
+  "DEFAULT_UPDATE",
+]);
+
+/** The shape we read off a verified Plaid webhook body. Everything else Plaid
+ *  sends is ignored; these four fields drive the dispatch. */
+type PlaidWebhookBody = {
+  webhook_type?: string;
+  webhook_code?: string;
+  item_id?: string;
+  error?: { error_code?: string } | null;
+};
+
+/** Fastify hangs the raw request text here (see the webhook's content-type
+ *  parser) so the body hash can be checked against Plaid's signature. */
+type RawBodyRequest = { rawBody?: string };
 
 /**
  * How long a session's cleared TOTP challenge is honoured before Plaid Link
@@ -160,6 +184,8 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
         institutionName: c.institutionName ?? null,
         createdAt: c.createdAt,
         lastSyncedAt: c.lastSyncedAt ?? null,
+        // Lets the UI prompt "reconnect this bank" without exposing why.
+        reauthRequired: c.reauthRequired ?? false,
       })),
     };
   });
@@ -208,37 +234,106 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
     const connection = await ownedConnection(request, reply, connectionId);
     if (!connection) return reply;
 
-    const [accountsResult, syncResult] = await Promise.all([
-      getAccountsAndBalances(options.client, connection.accessToken),
-      syncTransactions(options.client, connection.accessToken, { cursor: connection.transactionsCursor }),
-    ]);
-
     const store = await options.stores.forUser(callerId(request));
-    const summary = await syncIntoStore(store, {
-      connectionId,
-      accounts: accountsResult.accounts,
-      added: syncResult.added,
-      modified: syncResult.modified,
-      removedIds: syncResult.removedIds,
-    });
-
-    const syncedAt = new Date().toISOString();
-    // Persist the advanced cursor together with the sync time, so the next sync
-    // resumes exactly here and never re-pulls what we just applied.
-    await options.tokenStore.markSynced(connectionId, syncedAt, syncResult.nextCursor);
+    const result = await runConnectionSync(options.client, options.tokenStore, store, connection);
 
     return {
       connectionId,
-      syncedAt,
-      accountsSynced: accountsResult.accounts.length,
+      syncedAt: result.syncedAt,
+      accountsSynced: result.accountsSynced,
       // `synced` is the headline count the UI shows (rows new or changed).
-      synced: summary.added + summary.modified,
-      transactionsAdded: summary.added,
-      transactionsModified: summary.modified,
-      transactionsRemoved: summary.removed,
-      transactionsDuplicate: summary.duplicate,
+      synced: result.added + result.modified,
+      transactionsAdded: result.added,
+      transactionsModified: result.modified,
+      transactionsRemoved: result.removed,
+      transactionsDuplicate: result.duplicate,
     };
   });
+
+  /**
+   * Inbound Plaid webhooks. Public and machine-to-machine: no session rides on
+   * it, so trust comes entirely from the signature check below (the path is on
+   * the auth allowlist for that reason). It lives in its own encapsulated scope
+   * because it needs the *raw* request body to verify Plaid's body hash — the
+   * content-type parser here keeps that raw text, and being encapsulated means it
+   * never changes how any other route parses JSON.
+   */
+  const fetchWebhookKey = createCachingKeyFetcher({
+    async webhookVerificationKeyGet(request) {
+      if (typeof options.client.webhookVerificationKeyGet !== "function") {
+        throw new Error("Plaid client cannot fetch webhook verification keys.");
+      }
+      return options.client.webhookVerificationKeyGet(request);
+    },
+  });
+
+  // Not awaited on purpose: awaiting boots the instance, which would freeze the
+  // error handler registered at the end of this function out (Fastify refuses
+  // `setErrorHandler` once ready). Fastify loads this encapsulated plugin at
+  // `ready()`/first-request time either way.
+  void app.register(async (webhookScope) => {
+    webhookScope.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
+      const raw = typeof body === "string" ? body : body.toString("utf8");
+      (request as unknown as RawBodyRequest).rawBody = raw;
+      try {
+        done(null, raw.length > 0 ? JSON.parse(raw) : {});
+      } catch (error) {
+        done(error as Error, undefined);
+      }
+    });
+
+    webhookScope.post("/api/plaid/webhook", async (request, reply) => {
+      const rawBody = (request as unknown as RawBodyRequest).rawBody ?? "";
+      const signedJwt = request.headers["plaid-verification"];
+      // One opaque 400 for every failure — a missing header, a bad signature, a
+      // tampered body — so a prober learns nothing about which check it tripped.
+      if (typeof signedJwt !== "string" || signedJwt.length === 0) {
+        return reply.code(400).send({ error: { code: "PLAID_WEBHOOK_UNVERIFIED" } });
+      }
+      try {
+        await verifyPlaidWebhook({ signedJwt, rawBody, fetchKey: fetchWebhookKey });
+      } catch {
+        return reply.code(400).send({ error: { code: "PLAID_WEBHOOK_UNVERIFIED" } });
+      }
+
+      await handlePlaidWebhook((request.body ?? {}) as PlaidWebhookBody);
+      // Plaid retries any non-2xx, so once verified we always ack — even a
+      // no-op code — to stop it re-delivering something already handled.
+      return { received: true };
+    });
+  });
+
+  /**
+   * Act on a verified webhook. A `TRANSACTIONS` delta triggers the same cursor
+   * sync the manual route runs (idempotent, so a redundant delivery is cheap); an
+   * `ITEM_LOGIN_REQUIRED`-class event flags the connection for re-auth, and a
+   * repair clears it. Everything else is acknowledged without action.
+   */
+  async function handlePlaidWebhook(body: PlaidWebhookBody): Promise<void> {
+    const itemId = body.item_id;
+    if (!itemId) return;
+    const connections = await options.tokenStore.listByItemId(itemId);
+    if (connections.length === 0) return;
+
+    if (body.webhook_type === "TRANSACTIONS" && body.webhook_code && TRANSACTIONS_SYNC_CODES.has(body.webhook_code)) {
+      // No store wired (isolated route tests) means nowhere to write the delta —
+      // ack without syncing rather than 500.
+      if (!options.stores) return;
+      for (const connection of connections) {
+        const store = await options.stores.forUser(connection.userId);
+        await runConnectionSync(options.client, options.tokenStore, store, connection);
+      }
+      return;
+    }
+
+    if (body.webhook_type === "ITEM") {
+      if (isReauthSignal(body)) {
+        await Promise.all(connections.map((c) => options.tokenStore.setReauthRequired(c.connectionId, true)));
+      } else if (body.webhook_code === "LOGIN_REPAIRED") {
+        await Promise.all(connections.map((c) => options.tokenStore.setReauthRequired(c.connectionId, false)));
+      }
+    }
+  }
 
   app.delete("/api/plaid/connections/:connectionId", async (request, reply) => {
     const { connectionId } = ConnectionParamsSchema.parse(request.params);
@@ -249,6 +344,48 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
   });
 
   registerSafeErrorHandler(app);
+}
+
+/**
+ * Pull one connection's latest accounts + transaction delta and apply it. Shared
+ * by the manual sync route and the webhook receiver so both advance the cursor,
+ * write the same store, and clear a stale re-auth flag identically — there is one
+ * definition of "sync a connection", not two that can drift.
+ */
+async function runConnectionSync(
+  client: PlaidClientLike,
+  tokenStore: PlaidTokenStore,
+  store: StatementImportStore,
+  connection: StoredPlaidConnection,
+): Promise<{ syncedAt: string; accountsSynced: number; added: number; modified: number; removed: number; duplicate: number }> {
+  const [accountsResult, syncResult] = await Promise.all([
+    getAccountsAndBalances(client, connection.accessToken),
+    syncTransactions(client, connection.accessToken, { cursor: connection.transactionsCursor }),
+  ]);
+
+  const summary = await syncIntoStore(store, {
+    connectionId: connection.connectionId,
+    accounts: accountsResult.accounts,
+    added: syncResult.added,
+    modified: syncResult.modified,
+    removedIds: syncResult.removedIds,
+  });
+
+  const syncedAt = new Date().toISOString();
+  // Persist the advanced cursor together with the sync time, so the next sync
+  // resumes exactly here and never re-pulls what we just applied. markSynced also
+  // clears any re-auth flag — a sync that succeeded is proof the login works.
+  await tokenStore.markSynced(connection.connectionId, syncedAt, syncResult.nextCursor);
+
+  return { syncedAt, accountsSynced: accountsResult.accounts.length, ...summary };
+}
+
+/** True when an `ITEM` webhook means the bank login is broken and needs Link to
+ *  repair it — either the dedicated `PENDING_EXPIRATION` code, or an `ERROR`
+ *  carrying `ITEM_LOGIN_REQUIRED`. */
+function isReauthSignal(body: PlaidWebhookBody): boolean {
+  if (body.webhook_code === "PENDING_EXPIRATION") return true;
+  return body.webhook_code === "ERROR" && body.error?.error_code === "ITEM_LOGIN_REQUIRED";
 }
 
 /**

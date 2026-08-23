@@ -10,6 +10,7 @@ import type {
   Transaction as PlaidTransaction,
   TransactionsGetResponse,
   TransactionsSyncResponse,
+  WebhookVerificationKeyGetResponse,
 } from "plaid";
 import type { PlaidConfig } from "./config";
 import { toPlaidAdapterError } from "./errors";
@@ -41,6 +42,12 @@ export type PlaidClientLike = {
     count?: number;
     options?: { include_original_description?: boolean };
   }): Promise<{ data: TransactionsSyncResponse }>;
+  /** Optional: fetch the public key that signed a webhook, by its `kid`. Only the
+   *  webhook receiver needs it, and route-only test clients omit it, so it is
+   *  feature-detected at the one call site. */
+  webhookVerificationKeyGet?(request: {
+    key_id: string;
+  }): Promise<{ data: WebhookVerificationKeyGetResponse }>;
 };
 
 export type PlaidLinkTokenResult = {

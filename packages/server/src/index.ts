@@ -28,6 +28,11 @@ export { createPlaidClient } from "./plaid/client";
 export { FieldCipher, FieldCipherKeyError, loadFieldCipher } from "./crypto/field-cipher";
 export { loadPlaidConfig, PlaidConfigError } from "./plaid/config";
 export { PlaidAdapterError } from "./plaid/errors";
+export {
+  createCachingKeyFetcher,
+  PlaidWebhookVerificationError,
+  verifyPlaidWebhook,
+} from "./plaid/webhook";
 export { FilePlaidTokenStore, InMemoryPlaidTokenStore } from "./plaid/token-store";
 export {
   mapPlaidAccount,
@@ -66,6 +71,7 @@ export type {
 } from "./plaid/adapter";
 export type { PlaidConfig } from "./plaid/config";
 export type { SafePlaidError } from "./plaid/errors";
+export type { PlaidJwk, VerifyPlaidWebhookInput } from "./plaid/webhook";
 export type { PlaidSnapshotMappingOptions } from "./plaid/mapper";
 export type { PlaidTokenStore, StoredPlaidConnection } from "./plaid/token-store";
 
