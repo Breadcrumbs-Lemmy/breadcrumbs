@@ -40,6 +40,18 @@ export type SaveStatementImportInput = {
   transactions: Transaction[];
   batch: Omit<StatementImportBatch, "importedTransactionCount" | "duplicateTransactionCount">;
   knownDuplicateTransactionCount?: number;
+  /**
+   * Plaid `/transactions/sync` deltas. A bank sync is not append-only the way a
+   * CSV import is: an already-imported transaction can change (a pending charge
+   * settles at a different amount, a merchant name resolves) or disappear (a
+   * pending charge is dropped). `modifiedTransactions` upserts by id — it
+   * replaces the stored row, or inserts it if unseen, exactly as Plaid instructs
+   * clients to treat added and modified alike. `removedTransactionIds` deletes by
+   * id. CSV import passes neither, so its append-and-dedupe behaviour is byte-for-
+   * byte unchanged.
+   */
+  modifiedTransactions?: Transaction[];
+  removedTransactionIds?: string[];
 };
 
 export type SaveStatementImportResult = {
@@ -47,6 +59,12 @@ export type SaveStatementImportResult = {
   batch: StatementImportBatch;
   importedTransactions: Transaction[];
   duplicateTransactions: Transaction[];
+  /** Upserted rows (from `modifiedTransactions`). Empty for a CSV import. */
+  modifiedTransactions: Transaction[];
+  /** Ids that were present and are now deleted (from `removedTransactionIds`).
+   *  A requested id that was not in the store is silently skipped, so this lists
+   *  only what actually changed. Empty for a CSV import. */
+  removedTransactionIds: string[];
 };
 
 export interface StatementImportStore {
@@ -155,10 +173,23 @@ function saveToState(
   input: SaveStatementImportInput,
 ): SaveStatementImportResult {
   const accounts = upsertAccount(state.accounts, input.account);
-  const existingTransactionIds = new Set(state.transactions.map((transaction) => transaction.id));
+
+  // 1. Removals first, so a remove-then-re-add of the same id in one batch does
+  //    not fight itself. Only ids actually present are reported as removed.
+  const removedIds = new Set(input.removedTransactionIds ?? []);
+  const removedTransactionIds: string[] = [];
+  let working = state.transactions.filter((transaction) => {
+    if (removedIds.has(transaction.id)) {
+      removedTransactionIds.push(transaction.id);
+      return false;
+    }
+    return true;
+  });
+
+  // 2. Additions: append, deduping by id against what survives the removal pass.
+  const existingTransactionIds = new Set(working.map((transaction) => transaction.id));
   const importedTransactions: Transaction[] = [];
   const duplicateTransactions: Transaction[] = [];
-
   for (const transaction of input.transactions) {
     if (existingTransactionIds.has(transaction.id)) {
       duplicateTransactions.push(transaction);
@@ -166,6 +197,18 @@ function saveToState(
     }
     importedTransactions.push(transaction);
     existingTransactionIds.add(transaction.id);
+  }
+  working = [...working, ...importedTransactions];
+
+  // 3. Modifications: upsert by id (replace in place, or insert if unseen).
+  const modifiedTransactions: Transaction[] = [];
+  if (input.modifiedTransactions && input.modifiedTransactions.length > 0) {
+    const byId = new Map(working.map((transaction) => [transaction.id, transaction]));
+    for (const transaction of input.modifiedTransactions) {
+      byId.set(transaction.id, transaction);
+      modifiedTransactions.push(transaction);
+    }
+    working = [...byId.values()];
   }
 
   const batch: StatementImportBatch = {
@@ -175,7 +218,7 @@ function saveToState(
   };
   const nextState = {
     accounts,
-    transactions: [...state.transactions, ...importedTransactions].sort((left, right) => {
+    transactions: working.sort((left, right) => {
       return left.postedDate.localeCompare(right.postedDate) || left.id.localeCompare(right.id);
     }),
     importBatches: [...state.importBatches, batch],
@@ -186,6 +229,8 @@ function saveToState(
     batch,
     importedTransactions: cloneTransactions(importedTransactions),
     duplicateTransactions: cloneTransactions(duplicateTransactions),
+    modifiedTransactions: cloneTransactions(modifiedTransactions),
+    removedTransactionIds: [...removedTransactionIds],
   };
 }
 
