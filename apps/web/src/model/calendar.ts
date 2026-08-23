@@ -26,6 +26,16 @@ export type DayCell = {
 /** A named quick-range preset. */
 export type PresetRange = { label: string; from: string; to: string };
 
+/** A coarse selectable cell (a whole month or year) in the zoomed-out grids. */
+export type Cell = {
+  key: string;
+  label: string;
+  /** Inclusive range bounds, clamped to [floor, today]. */
+  startDate: string;
+  endDate: string;
+  selectable: boolean;
+};
+
 // ---------------------------------------------------------------------------
 // Internal date helpers (UTC-only)
 
@@ -92,6 +102,51 @@ export function monthGrid(
   }
 
   return rows;
+}
+
+/**
+ * One cell per year from floor's year through today's year. Bounds are clamped
+ * to [floor, today] (the floor year starts at the floor date; the current year
+ * ends today). Every year in range is selectable.
+ */
+export function yearCells(floor: string, today: string): Cell[] {
+  const floorYear = Number(floor.slice(0, 4));
+  const todayYear = Number(today.slice(0, 4));
+  const cells: Cell[] = [];
+  for (let y = floorYear; y <= todayYear; y++) {
+    const start = `${y}-01-01`;
+    const end = `${y}-12-31`;
+    cells.push({
+      key: String(y),
+      label: String(y),
+      startDate: start < floor ? floor : start,
+      endDate: end > today ? today : end,
+      selectable: true,
+    });
+  }
+  return cells;
+}
+
+/**
+ * Twelve month cells for a year. Bounds are clamped to [floor, today]; a month
+ * entirely before the floor or after today is not selectable.
+ */
+export function monthCells(year: number, floor: string, today: string): Cell[] {
+  const cells: Cell[] = [];
+  for (let m = 0; m < 12; m++) {
+    const mm = String(m + 1).padStart(2, "0");
+    const lastDay = new Date(Date.UTC(year, m + 1, 0)).getUTCDate();
+    const start = `${year}-${mm}-01`;
+    const end = `${year}-${mm}-${String(lastDay).padStart(2, "0")}`;
+    cells.push({
+      key: `${year}-${mm}`,
+      label: shortMonth(m),
+      startDate: start < floor ? floor : start,
+      endDate: end > today ? today : end,
+      selectable: end >= floor && start <= today,
+    });
+  }
+  return cells;
 }
 
 // ---------------------------------------------------------------------------

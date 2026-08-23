@@ -2,11 +2,66 @@ import { describe, expect, it } from "vitest";
 import {
   formatRange,
   isCovered,
+  monthCells,
   monthGrid,
   presetRanges,
   rangeHasUnsynced,
   seriesKeyToStartDate,
+  yearCells,
 } from "./calendar";
+
+// ---------------------------------------------------------------------------
+// yearCells
+// ---------------------------------------------------------------------------
+describe("yearCells", () => {
+  it("produces one cell per year from floor to today inclusive", () => {
+    const cells = yearCells("2024-06-01", "2026-08-23");
+    expect(cells.map((c) => c.key)).toEqual(["2024", "2025", "2026"]);
+    for (const c of cells) expect(c.selectable).toBe(true);
+  });
+
+  it("clamps the floor year's start and the current year's end", () => {
+    const cells = yearCells("2024-06-15", "2026-08-23");
+    expect(cells[0]?.startDate).toBe("2024-06-15"); // clamped to floor
+    expect(cells[0]?.endDate).toBe("2024-12-31");
+    expect(cells[2]?.startDate).toBe("2026-01-01");
+    expect(cells[2]?.endDate).toBe("2026-08-23"); // clamped to today
+  });
+});
+
+// ---------------------------------------------------------------------------
+// monthCells
+// ---------------------------------------------------------------------------
+describe("monthCells", () => {
+  it("always returns 12 labelled cells", () => {
+    const cells = monthCells(2026, "2025-01-01", "2026-08-23");
+    expect(cells).toHaveLength(12);
+    expect(cells.map((c) => c.label)).toEqual([
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]);
+  });
+
+  it("marks months outside [floor, today] as not selectable", () => {
+    const cells = monthCells(2026, "2026-06-15", "2026-08-23");
+    expect(cells[4]?.selectable).toBe(false); // May (before floor)
+    expect(cells[5]?.selectable).toBe(true); // Jun
+    expect(cells[7]?.selectable).toBe(true); // Aug
+    expect(cells[8]?.selectable).toBe(false); // Sep (future)
+  });
+
+  it("clamps the floor month's start and today's month end", () => {
+    const cells = monthCells(2026, "2026-06-15", "2026-08-23");
+    expect(cells[5]?.startDate).toBe("2026-06-15"); // Jun clamped to floor
+    expect(cells[5]?.endDate).toBe("2026-06-30");
+    expect(cells[7]?.endDate).toBe("2026-08-23"); // Aug clamped to today
+  });
+
+  it("computes February end dates correctly (leap and non-leap)", () => {
+    expect(monthCells(2026, "2026-01-01", "2026-12-31")[1]?.endDate).toBe("2026-02-28");
+    expect(monthCells(2024, "2024-01-01", "2024-12-31")[1]?.endDate).toBe("2024-02-29");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // monthGrid
