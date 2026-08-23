@@ -25,6 +25,7 @@ import {
   getAccountsAndBalances,
   getCanonicalSnapshot,
   getTransactions,
+  syncTransactions,
 } from "../plaid/adapter";
 import type { PlaidClientLike } from "../plaid/adapter";
 import type { PlaidConfig } from "../plaid/config";
@@ -76,13 +77,6 @@ const SnapshotQuerySchema = DateRangeQuerySchema.extend({
   currency: z.string().length(3).default("USD"),
   balancesDeclaredComplete: QueryBooleanSchema.optional(),
   userConfirmedNoOtherRequiredObligations: QueryBooleanSchema.optional(),
-});
-
-/** Sync accepts an optional window; absent, it pulls the last 90 days, which is
- *  a sensible first look at spending without asking the user to pick dates. */
-const SyncBodySchema = z.object({
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export type RegisterPlaidRoutesOptions = {
@@ -198,42 +192,50 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
   });
 
   /**
-   * Pull accounts + transactions from the bank into the caller's statement
-   * store. This is what turns a fresh connection into visible spending. Idempotent
-   * by construction: the store dedupes on transaction id, so re-syncing an
-   * overlapping window imports only what is new.
+   * Pull the bank's latest accounts + transaction delta into the caller's
+   * statement store. This is what turns a fresh connection into visible spending
+   * and keeps it current. Cursor-based (`/transactions/sync`): the first sync
+   * pulls full history, every later sync resumes from the stored cursor and
+   * applies only what changed — new rows added, corrected rows upserted, dropped
+   * rows removed. Idempotent by construction, so a redundant sync is a cheap
+   * no-op that advances the cursor.
    */
   app.post("/api/plaid/connections/:connectionId/sync", async (request, reply) => {
     if (!options.stores) {
       return reply.code(501).send({ error: { code: "SYNC_STORE_UNAVAILABLE" } });
     }
     const { connectionId } = ConnectionParamsSchema.parse(request.params);
-    const body = SyncBodySchema.parse(request.body ?? {});
     const connection = await ownedConnection(request, reply, connectionId);
     if (!connection) return reply;
 
-    const { startDate, endDate } = defaultSyncWindow(body.startDate, body.endDate);
-    const [accountsResult, transactionsResult] = await Promise.all([
+    const [accountsResult, syncResult] = await Promise.all([
       getAccountsAndBalances(options.client, connection.accessToken),
-      getTransactions(options.client, connection.accessToken, { startDate, endDate }),
+      syncTransactions(options.client, connection.accessToken, { cursor: connection.transactionsCursor }),
     ]);
 
     const store = await options.stores.forUser(callerId(request));
     const summary = await syncIntoStore(store, {
       connectionId,
       accounts: accountsResult.accounts,
-      transactions: transactionsResult.transactions,
+      added: syncResult.added,
+      modified: syncResult.modified,
+      removedIds: syncResult.removedIds,
     });
 
     const syncedAt = new Date().toISOString();
-    await options.tokenStore.markSynced(connectionId, syncedAt);
+    // Persist the advanced cursor together with the sync time, so the next sync
+    // resumes exactly here and never re-pulls what we just applied.
+    await options.tokenStore.markSynced(connectionId, syncedAt, syncResult.nextCursor);
 
     return {
       connectionId,
       syncedAt,
-      window: { startDate, endDate },
       accountsSynced: accountsResult.accounts.length,
-      transactionsImported: summary.imported,
+      // `synced` is the headline count the UI shows (rows new or changed).
+      synced: summary.added + summary.modified,
+      transactionsAdded: summary.added,
+      transactionsModified: summary.modified,
+      transactionsRemoved: summary.removed,
       transactionsDuplicate: summary.duplicate,
     };
   });
@@ -249,55 +251,67 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
   registerSafeErrorHandler(app);
 }
 
-/** Absent an explicit window, look back 90 days from today. */
-function defaultSyncWindow(startDate?: string, endDate?: string): { startDate: string; endDate: string } {
-  const end = endDate ? new Date(`${endDate}T00:00:00Z`) : new Date();
-  const start = startDate ? new Date(`${startDate}T00:00:00Z`) : new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
-  return { startDate: isoDate(start), endDate: isoDate(end) };
-}
-
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 /**
- * Write one connection's fetched data into the store, one account at a time
- * (`saveImport` upserts a single account and its rows). Accounts with no
- * transactions in the window are still written so their balances appear.
+ * Write one connection's sync delta into the store, one account at a time
+ * (`saveImport` upserts a single account and applies its rows). Every balance
+ * account is written even with no transactions, so its balance still appears.
+ *
+ * `added` and `modified` carry an account id, so they are grouped per account.
+ * A `/transactions/sync` `removed` entry carries only a transaction id (Plaid
+ * does not say which account), and the store deletes globally by id — so the
+ * removals ride on the first account's write. Every live connection has at least
+ * one balance account here, so removals are never dropped.
  */
 async function syncIntoStore(
   store: StatementImportStore,
-  input: { connectionId: string; accounts: Account[]; transactions: Transaction[] },
-): Promise<{ imported: number; duplicate: number }> {
-  const byAccount = new Map<string, Transaction[]>();
-  for (const transaction of input.transactions) {
-    const list = byAccount.get(transaction.accountId) ?? [];
-    list.push(transaction);
-    byAccount.set(transaction.accountId, list);
-  }
+  input: { connectionId: string; accounts: Account[]; added: Transaction[]; modified: Transaction[]; removedIds: string[] },
+): Promise<{ added: number; modified: number; removed: number; duplicate: number }> {
+  const addedByAccount = groupByAccount(input.added);
+  const modifiedByAccount = groupByAccount(input.modified);
 
   const createdAt = new Date().toISOString();
-  let imported = 0;
+  let added = 0;
+  let modified = 0;
+  let removed = 0;
   let duplicate = 0;
 
+  let firstAccount = true;
   for (const account of input.accounts) {
-    const transactions = byAccount.get(account.id) ?? [];
+    const accountAdded = addedByAccount.get(account.id) ?? [];
+    const accountModified = modifiedByAccount.get(account.id) ?? [];
     const result = await store.saveImport({
       account,
-      transactions,
+      transactions: accountAdded,
+      modifiedTransactions: accountModified,
+      // Removals are id-keyed and global; attach them once, to the first write.
+      removedTransactionIds: firstAccount ? input.removedIds : [],
       batch: {
         id: `plaid_${input.connectionId}_${account.id}_${createdAt}`,
         accountId: account.id,
         sourceFormat: "plaid",
         createdAt,
-        rowCount: transactions.length,
+        rowCount: accountAdded.length + accountModified.length,
         invalidRowCount: 0,
         rawCsvStored: false,
       },
     });
-    imported += result.importedTransactions.length;
+    added += result.importedTransactions.length;
     duplicate += result.duplicateTransactions.length;
+    modified += result.modifiedTransactions.length;
+    removed += result.removedTransactionIds.length;
+    firstAccount = false;
   }
 
-  return { imported, duplicate };
+  return { added, modified, removed, duplicate };
+}
+
+/** Group transactions by their account id, preserving order within each group. */
+function groupByAccount(transactions: Transaction[]): Map<string, Transaction[]> {
+  const byAccount = new Map<string, Transaction[]>();
+  for (const transaction of transactions) {
+    const list = byAccount.get(transaction.accountId) ?? [];
+    list.push(transaction);
+    byAccount.set(transaction.accountId, list);
+  }
+  return byAccount;
 }
