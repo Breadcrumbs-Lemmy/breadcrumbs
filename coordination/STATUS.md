@@ -1,7 +1,24 @@
 # Coordination Status
 
 Status: Living  
-Last updated: 2026-08-16
+Last updated: 2026-08-23
+
+> **Spending Coverage Calendar built 2026-08-23 (`[UI: Claude]`, `H-098`, branch `worktree-spending-calendar` — not yet PR'd).**
+> Redesign of the Spending page around a **synchronized calendar + Plaid historical backfill**. Two
+> orthogonal controls: the Week/Month/Year grain toggle (bucketing) and a new **CoverageRail** —
+> a strip of time-bucket cells back to Plaid's ~24-month floor; filled = already synced, ghost =
+> reachable but not pulled. **Contiguous** two-click range selection only (no disjoint buckets —
+> the user's constraint); ghost selection shows a "Pull from your bank" backfill CTA. Selected span
+> drives the summary via new `from`/`to` params (aggregated, comparison off); single cell = drill-in;
+> multi-cell = per-bucket trend strip. **Backfill = hybrid:** sync default **90d → 6 months**
+> (auto on connect), older pulled on demand (store dedups). New `GET /api/plaid/coverage` +
+> `coverageStart/coverageEnd` watermark on connections; `summarizeSpending` gains a `span:` mode
+> (all non-span behavior byte-identical). Touches: core `spending-summary.ts`; server
+> `plaid-routes.ts` + `plaid/token-store.ts` + `http/spending-routes.ts`; web `services/api.ts` +
+> `screens/SpendingScreen.tsx` + new `components/CoverageRail.tsx` + `model/calendar.ts`. Verified:
+> core 323/323 + server 427/427 + web 121 tests green, all typechecks + full `pnpm build` clean.
+> **Not** browser-verified live yet, and backfill runs synchronously (background-job + progress is
+> the next increment). Full record: `HANDOFFS.md` H-098.
 
 > **UI validation sweep merged to `main` 2026-08-16 (`[UI: Claude]`, `apps/web` only; `H-094`, PR #18).**
 > A full pass over the reconciled validation findings: **20 UI bugs fixed, 1 evaluated and

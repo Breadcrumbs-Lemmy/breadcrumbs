@@ -117,6 +117,52 @@ describe("spending routes", () => {
     await app.close();
   });
 
+  it("accepts ?from=&to= and returns a span summary with comparable: false", async () => {
+    const app = await serverWithImportedStatement();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/spending/summary?currency=USD&from=2026-04-01&to=2026-05-31",
+    });
+    const body = JSON.parse(response.body);
+
+    expect(response.statusCode).toBe(200);
+    expect(body.period.key).toBe("span:2026-04-01:2026-05-31");
+    expect(body.comparison.comparable).toBe(false);
+    expect(body.comparison.direction).toBe("new");
+    // Two months of fixture data are in this span — outflow must be non-zero.
+    expect(body.totalOutflowCents).toBeGreaterThan(0);
+    await app.close();
+  });
+
+  it("rejects ?from= without ?to= with SPAN_REQUIRES_BOTH_DATES", async () => {
+    const app = await serverWithImportedStatement();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/spending/summary?currency=USD&from=2026-04-01",
+    });
+    const body = JSON.parse(response.body);
+
+    expect(response.statusCode).toBe(400);
+    expect(body.error.code).toBe("SPAN_REQUIRES_BOTH_DATES");
+    await app.close();
+  });
+
+  it("rejects ?from= after ?to= with SPAN_START_AFTER_END", async () => {
+    const app = await serverWithImportedStatement();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/spending/summary?currency=USD&from=2026-06-01&to=2026-04-30",
+    });
+    const body = JSON.parse(response.body);
+
+    expect(response.statusCode).toBe(400);
+    expect(body.error.code).toBe("SPAN_START_AFTER_END");
+    await app.close();
+  });
+
   it("returns accounts built from the imported statement", async () => {
     const app = await serverWithImportedStatement();
 

@@ -39,12 +39,18 @@ export const ACCOUNTS_PATH = "/api/v1/accounts";
 const PeriodKindSchema = z.enum(["week", "month", "year", "statement"]);
 const CalendarKindSchema = z.enum(["week", "month", "year"]);
 
+/** Calendar-date bound (`YYYY-MM-DD`). Transaction dates are stored as ISO date
+ *  strings, so a filter must be the same shape or it silently matches nothing. */
+const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
+
 const SummaryQuerySchema = z.object({
   period: PeriodKindSchema.default("month"),
   key: z.string().min(1).optional(),
   accountId: z.string().min(1).optional(),
   currency: z.string().length(3).default("USD"),
   baselineCount: z.coerce.number().int().min(1).max(12).default(3),
+  from: IsoDateSchema.optional(),
+  to: IsoDateSchema.optional(),
 });
 
 const SeriesQuerySchema = z.object({
@@ -52,10 +58,6 @@ const SeriesQuerySchema = z.object({
   count: z.coerce.number().int().min(2).max(36).default(12),
   currency: z.string().length(3).default("USD"),
 });
-
-/** Calendar-date bound (`YYYY-MM-DD`). Transaction dates are stored as ISO date
- *  strings, so a filter must be the same shape or it silently matches nothing. */
-const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
 
 const TransactionsQuerySchema = z.object({
   from: IsoDateSchema.optional(),
@@ -139,7 +141,25 @@ export async function registerSpendingRoutes(
     if (!parsed.success) return badRequest(reply, "INVALID_SPENDING_QUERY", parsed.error.issues);
     const q = parsed.data;
 
-    if (q.period === "statement" && !q.accountId) {
+    // Span validation: both from/to must be supplied together, and start <= end.
+    const hasFrom = q.from !== undefined;
+    const hasTo = q.to !== undefined;
+    if (hasFrom !== hasTo) {
+      return badRequest(reply, "SPAN_REQUIRES_BOTH_DATES", [
+        { path: ["from", "to"], message: "Both 'from' and 'to' are required to define a span." },
+      ]);
+    }
+    if (hasFrom && hasTo && q.from! > q.to!) {
+      return badRequest(reply, "SPAN_START_AFTER_END", [
+        { path: ["from"], message: "'from' must not be after 'to'." },
+      ]);
+    }
+
+    const isSpanRequest = hasFrom && hasTo;
+
+    // The statement-period guard only applies when no explicit span is given;
+    // a span overrides period-based bucketing entirely.
+    if (!isSpanRequest && q.period === "statement" && !q.accountId) {
       return badRequest(reply, "ACCOUNT_ID_REQUIRED_FOR_STATEMENT", [
         { path: ["accountId"], message: "A statement period is specific to one card." },
       ]);
@@ -158,6 +178,7 @@ export async function registerSpendingRoutes(
         accountId: q.accountId,
         baselineCount: q.baselineCount,
         categoryLabel,
+        ...(isSpanRequest ? { span: { startDate: q.from!, endDate: q.to! } } : {}),
       }),
     );
   });

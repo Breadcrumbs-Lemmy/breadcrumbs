@@ -15,6 +15,7 @@
  * resolved is surfaced as uncertainty rather than counted either way.
  */
 import type { Account, FlowType, Transaction } from "./types";
+import { daysBetween } from "./dates";
 import {
   baselineLabel,
   containsDate,
@@ -108,6 +109,10 @@ export type SummarizeOptions = {
   baselineCount?: number;
   /** Resolves a category id to its display label. */
   categoryLabel?: (categoryId: string) => string;
+  /** Aggregate over this explicit contiguous span instead of a named period.
+   *  When set, `key` is ignored and period comparison is disabled (a custom span
+   *  has no natural baseline). `kind` still labels the grain. */
+  span?: { startDate: string; endDate: string; label?: string };
 };
 
 const CARD_PAYMENT_CATEGORIES = new Set(["credit_card_payment", "card_payment"]);
@@ -254,28 +259,43 @@ export function summarizeSpending(options: SummarizeOptions): SpendingSummary {
     }))
     .sort((a, b) => b.outflowCents - a.outflowCents);
 
-  const comparison = buildComparison({
-    kind,
-    period,
-    transactions: scoped,
-    accountIds,
-    asOfDate,
-    baselineCount,
-    recentOutflow: totalOutflow,
-    accountById,
-    accountId,
-  });
+  // A custom span has no natural baseline — comparison is meaningless and must
+  // not try to derive regular-grid periods from an arbitrary date range.
+  const isSpan = Boolean(options.span);
 
-  attachCategoryComparisons(categoryTotals, {
-    kind,
-    period,
-    transactions: scoped,
-    accountIds,
-    asOfDate,
-    baselineCount,
-    accountById,
-    accountId,
-  });
+  const comparison: SpendingComparison = isSpan
+    ? {
+        direction: "new",
+        outflowChangeCents: 0,
+        baselineAverageOutflowCents: 0,
+        baselinePeriodCount: 0,
+        baselineLabel: "",
+        comparable: false,
+      }
+    : buildComparison({
+        kind,
+        period,
+        transactions: scoped,
+        accountIds,
+        asOfDate,
+        baselineCount,
+        recentOutflow: totalOutflow,
+        accountById,
+        accountId,
+      });
+
+  if (!isSpan) {
+    attachCategoryComparisons(categoryTotals, {
+      kind,
+      period,
+      transactions: scoped,
+      accountIds,
+      asOfDate,
+      baselineCount,
+      accountById,
+      accountId,
+    });
+  }
 
   const institutions = new Map<string, InstitutionTotal>();
   for (const at of accountTotals.values()) {
@@ -328,6 +348,21 @@ function resolvePeriod(
   accountById: Map<string, Account>,
 ): Period {
   const { kind, key, asOfDate, accountId } = options;
+
+  if (options.span) {
+    const { span } = options;
+    const totalDays = daysBetween(span.startDate, span.endDate) + 1;
+    return {
+      kind,
+      key: `span:${span.startDate}:${span.endDate}`,
+      label: span.label ?? `${span.startDate} – ${span.endDate}`,
+      partial: false,
+      startDate: span.startDate,
+      endDate: span.endDate,
+      elapsedDays: totalDays,
+      totalDays,
+    };
+  }
 
   if (kind === "statement") {
     const account = accountId ? accountById.get(accountId) : undefined;
