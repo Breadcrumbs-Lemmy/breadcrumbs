@@ -15,21 +15,79 @@ export type StoredPlaidConnection = {
   institutionName?: string;
   createdAt: string;
   lastSyncedAt?: string;
-  /** Earliest posted-date (YYYY-MM-DD) that has been synced from Plaid for this
-   *  connection. Updated on every sync by merging the sync window: the UI reads
-   *  this to render a coverage rail (how far back real bank data extends) and to
-   *  decide whether a historical backfill is needed. */
+  /** Earliest posted-date (YYYY-MM-DD) of transactions synced from Plaid for this
+   *  connection. Under the cursor-sync model the first sync drains the full
+   *  available history, so this settles to the true floor of real bank data; the
+   *  UI reads it to render a coverage rail (how far back data extends) and to
+   *  decide whether a historical backfill CTA is worth showing. Only ever widens
+   *  (min), never shrinks. */
   coverageStart?: string;
-  /** Latest posted-date (YYYY-MM-DD) that has been synced from Plaid for this
-   *  connection. Paired with coverageStart for the UI coverage rail. */
+  /** Latest date (YYYY-MM-DD) through which this connection is known-complete.
+   *  Because `/transactions/sync` always drains to the present, a successful sync
+   *  means we hold every transaction up to the sync date — so this advances to the
+   *  sync date, not merely the newest transaction. Paired with coverageStart for
+   *  the UI coverage rail. Only ever advances (max). */
   coverageEnd?: string;
+  /** Opaque Plaid `/transactions/sync` cursor. Absent until the first sync, when
+   *  a full history is pulled and the returned `next_cursor` is stored; every
+   *  later sync resumes from here and receives only the delta. Not a secret (it
+   *  encodes no account data), so it rides alongside the encrypted access token
+   *  in plaintext. */
+  transactionsCursor?: string;
+  /** Set when Plaid tells us the bank login is broken (`ITEM_LOGIN_REQUIRED`,
+   *  pending expiration) — the access token is intact but the user must re-run
+   *  Link to repair it. Surfaced to the UI so it can prompt, and cleared
+   *  automatically the next time a sync succeeds (proof the login works again). */
+  reauthRequired?: boolean;
 };
+
+/** Payload for {@link PlaidTokenStore.markSynced}: a successful sync advances the
+ *  cursor (resume point for the next delta) and widens the coverage bounds. Both
+ *  parts are optional — pass only what the sync produced. */
+export type SyncMarker = {
+  /** New `/transactions/sync` cursor. `undefined` leaves the stored one untouched. */
+  cursor?: string;
+  /** Coverage bounds observed this sync. `start` unions to the min, `end` to the
+   *  max; either may be omitted (e.g. a delta sync that added no older data still
+   *  advances `end` to the sync date). */
+  coverage?: { start?: string; end?: string };
+};
+
+/** Widen a connection's coverage bounds in place: `start` unions to the earliest
+ *  (min), `end` to the latest (max). Coverage only ever grows — a missing bound
+ *  leaves the existing value alone. Shared by both store implementations. */
+function applyCoverage(connection: StoredPlaidConnection, coverage?: { start?: string; end?: string }): void {
+  if (!coverage) return;
+  if (coverage.start) {
+    connection.coverageStart = connection.coverageStart
+      ? (coverage.start < connection.coverageStart ? coverage.start : connection.coverageStart)
+      : coverage.start;
+  }
+  if (coverage.end) {
+    connection.coverageEnd = connection.coverageEnd
+      ? (coverage.end > connection.coverageEnd ? coverage.end : connection.coverageEnd)
+      : coverage.end;
+  }
+}
 
 export interface PlaidTokenStore {
   save(input: { userId?: string; itemId: string; accessToken: string; institutionName?: string }): Promise<StoredPlaidConnection>;
   get(connectionId: string): Promise<StoredPlaidConnection | undefined>;
   listForUser(userId: string): Promise<StoredPlaidConnection[]>;
-  markSynced(connectionId: string, at: string, window?: { startDate: string; endDate: string }): Promise<void>;
+  /** Every connection for a Plaid `item_id`. A webhook names the item, not our
+   *  connection id, so this is how an inbound webhook maps to what to act on.
+   *  Normally one connection per item, but returns a list so re-links can't be
+   *  silently skipped. */
+  listByItemId(itemId: string): Promise<StoredPlaidConnection[]>;
+  /** Stamp the last-synced time and record what the sync produced: the new
+   *  `/transactions/sync` cursor (so the next sync resumes from it) and the
+   *  coverage bounds it observed (unioned into coverageStart/coverageEnd for the
+   *  UI rail). Both parts of `update` are optional. A successful sync also clears
+   *  any `reauthRequired` flag: the token demonstrably works. */
+  markSynced(connectionId: string, at: string, update?: SyncMarker): Promise<void>;
+  /** Flag (or clear) that the bank login needs repairing via Plaid Link. Set on
+   *  an `ITEM_LOGIN_REQUIRED`-class webhook, cleared on a repair webhook. */
+  setReauthRequired(connectionId: string, required: boolean): Promise<void>;
   delete(connectionId: string): Promise<void>;
   /** Remove every connection (and its stored access token) belonging to a user.
    *  Used when an account is deleted, so no orphaned bank credential survives. */
@@ -66,18 +124,25 @@ export class InMemoryPlaidTokenStore implements PlaidTokenStore {
     return [...this.connections.values()].filter((c) => c.userId === userId).map((c) => ({ ...c }));
   }
 
-  async markSynced(connectionId: string, at: string, window?: { startDate: string; endDate: string }): Promise<void> {
+  async listByItemId(itemId: string): Promise<StoredPlaidConnection[]> {
+    return [...this.connections.values()].filter((c) => c.itemId === itemId).map((c) => ({ ...c }));
+  }
+
+  async markSynced(connectionId: string, at: string, update?: SyncMarker): Promise<void> {
     const found = this.connections.get(connectionId);
     if (!found) return;
     found.lastSyncedAt = at;
-    if (window) {
-      found.coverageStart = found.coverageStart
-        ? (window.startDate < found.coverageStart ? window.startDate : found.coverageStart)
-        : window.startDate;
-      found.coverageEnd = found.coverageEnd
-        ? (window.endDate > found.coverageEnd ? window.endDate : found.coverageEnd)
-        : window.endDate;
-    }
+    if (update?.cursor !== undefined) found.transactionsCursor = update.cursor;
+    applyCoverage(found, update?.coverage);
+    // A successful sync proves the login works, so it retires any re-auth flag.
+    delete found.reauthRequired;
+  }
+
+  async setReauthRequired(connectionId: string, required: boolean): Promise<void> {
+    const found = this.connections.get(connectionId);
+    if (!found) return;
+    if (required) found.reauthRequired = true;
+    else delete found.reauthRequired;
   }
 
   async delete(connectionId: string): Promise<void> {
@@ -148,21 +213,30 @@ export class FilePlaidTokenStore implements PlaidTokenStore {
     return (await this.store.all()).filter((c) => c.userId === userId).map((c) => this.decode(c));
   }
 
-  async markSynced(connectionId: string, at: string, window?: { startDate: string; endDate: string }): Promise<void> {
+  async listByItemId(itemId: string): Promise<StoredPlaidConnection[]> {
+    return (await this.store.all()).filter((c) => c.itemId === itemId).map((c) => this.decode(c));
+  }
+
+  async markSynced(connectionId: string, at: string, update?: SyncMarker): Promise<void> {
     const found = await this.store.get(connectionId);
     if (!found) return;
     // Round-trip through decode/encode so a legacy plaintext record is migrated
     // to ciphertext on this write, and the token is never left in plaintext.
     const connection = this.decode(found);
     connection.lastSyncedAt = at;
-    if (window) {
-      connection.coverageStart = connection.coverageStart
-        ? (window.startDate < connection.coverageStart ? window.startDate : connection.coverageStart)
-        : window.startDate;
-      connection.coverageEnd = connection.coverageEnd
-        ? (window.endDate > connection.coverageEnd ? window.endDate : connection.coverageEnd)
-        : window.endDate;
-    }
+    if (update?.cursor !== undefined) connection.transactionsCursor = update.cursor;
+    applyCoverage(connection, update?.coverage);
+    // A successful sync proves the login works, so it retires any re-auth flag.
+    delete connection.reauthRequired;
+    await this.store.put(connectionId, this.encode(connection));
+  }
+
+  async setReauthRequired(connectionId: string, required: boolean): Promise<void> {
+    const found = await this.store.get(connectionId);
+    if (!found) return;
+    const connection = this.decode(found);
+    if (required) connection.reauthRequired = true;
+    else delete connection.reauthRequired;
     await this.store.put(connectionId, this.encode(connection));
   }
 

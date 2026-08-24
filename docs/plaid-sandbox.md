@@ -1,7 +1,7 @@
 # Plaid Sandbox Scaffold
 
 Status: Living  
-Last updated: 2026-08-04
+Last updated: 2026-08-23
 
 ## Purpose
 
@@ -13,12 +13,12 @@ layer or a production Plaid rollout.
 
 ## Safety Boundaries
 
-- Plaid is restricted to Sandbox. `PLAID_ENV` must be exactly `sandbox`, and the SDK client uses Plaid's Sandbox base URL.
+- `PLAID_ENV` selects the environment: `sandbox` (test institutions, fake credentials) or `production` (real banks). The SDK client uses the matching Plaid base URL. Production requires separate dashboard credentials and, for most large banks, `PLAID_REDIRECT_URI`.
 - The Link token requests only the `transactions` product. Plaid Balance access is available without adding `balance` as a Link product.
 - `auth` and `identity` are not requested because the current product docs only require accounts, balances, and transactions.
 - The adapter exposes no payment, transfer, investment, liability, processor, or account-write endpoints.
 - Plaid `access_token` values stay server-side. The public-token exchange route returns a local `connectionId` and `itemId`, not the access token.
-- The local token store is in-memory and resets on server restart. Before any real beta, replace it with authenticated, encrypted persistence plus consent, deletion, and disconnect flows.
+- Tokens persist durably: `FilePlaidTokenStore` writes them to a `0600` file under `BREADCRUMBS_LOCAL_DATA_DIR/plaid`, encrypted at rest (AES-256-GCM, bound to the connection id) when `BREADCRUMBS_ENCRYPTION_KEY` is set. Every retrieval route is scoped to the authenticated caller, so one user can never read another's connection.
 - Fastify logging is disabled in the scaffold, and error responses are redacted to avoid echoing tokens or secrets.
 - Tests mock Plaid and do not call the live Sandbox service.
 
@@ -38,13 +38,14 @@ Expected Plaid variables:
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `PLAID_ENV` | Yes for Plaid | Must be `sandbox`. Other values are rejected. |
-| `PLAID_CLIENT_ID` | Yes for Plaid | Plaid Sandbox client id. Never paste it into chat or commit it. |
-| `PLAID_SECRET` | Yes for Plaid | Plaid Sandbox secret. Never paste it into chat or commit it. |
-| `PLAID_CLIENT_NAME` | No | Defaults to `Breadcrumbz Sandbox`; Plaid displays it in Link. |
+| `PLAID_ENV` | Yes for Plaid | `sandbox` or `production`. Any other value is rejected. This guide uses `sandbox`. |
+| `PLAID_CLIENT_ID` | Yes for Plaid | Plaid client id for the chosen env. Never paste it into chat or commit it. |
+| `PLAID_SECRET` | Yes for Plaid | Plaid secret for the chosen env (production differs from sandbox). Never paste it into chat or commit it. |
+| `PLAID_CLIENT_NAME` | No | Defaults to `Breadcrumbz`; Plaid displays it in Link. |
 | `PLAID_COUNTRY_CODES` | No | Defaults to `US`; only `US` is accepted in this scaffold. |
-| `PLAID_REDIRECT_URI` | No | Optional OAuth redirect URI for local Link testing. |
-| `PLAID_WEBHOOK` | No | Optional webhook URL for local tunnel testing. |
+| `PLAID_REDIRECT_URI` | No | OAuth redirect URI. Required for the OAuth banks most large institutions use in production; optional for non-OAuth sandbox banks. |
+| `PLAID_WEBHOOK` | No | Public HTTPS URL Plaid delivers webhooks to (`…/api/plaid/webhook`). Enables real-time updates and re-auth flagging; the endpoint verifies Plaid's signature on every delivery. |
+| `BREADCRUMBS_ENCRYPTION_KEY` | No (recommended in prod) | 32-byte key (hex or base64) that encrypts stored access tokens at rest. Absent, tokens are protected by file permissions only and the API warns on boot. |
 | `HOST` | No | Defaults to `127.0.0.1`. |
 | `PORT` | No | Defaults to `8787`. |
 | `BREADCRUMBZ_LOCAL_DATA_DIR` | No | Local CSV import storage directory. Defaults to `~/.breadcrumbz/local-data`, outside the project tree. |
@@ -94,17 +95,23 @@ curl -X POST http://127.0.0.1:8787/api/plaid/exchange-public-token \
 The response contains `connectionId`, `itemId`, and `requestId`. It must not
 contain a Plaid `access_token`.
 
-## Read-Only Endpoints
+## Endpoints
 
-All endpoints are local development routes under `/api/plaid`.
+All routes are under `/api/plaid`. Every `/connections/:connectionId/*` route is
+scoped to the authenticated caller; `/webhook` is public and authenticates each
+delivery by verifying Plaid's signature.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/link-token` | Create a Sandbox Link token for `transactions`. |
-| `POST` | `/exchange-public-token` | Exchange a browser `public_token` server-side and store the access token in memory. |
+| `POST` | `/link-token` | Create a Link token for `transactions`. |
+| `POST` | `/exchange-public-token` | Exchange a browser `public_token` server-side and persist the access token (encrypted at rest when a key is set). |
+| `GET` | `/connections` | List the caller's connections (no access tokens). Includes `reauthRequired` when the bank login needs repair. |
 | `GET` | `/connections/:connectionId/accounts` | Retrieve balances and return canonical `Account[]`. |
 | `GET` | `/connections/:connectionId/transactions?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` | Retrieve transactions and return canonical `Transaction[]`. Pending transactions are excluded until the core model supports pending state. |
 | `GET` | `/connections/:connectionId/snapshot?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&asOfDate=YYYY-MM-DD` | Retrieve accounts and transactions and map them into a conservative `FinancialSnapshot`. |
+| `POST` | `/connections/:connectionId/sync` | Pull the latest accounts + transaction delta via `/transactions/sync` (cursor-based) into the caller's statement store. Idempotent. |
+| `DELETE` | `/connections/:connectionId` | Remove the connection and its stored access token. |
+| `POST` | `/webhook` | Receive Plaid webhooks. Verifies the signature, then syncs on a `TRANSACTIONS` delta or flags re-auth on an `ITEM_LOGIN_REQUIRED`-class event. |
 
 The snapshot mapper sets `balancesDeclaredComplete` and
 `userConfirmedNoOtherRequiredObligations` to `false` by default. A connected
