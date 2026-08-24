@@ -2,7 +2,7 @@
  * A tiny durable JSON map, shared by the user and session stores.
  *
  * It exists so identity persistence follows the same "in-memory for tests, a
- * JSON file under ~/.breadcrumbs for local use" shape the statement import store
+ * JSON file under ~/.breadcrumbz for local use" shape the statement import store
  * already established — one persistence idea in the codebase, not three. When a
  * real database is connected later, only these stores are reimplemented; every
  * caller is written against the interfaces above them, not this file.

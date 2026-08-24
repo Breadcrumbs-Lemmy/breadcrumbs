@@ -385,7 +385,7 @@ async function callLocalModel(
   // the loopback guarantee is checked against the URL the statement text is
   // actually posted to. Falls back to the chat fields when a config omits them.
   const baseUrl = config.extractionLocalBaseUrl ?? config.localBaseUrl;
-  if (!baseUrl) throw new Error("Local statement extraction requires BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL (or BREADCRUMBS_LOCAL_AGENT_BASE_URL).");
+  if (!baseUrl) throw new Error("Local statement extraction requires BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL (or BREADCRUMBZ_LOCAL_AGENT_BASE_URL).");
   // Same no-internet guarantee the chat provider enforces: unless explicitly
   // relaxed, the model endpoint must be loopback so a statement's text can never
   // be posted off the machine.

@@ -1,5 +1,5 @@
 /**
- * Breadcrumbs logo.
+ * Breadcrumbz logo.
  *
  * The mark is a lowercase "b" — the brand's initial — stamped into a coin, the
  * money the name plays on. One clean letterform (a tall stem with a round bowl
@@ -17,7 +17,7 @@
  *
  * Monochrome by design: the whole mark inherits `currentColor` (the accent),
  * so it themes for free and never competes with the data on screen. The
- * chromatic wit — bread in honey, crumbs in teal — lives in the wordmark.
+ * chromatic wit — bread in honey, crumbz in teal — lives in the wordmark.
  */
 
 import { useEffect, useState, type CSSProperties } from "react";
@@ -133,7 +133,7 @@ const GLINT_DOTS: { a: number; r: number; opacity: number; color: string }[] = [
  * keyframe reads. Everything here is rolled fresh — start column, size, drift,
  * spin, distance and timing — so no two coins (and no two hovers) fall alike.
  * `spread` sets how far the start columns fan out: the full wordmark drops coins
- * across all of "breadcrumbs" (3–97%), the lone mark keeps them over the "b".
+ * across all of "breadcrumbz" (3–97%), the lone mark keeps them over the "b".
  */
 function makeCoins(count: number, spread: "mark" | "wide"): CSSProperties[] {
   const rand = (min: number, max: number) => min + Math.random() * (max - min);
@@ -398,7 +398,7 @@ export function Logo({
   }
 
   // Full lockup: the mark keeps its beacon crumb, but the hover coin-spill lifts
-  // up to the lockup so coins drop from all along "breadcrumbs", not just the
+  // up to the lockup so coins drop from all along "breadcrumbz", not just the
   // "b". Mounted only while active so every hover falls in a fresh pattern; on
   // leave the coins drain one loop-boundary at a time (see useSpillHover).
   return (
@@ -433,7 +433,7 @@ export function Logo({
 /**
  * The wordmark. Fraunces gives it a warm, typeset voice, and the name carries
  * its own pun: "bread" wears the honey brand colour — money, the slang the name
- * plays on — while "crumbs" takes the teal accent. Two tones, one unbroken
+ * plays on — while "crumbz" takes the teal accent. Two tones, one unbroken
  * word. The trailing brand-gradient crumb is the last spot of chromatic colour,
  * echoing the trail in the mark.
  */
@@ -445,7 +445,7 @@ export function Wordmark({ className = "" }: { className?: string }) {
       }`}
     >
       <span style={{ color: "var(--brand-honey)" }}>bread</span>
-      <span className="text-accent">crumbs</span>
+      <span className="text-accent">crumbz</span>
       <span
         aria-hidden="true"
         className="ml-[0.12em] h-[0.32em] w-[0.32em] self-end rounded-full bg-brand"

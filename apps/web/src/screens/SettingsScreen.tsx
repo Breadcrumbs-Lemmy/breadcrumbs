@@ -264,7 +264,7 @@ function buildPrivacyRows(status: AgentStatus | null): PrivacyRowData[] {
     {
       title: "On this device",
       body:
-        "Your accounts, transactions, imported statements, uploaded files, saved facts, and chat history are stored as plain files on the machine that runs Breadcrumbs. There is no shared cloud database — nothing is copied to an outside server for us to hold.",
+        "Your accounts, transactions, imported statements, uploaded files, saved facts, and chat history are stored as plain files on the machine that runs Breadcrumbz. There is no shared cloud database — nothing is copied to an outside server for us to hold.",
       badge: { label: "On device", tone: "onDevice" },
     },
   ];
@@ -307,7 +307,7 @@ function buildPrivacyRows(status: AgentStatus | null): PrivacyRowData[] {
     {
       title: "Connecting a bank",
       body:
-        "Linking an account goes through Plaid, a third party that brokers the bank connection. Your bank credentials go to Plaid, never to us — Breadcrumbs receives only the transactions, which are then stored on this machine.",
+        "Linking an account goes through Plaid, a third party that brokers the bank connection. Your bank credentials go to Plaid, never to us — Breadcrumbz receives only the transactions, which are then stored on this machine.",
       badge: { label: "Third party", tone: "thirdParty" },
     },
     {

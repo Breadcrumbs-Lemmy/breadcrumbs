@@ -31,15 +31,15 @@ export type AuthConfig = {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig {
-  const mode: AuthMode = env.BREADCRUMBS_AUTH_MODE?.trim() === "multi_user" ? "multi_user" : "single_user";
-  const ttlDays = Number.parseInt(env.BREADCRUMBS_SESSION_TTL_DAYS ?? "", 10);
+  const mode: AuthMode = env.BREADCRUMBZ_AUTH_MODE?.trim() === "multi_user" ? "multi_user" : "single_user";
+  const ttlDays = Number.parseInt(env.BREADCRUMBZ_SESSION_TTL_DAYS ?? "", 10);
   return {
     mode,
     sessionTtlMs: (Number.isFinite(ttlDays) && ttlDays > 0 ? ttlDays : 30) * DAY_MS,
     // Registration is open by default in multi_user so a fresh deployment is
-    // usable; close it with BREADCRUMBS_REGISTRATION=closed once seeded.
-    registrationOpen: env.BREADCRUMBS_REGISTRATION?.trim() !== "closed",
-    ownerEmail: env.BREADCRUMBS_OWNER_EMAIL?.trim()?.toLowerCase() || undefined,
+    // usable; close it with BREADCRUMBZ_REGISTRATION=closed once seeded.
+    registrationOpen: env.BREADCRUMBZ_REGISTRATION?.trim() !== "closed",
+    ownerEmail: env.BREADCRUMBZ_OWNER_EMAIL?.trim()?.toLowerCase() || undefined,
     passwordMinLength: 8,
   };
 }

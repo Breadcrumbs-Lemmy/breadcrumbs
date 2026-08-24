@@ -61,20 +61,20 @@ describe("affordability HTTP routes", () => {
 
   it("allows configured deployed frontend origins in addition to local development origins", async () => {
     const app = await createServer({
-      allowedCorsOrigins: ["https://breadcrumbs-web.example"],
+      allowedCorsOrigins: ["https://breadcrumbz-web.example"],
     });
 
     const response = await app.inject({
       method: "OPTIONS",
       url: "/api/v1/affordability/evaluate",
       headers: {
-        origin: "https://breadcrumbs-web.example",
+        origin: "https://breadcrumbz-web.example",
         "access-control-request-method": "POST",
       },
     });
 
     expect(response.statusCode).toBe(204);
-    expect(response.headers["access-control-allow-origin"]).toBe("https://breadcrumbs-web.example");
+    expect(response.headers["access-control-allow-origin"]).toBe("https://breadcrumbz-web.example");
     await app.close();
   });
 });

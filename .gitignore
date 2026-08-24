@@ -17,9 +17,10 @@ build/
 *.tsbuildinfo
 apps/web/dist/
 
-# --- Runtime data (file-backed stores default to ~/.breadcrumbs, but guard
+# --- Runtime data (file-backed stores default to ~/.breadcrumbz, but guard
 #     against a repo-local dataDir override) ---
 data/
+.breadcrumbz/
 .breadcrumbs/
 *.local.json
 

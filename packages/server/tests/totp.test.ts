@@ -77,10 +77,10 @@ describe("TOTP", () => {
   });
 
   it("builds an otpauth URI an authenticator app can import", () => {
-    const uri = buildOtpauthUri({ secret: "JBSWY3DPEHPK3PXP", accountName: "alice@example.com", issuer: "Breadcrumbs" });
-    expect(uri).toMatch(/^otpauth:\/\/totp\/Breadcrumbs:alice%40example\.com\?/);
+    const uri = buildOtpauthUri({ secret: "JBSWY3DPEHPK3PXP", accountName: "alice@example.com", issuer: "Breadcrumbz" });
+    expect(uri).toMatch(/^otpauth:\/\/totp\/Breadcrumbz:alice%40example\.com\?/);
     expect(uri).toContain("secret=JBSWY3DPEHPK3PXP");
-    expect(uri).toContain("issuer=Breadcrumbs");
+    expect(uri).toContain("issuer=Breadcrumbz");
     expect(uri).toContain("algorithm=SHA1");
     expect(uri).toContain("digits=6");
     expect(uri).toContain("period=30");

@@ -24,7 +24,7 @@ box, so this procedure is deliberately built around the signals that *do* exist:
 
 | Signal | Where it appears | Status |
 | --- | --- | --- |
-| Boot-time security warnings — missing `BREADCRUMBS_ENCRYPTION_KEY`, risky agent config (local chat + hosted extractor) | process stdout/stderr (`console.warn` in `http/server.ts`, `main.ts`) | Implemented |
+| Boot-time security warnings — missing `BREADCRUMBZ_ENCRYPTION_KEY`, risky agent config (local chat + hosted extractor) | process stdout/stderr (`console.warn` in `http/server.ts`, `main.ts`) | Implemented |
 | Fatal errors — uncaught exception, unhandled rejection, failed data migration, invalid Plaid config | process stderr (`[fatal]` / `[data]` in `main.ts`) | Implemented |
 | **Auth failure** (bad password, unknown email, locked account) | **HTTP `401`** (and **`429`** once locked) returned to the client — visible in the operator's **reverse-proxy / access log**, not in an app log | Implemented (as HTTP status) |
 | **Rate-limit trip** (per-IP flood) | **HTTP `429`** with a `RATE_LIMITED` body — same: visible in the access log | Implemented (as HTTP status) |
@@ -70,7 +70,7 @@ deployment's normal traffic; the numbers below are sane starting defaults.
 | `401`/`429` from one source IP across many accounts | ≥ 50 in 15 min | Credential-stuffing pattern — block the IP at the proxy; verify per-IP rate limit is active; open an incident if widespread. |
 | Global `429` rate | Sustained > baseline for 10 min | Possible flood or misconfigured client — investigate source; consider tightening the rate limit. |
 | `[fatal]` line in process logs | Any occurrence | Page on-call; the process may have exited — check service health and restart/roll back. |
-| `[security]` "encryption key not set" in production | Any occurrence | Misconfiguration — set `BREADCRUMBS_ENCRYPTION_KEY` and restart; treat prior at-rest data as unencrypted. |
+| `[security]` "encryption key not set" in production | Any occurrence | Misconfiguration — set `BREADCRUMBZ_ENCRYPTION_KEY` and restart; treat prior at-rest data as unencrypted. |
 | New **high/critical** dependency advisory | Any (CI fails the build) | Patch or mitigate before release; see [risk R-05](risk-register.md). |
 | `5xx` (`INTERNAL_SERVER_ERROR`) rate | > baseline | Investigate for an availability or logic fault (not secret leakage — bodies are generic). |
 

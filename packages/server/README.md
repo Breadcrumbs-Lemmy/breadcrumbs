@@ -1,6 +1,6 @@
 # packages/server
 
-Single Fastify backend API for Breadcrumbs. It is the one deployable backend
+Single Fastify backend API for Breadcrumbz. It is the one deployable backend
 service; `packages/core` is an internal domain library it depends on, not a
 separate microservice.
 
@@ -29,22 +29,22 @@ their keys.
 |-----------------------|-----------------------------------------------------|---------------------|
 | Spending + CSV import | nothing                                             | fully works         |
 | Accounts / affordability | nothing                                          | fully works         |
-| Multi-user + admin    | `BREADCRUMBS_AUTH_MODE=multi_user`                  | single-user, no login |
+| Multi-user + admin    | `BREADCRUMBZ_AUTH_MODE=multi_user`                  | single-user, no login |
 | Hosted assistant      | `ANTHROPIC_API_KEY`                                 | chat routes unregistered |
-| Local (offline) assistant | `BREADCRUMBS_AGENT_PROVIDER=local` + base URL   | chat routes unregistered |
+| Local (offline) assistant | `BREADCRUMBZ_AGENT_PROVIDER=local` + base URL   | chat routes unregistered |
 | Assistant memory      | nothing (always on when the store is wired)         | uploads / facts / history available |
 | Plaid                 | `PLAID_CLIENT_ID` / `PLAID_SECRET`                  | Plaid routes unregistered |
 
 ## Authentication & isolation
 
-Two modes, switched by `BREADCRUMBS_AUTH_MODE`:
+Two modes, switched by `BREADCRUMBZ_AUTH_MODE`:
 
 - **single_user** (default) — no login. Every request acts as the implicit
   owner, reading the owner's own isolated data. Keeps the app frictionless when
   you run it just for yourself.
 - **multi_user** — real accounts. A single `onRequest` hook resolves the caller
   for every `/api` route and 401s anything not on the public allowlist. The
-  first registrant (or `BREADCRUMBS_OWNER_EMAIL`) becomes the bootstrap admin.
+  first registrant (or `BREADCRUMBZ_OWNER_EMAIL`) becomes the bootstrap admin.
 
 Per-user isolation is by construction, not by remembering a `WHERE user_id = ?`:
 handlers resolve a store, memory, or Plaid connection scoped to
@@ -72,7 +72,7 @@ one interface (`src/agent/provider.ts`):
   need the hosted model, and that case is reported, not silent.
 
 **Chat and extraction can run on different providers.** Statement extraction is a
-narrow, well-defined job, so `BREADCRUMBS_EXTRACTION_PROVIDER` can point it at a
+narrow, well-defined job, so `BREADCRUMBZ_EXTRACTION_PROVIDER` can point it at a
 small, cheap specialist independently of chat — e.g. a local, offline chat model
 paired with a small hosted extractor. That independence has a privacy edge: with
 a **local chat model and a hosted extractor**, a statement's text leaves the
@@ -108,20 +108,20 @@ it by opening a file under their data directory.
 
 Copy `.env.example` at the repository root. The keys, grouped:
 
-- **Server** — `HOST`, `PORT`, `BREADCRUMBS_CORS_ORIGINS`, `BREADCRUMBS_LOCAL_DATA_DIR`.
-- **Auth** — `BREADCRUMBS_AUTH_MODE`, `BREADCRUMBS_OWNER_EMAIL`, `BREADCRUMBS_REGISTRATION_OPEN`.
-- **Assistant** — `BREADCRUMBS_AGENT_PROVIDER`, then either `ANTHROPIC_API_KEY`
-  (+ optional `BREADCRUMBS_AGENT_MODEL`, `BREADCRUMBS_EXTRACTION_MODEL`) or
-  `BREADCRUMBS_LOCAL_AGENT_BASE_URL` (+ `BREADCRUMBS_LOCAL_AGENT_MODEL`,
-  `BREADCRUMBS_LOCAL_EXTRACTION_MODEL`, `BREADCRUMBS_LOCAL_AGENT_ALLOW_NONLOOPBACK`).
+- **Server** — `HOST`, `PORT`, `BREADCRUMBZ_CORS_ORIGINS`, `BREADCRUMBZ_LOCAL_DATA_DIR`.
+- **Auth** — `BREADCRUMBZ_AUTH_MODE`, `BREADCRUMBZ_OWNER_EMAIL`, `BREADCRUMBZ_REGISTRATION_OPEN`.
+- **Assistant** — `BREADCRUMBZ_AGENT_PROVIDER`, then either `ANTHROPIC_API_KEY`
+  (+ optional `BREADCRUMBZ_AGENT_MODEL`, `BREADCRUMBZ_EXTRACTION_MODEL`) or
+  `BREADCRUMBZ_LOCAL_AGENT_BASE_URL` (+ `BREADCRUMBZ_LOCAL_AGENT_MODEL`,
+  `BREADCRUMBZ_LOCAL_EXTRACTION_MODEL`, `BREADCRUMBZ_LOCAL_AGENT_ALLOW_NONLOOPBACK`).
   The `*_EXTRACTION_MODEL` knobs give PDF statement transcription its own model
   (defaults to the chat model), so a fast chat model can pair with a stronger extractor.
   To run extraction on a *different provider* than chat, set
-  `BREADCRUMBS_EXTRACTION_PROVIDER` (`anthropic` or `local`, defaults to the chat
-  provider); a local extractor takes its own `BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL`
+  `BREADCRUMBZ_EXTRACTION_PROVIDER` (`anthropic` or `local`, defaults to the chat
+  provider); a local extractor takes its own `BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL`
   (+ `_ALLOW_NONLOOPBACK`), and a hosted extractor reuses `ANTHROPIC_API_KEY` and
   defaults its model to a small, cheap one (not the big chat default) in the mixed
-  local-chat config — override with `BREADCRUMBS_EXTRACTION_MODEL`.
+  local-chat config — override with `BREADCRUMBZ_EXTRACTION_MODEL`.
 - **Plaid** — `PLAID_ENV`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_CLIENT_NAME`, `PLAID_COUNTRY_CODES`.
 
 ## Tests

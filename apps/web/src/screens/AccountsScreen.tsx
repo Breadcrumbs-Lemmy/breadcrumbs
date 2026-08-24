@@ -490,7 +490,7 @@ export function AccountsScreen({
           </div>
 
           <p className="mt-8 text-center text-meta text-ink-tertiary">
-            Read-only. Breadcrumbs can't move money or change your accounts.
+            Read-only. Breadcrumbz can't move money or change your accounts.
           </p>
         </>
       )}

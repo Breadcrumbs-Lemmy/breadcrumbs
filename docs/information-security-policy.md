@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | **Document owner** | `Lemuel Mutah — Owner & Maintainer (sole developer)` |
-| **Organization** | `Lemuel Mutah (sole operator — no incorporated entity)` ("the Company"), operator of Breadcrumbs |
+| **Organization** | `Lemuel Mutah (sole operator — no incorporated entity)` ("the Company"), operator of Breadcrumbz |
 | **Version** | 1.0 |
 | **Effective date** | 2026-08-09 |
 | **Next review** | 2027-08-09 (reviewed at least annually and after any material change) |
@@ -21,12 +21,12 @@
 ## 1. Purpose and scope
 
 This policy documents how the Company identifies, mitigates, and monitors
-information security risks relevant to Breadcrumbs — a personal-finance
+information security risks relevant to Breadcrumbz — a personal-finance
 application that connects to users' financial accounts (via Plaid) or ingests
 their statements, and provides spending analysis and an AI assistant scoped to
 each user's own data.
 
-**In scope:** the Breadcrumbs application (`packages/core`, `packages/server`,
+**In scope:** the Breadcrumbz application (`packages/core`, `packages/server`,
 `apps/web`), the data it processes, the credentials and third-party API secrets
 it holds, the environments it runs in, and the people who develop and operate it.
 
@@ -39,7 +39,7 @@ it holds, the environments it runs in, and the people who develop and operate it
 | Authentication data | password hashes (scrypt), session tokens | Critical |
 | User identity | email, display name | Moderate |
 
-Breadcrumbs is **read-only** with respect to financial accounts: it never
+Breadcrumbz is **read-only** with respect to financial accounts: it never
 initiates payments, transfers, or any movement of funds. This materially narrows
 the risk surface and is a deliberate product boundary.
 
@@ -56,7 +56,7 @@ the risk surface and is a deliberate product boundary.
   termination, host/OS hardening, disk encryption, backups, network exposure).
   Where the Company runs a hosted instance, the Company is the operator.
 
-Because Breadcrumbs is self-hostable, security is a **shared responsibility**:
+Because Breadcrumbz is self-hostable, security is a **shared responsibility**:
 the application ships secure defaults; the operator is responsible for the
 environment it runs in. Section 11 lists the operator's obligations explicitly.
 
@@ -104,14 +104,14 @@ as a living document alongside this policy ([risk-register.md](risk-register.md)
 | --- | --- | --- | --- |
 | Secrets from environment only | Plaid/Anthropic credentials are read from env, never committed; `.env` is git-ignored | Implemented | `plaid/config.ts`, `.env.example` |
 | No secret leakage in logs/errors | config validation maps issues by path without echoing the offending value, so a bad secret cannot land in a log line | Implemented | `plaid/config.ts` |
-| Encryption of Plaid tokens at rest | Plaid access tokens are encrypted at rest with AES-256-GCM (key from `BREADCRUMBS_ENCRYPTION_KEY`, bound to the connection id), decrypted only in memory at call time; the key lives in the environment, never in the datastore. Enabled by providing a key. | Implemented | `crypto/field-cipher.ts`, `plaid/token-store.ts` |
-| Encryption of persisted transaction data at rest | The per-user statement/transaction store encrypts its entire persisted state (accounts, transactions, import batches) at rest with the same AES-256-GCM field cipher (key from `BREADCRUMBS_ENCRYPTION_KEY`, domain-separated by a state AAD), decrypted only in memory. Legacy plaintext files are read transparently and re-sealed on the next write; an encrypted file with no key fails loudly rather than silently returning empty. Enabled by providing a key. | Implemented | `crypto/field-cipher.ts`, `local/store.ts` |
+| Encryption of Plaid tokens at rest | Plaid access tokens are encrypted at rest with AES-256-GCM (key from `BREADCRUMBZ_ENCRYPTION_KEY`, bound to the connection id), decrypted only in memory at call time; the key lives in the environment, never in the datastore. Enabled by providing a key. | Implemented | `crypto/field-cipher.ts`, `plaid/token-store.ts` |
+| Encryption of persisted transaction data at rest | The per-user statement/transaction store encrypts its entire persisted state (accounts, transactions, import batches) at rest with the same AES-256-GCM field cipher (key from `BREADCRUMBZ_ENCRYPTION_KEY`, domain-separated by a state AAD), decrypted only in memory. Legacy plaintext files are read transparently and re-sealed on the next write; an encrypted file with no key fails loudly rather than silently returning empty. Enabled by providing a key. | Implemented | `crypto/field-cipher.ts`, `local/store.ts` |
 
 ### 4.3 Data protection
 
 | Control | Detail | Status | Source |
 | --- | --- | --- | --- |
-| Encryption in transit | HTTPS/TLS terminated in front of the API; browser origins restricted by a CORS allowlist | Operator (TLS) / Implemented (CORS) | `docs/running-breadcrumbs.md`, `http/server.ts` |
+| Encryption in transit | HTTPS/TLS terminated in front of the API; browser origins restricted by a CORS allowlist | Operator (TLS) / Implemented (CORS) | `docs/running-breadcrumbz.md`, `http/server.ts` |
 | Durable persistence | atomic file writes; write-data-before-references ordering; staged restore — designed to survive crashes without corrupting the datastore | Implemented | `persistence/atomic-file.ts` (atomic writes/ordering), `persistence/backup.ts` (staged restore) |
 | Data residency & consent | per-user Private-vs-Synced consent model; no third-party cloud storage of user data exists today (E2EE synced tier deferred) | Implemented (Private) / Planned (Synced) | `docs/data-quality-and-safety.md` |
 | Encryption at rest | the datastore is protected by the host's disk/volume encryption | Operator | §11 |
@@ -241,9 +241,9 @@ For self-hosted deployments, the operator MUST:
 - Run on a host with **full-disk/volume encryption** (protects the datastore and
   stored tokens at rest).
 - Restrict network exposure (firewall; do not expose the API broadly).
-- Set `BREADCRUMBS_AUTH_MODE=multi_user` for any shared deployment (never rely on
+- Set `BREADCRUMBZ_AUTH_MODE=multi_user` for any shared deployment (never rely on
   `single_user`, which requires no login, outside a private single-operator box).
-- Configure `BREADCRUMBS_CORS_ORIGINS` to only trusted browser origins.
+- Configure `BREADCRUMBZ_CORS_ORIGINS` to only trusted browser origins.
 - Keep regular, tested **backups** of the datastore.
 - Apply OS and dependency **security updates** promptly.
 
@@ -279,7 +279,7 @@ Tracked openly so this document stays honest:
 
 ---
 
-*This policy is tailored to the Breadcrumbs codebase as of the effective date and
+*This policy is tailored to the Breadcrumbz codebase as of the effective date and
 has been reviewed and approved by the accountable owner (see header). Re-review on
 the §7 cadence and after any material change before relying on it for a fresh
 attestation. It is not legal or compliance advice.*

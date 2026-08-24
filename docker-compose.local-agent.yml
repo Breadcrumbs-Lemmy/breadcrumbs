@@ -22,7 +22,7 @@
 #   `agent-net` note below — which is the guarantee that actually matters:
 #   the user's financial prompts never leave this host, and the model can't phone home.
 #   (This holds for the all-local default. If you split extraction onto the hosted
-#   provider — BREADCRUMBS_EXTRACTION_PROVIDER=anthropic below — a statement's text
+#   provider — BREADCRUMBZ_EXTRACTION_PROVIDER=anthropic below — a statement's text
 #   DOES leave the host on import; chat stays local. The app warns at startup and
 #   /status reports it as extractionOffline=false.)
 #
@@ -34,7 +34,7 @@
 #   "$16,959.60"), now returns the exact "$1,695.96". So model choice is about
 #   overall quality — instruction-following, tool selection, phrasing, not padding
 #   an answer with figures it wasn't asked for — where a larger model is clearly
-#   better. Set BREADCRUMBS_LOCAL_AGENT_MODEL to pick the tier your GPU fits:
+#   better. Set BREADCRUMBZ_LOCAL_AGENT_MODEL to pick the tier your GPU fits:
 #     llama3.3:70b   ~40GB+ VRAM   production default; strongest following
 #     qwen2.5:32b    ~24GB VRAM    strong middle tier, excellent tool use
 #     llama3.1:8b    ~8-12GB VRAM  proven-correct low-VRAM / fast-verify tier
@@ -46,7 +46,7 @@
 #   figures the deterministic engine already computed (present.ts), so a small
 #   fast model is safe and snappy. Extraction reads an unfamiliar statement
 #   layout into structured rows — the one job where a bigger model clearly helps.
-#   Set BREADCRUMBS_LOCAL_EXTRACTION_MODEL to run them on separate models, e.g.
+#   Set BREADCRUMBZ_LOCAL_EXTRACTION_MODEL to run them on separate models, e.g.
 #   chat=qwen2.5:3b, extraction=qwen2.5:32b. The sidecar pulls BOTH (the entrypoint
 #   pulls the extraction tag too), and the api routes each job to its own model.
 #   Leave it empty and nothing changes — one model serves both, exactly as before.
@@ -71,13 +71,13 @@
 #
 #   The #1 cost lever either way: STOP the instance when idle — you pay compute
 #     only while it runs. The model weights persist on the EBS-backed
-#     `breadcrumbs-ollama-models` volume (which keeps costing a few cents/GB-month
+#     `breadcrumbz-ollama-models` volume (which keeps costing a few cents/GB-month
 #     even while stopped), so a restart skips the re-pull. Prices vary by
 #     region/time — check the AWS pricing calculator.
 #
 #   Two gotchas when you STOP/START:
 #     • The auto-assigned public IPv4 CHANGES on every stop→start. Clients,
-#       bookmarks, or a VITE_BREADCRUMBS_API_BASE_URL pinned to the old address
+#       bookmarks, or a VITE_BREADCRUMBZ_API_BASE_URL pinned to the old address
 #       silently fail after a restart (the box is healthy — only its IP moved).
 #       Cheapest fix for a single-user box: just re-read the new public IP after
 #       each start. For a stable address, an Elastic IP or a DNS name works — but
@@ -91,14 +91,14 @@
 services:
   ollama:
     image: ollama/ollama:latest
-    container_name: breadcrumbs-ollama
+    container_name: breadcrumbz-ollama
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     environment:
       # Single source of truth for the model tag; the api service reads the same var.
-      OLLAMA_MODEL: ${BREADCRUMBS_LOCAL_AGENT_MODEL:-llama3.3:70b}
+      OLLAMA_MODEL: ${BREADCRUMBZ_LOCAL_AGENT_MODEL:-llama3.3:70b}
       # Optional second model, pulled by the entrypoint only when set and distinct
       # (see "SPLITTING CHAT AND EXTRACTION" above). Empty ⇒ nothing extra pulled.
-      OLLAMA_EXTRACTION_MODEL: ${BREADCRUMBS_LOCAL_EXTRACTION_MODEL:-}
+      OLLAMA_EXTRACTION_MODEL: ${BREADCRUMBZ_LOCAL_EXTRACTION_MODEL:-}
     volumes:
       # Weights persist across restarts/rebuilds — the multi-GB pull happens once.
       - ollama-models:/root/.ollama
@@ -132,34 +132,34 @@ services:
 
   api:
     environment:
-      BREADCRUMBS_AGENT_PROVIDER: local
+      BREADCRUMBZ_AGENT_PROVIDER: local
       # Service-name URL over the compose network (not 127.0.0.1 — see header).
-      BREADCRUMBS_LOCAL_AGENT_BASE_URL: http://ollama:11434/v1
-      BREADCRUMBS_LOCAL_AGENT_MODEL: ${BREADCRUMBS_LOCAL_AGENT_MODEL:-llama3.3:70b}
+      BREADCRUMBZ_LOCAL_AGENT_BASE_URL: http://ollama:11434/v1
+      BREADCRUMBZ_LOCAL_AGENT_MODEL: ${BREADCRUMBZ_LOCAL_AGENT_MODEL:-llama3.3:70b}
       # Optional split: a separate model for statement extraction. Empty ⇒ the
       # chat model handles both. The sidecar pulls this too (OLLAMA_EXTRACTION_MODEL).
-      BREADCRUMBS_LOCAL_EXTRACTION_MODEL: ${BREADCRUMBS_LOCAL_EXTRACTION_MODEL:-}
+      BREADCRUMBZ_LOCAL_EXTRACTION_MODEL: ${BREADCRUMBZ_LOCAL_EXTRACTION_MODEL:-}
       # Required because the URL above is a service name, not loopback. The
       # no-internet guarantee is kept by `agent-net`, not by the URL check.
       # Do NOT set this when the model sits on a network you don't fully control.
-      BREADCRUMBS_LOCAL_AGENT_ALLOW_NONLOOPBACK: "true"
+      BREADCRUMBZ_LOCAL_AGENT_ALLOW_NONLOOPBACK: "true"
       # Optional: run statement EXTRACTION on a different provider than chat.
       # Unset ⇒ extraction runs on this same local model (no change). Set to
       # "anthropic" to keep chat on-device but send PDF statements to a small,
       # cheap hosted extractor: it reuses ANTHROPIC_API_KEY and the model named in
-      # BREADCRUMBS_EXTRACTION_MODEL (unset ⇒ a small, cheap default, not the big
+      # BREADCRUMBZ_EXTRACTION_MODEL (unset ⇒ a small, cheap default, not the big
       # chat model). This sends a statement's text off-box on
       # import (the app warns and /status reports extractionOffline=false) — and it
       # works here with NO network change, because the `api` container keeps its
       # internet route via the `default` network; only `ollama` is cut off by
       # `agent-net` (see the note below). To instead split onto a SECOND local
-      # endpoint, set BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL (a loopback/service URL)
-      # and, if it isn't loopback, BREADCRUMBS_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK.
-      BREADCRUMBS_EXTRACTION_PROVIDER: ${BREADCRUMBS_EXTRACTION_PROVIDER:-}
+      # endpoint, set BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL (a loopback/service URL)
+      # and, if it isn't loopback, BREADCRUMBZ_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK.
+      BREADCRUMBZ_EXTRACTION_PROVIDER: ${BREADCRUMBZ_EXTRACTION_PROVIDER:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      BREADCRUMBS_EXTRACTION_MODEL: ${BREADCRUMBS_EXTRACTION_MODEL:-}
-      BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL: ${BREADCRUMBS_LOCAL_EXTRACTION_BASE_URL:-}
-      BREADCRUMBS_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK: ${BREADCRUMBS_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK:-}
+      BREADCRUMBZ_EXTRACTION_MODEL: ${BREADCRUMBZ_EXTRACTION_MODEL:-}
+      BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL: ${BREADCRUMBZ_LOCAL_EXTRACTION_BASE_URL:-}
+      BREADCRUMBZ_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK: ${BREADCRUMBZ_LOCAL_EXTRACTION_ALLOW_NONLOOPBACK:-}
     depends_on:
       ollama:
         condition: service_healthy
@@ -178,7 +178,7 @@ networks:
     #   Scope: `internal: true` isolates ONLY the `ollama` container. The `api`
     #   container sits on both this network and `default`, so it KEEPS its internet
     #   route — which is what lets a split-out hosted extractor
-    #   (BREADCRUMBS_EXTRACTION_PROVIDER=anthropic) reach Anthropic even with this
+    #   (BREADCRUMBZ_EXTRACTION_PROVIDER=anthropic) reach Anthropic even with this
     #   hardened. The all-local default never uses that route.
     internal: false
 
@@ -189,4 +189,4 @@ volumes:
     # AND can be pre-seeded: a plain `ollama pull` into this same volume (e.g.
     # during verification) means the first `compose up` skips the download
     # entirely. The entrypoint only pulls when `ollama list` misses the tag.
-    name: breadcrumbs-ollama-models
+    name: breadcrumbz-ollama-models

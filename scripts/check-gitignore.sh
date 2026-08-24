@@ -74,7 +74,7 @@ must_ignore=(
   "node_modules/pkg/index.js"
   "packages/server/node_modules/pkg/index.js"
   "data/store.json"
-  ".breadcrumbs/local-data/store.json"
+  ".breadcrumbz/local-data/store.json"
   "secret.pem"
   "server.key"
   "state.local.json"

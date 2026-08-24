@@ -1,5 +1,5 @@
 /**
- * Identity types for Breadcrumbs.
+ * Identity types for Breadcrumbz.
  *
  * The product's first user is its owner tracking their own spending, so the
  * default posture is single-user and login-free (`mode: "single_user"`). The

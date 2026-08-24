@@ -1,4 +1,4 @@
-# Running Breadcrumbs
+# Running Breadcrumbz
 
 Status: Living  
 Last updated: 2026-08-06
@@ -33,6 +33,40 @@ docker compose up --build
 
 Same ports. Imported statements persist on a named volume; `docker compose down -v` deletes them, without `-v` they survive.
 
+## Upgrading from Breadcrumbs (the rename)
+
+The app was renamed **Breadcrumbs → Breadcrumbz**. This was a hard rename: the config
+prefix, the on-disk data directory, and the Docker volumes all changed, with no
+backward-compatible fallback. If you ran the old name, migrate once before upgrading —
+nothing is read from the old locations anymore.
+
+**Local (the default path).** The data directory moved from `~/.breadcrumbs` to
+`~/.breadcrumbz`. Move your existing store so nothing is lost:
+
+```bash
+mv ~/.breadcrumbs ~/.breadcrumbz   # or `cp -R` to keep the old copy as a backup
+```
+
+**Environment variables.** Every `BREADCRUMBS_*` key is now `BREADCRUMBZ_*`
+(e.g. `BREADCRUMBS_ENCRYPTION_KEY` → `BREADCRUMBZ_ENCRYPTION_KEY`,
+`VITE_BREADCRUMBS_API_BASE_URL` → `VITE_BREADCRUMBZ_API_BASE_URL`). Rename the keys in
+your `.env`; the old names are silently ignored, which means dropped config, not an error.
+
+**Docker.** The named volumes were renamed (`breadcrumbs-data` → `breadcrumbz-data`, and
+in the local-agent overlay `breadcrumbs-ollama-models` → `breadcrumbz-ollama-models`). A
+plain `docker compose up --build` would start against a fresh empty volume and leave your
+data — and the multi-GB Ollama model cache — stranded in the old ones. Copy them across first:
+
+```bash
+docker volume create breadcrumbz-data
+docker run --rm -v breadcrumbs-data:/from -v breadcrumbz-data:/to alpine \
+  ash -c 'cp -a /from/. /to/'
+# local-agent overlay only — preserves the downloaded model weights:
+docker volume create breadcrumbz-ollama-models
+docker run --rm -v breadcrumbs-ollama-models:/from -v breadcrumbz-ollama-models:/to alpine \
+  ash -c 'cp -a /from/. /to/'
+```
+
 ## What I need from you: Plaid credentials
 
 Sign up at **<https://dashboard.plaid.com/signup>**. Free, no card required for Sandbox.
@@ -64,7 +98,7 @@ Production access is a separate application in the Plaid dashboard, and Plaid re
 | Variable | Lives | Why |
 | --- | --- | --- |
 | `PLAID_CLIENT_ID`, `PLAID_SECRET` | Server only, `.env` | Server-side secrets |
-| `VITE_BREADCRUMBS_API_BASE_URL` | Build arg, public | Just a URL |
+| `VITE_BREADCRUMBZ_API_BASE_URL` | Build arg, public | Just a URL |
 | Anything secret with a `VITE_` prefix | **Never** | Vite inlines `VITE_*` into the browser bundle in plain text. A secret placed there is published to every visitor. This is a build guarantee, not a discipline problem. |
 
 The browser never sees a Plaid secret or an `access_token`. It requests a `link_token`, opens Link with it, and hands the resulting `public_token` straight back to the server, which exchanges it. The browser keeps only a `connectionId`.
@@ -121,7 +155,7 @@ A minimal commit body. `account` is required on the first import for an account 
 
 `amountSignConvention` is required whenever you map a single `amount` column, because banks disagree on the sign of a purchase. Use `outflow_positive` when a purchase is a positive number, `signed` when a purchase is negative. Alternatively map `debitAmount` and `creditAmount` instead of `amount`. Getting this backwards turns your income into spending, which is why the field has no default.
 
-Imported data is written under `~/.breadcrumbs/local-data/`, outside the project tree. In `single_user` mode (the default) it is a single `statement-imports.json`; in `multi_user` mode each user gets their own `users/<userId>/statement-imports.json` so accounts never mix. Set `BREADCRUMBS_LOCAL_DATA_DIR` to move the root. Deleting the file(s) resets the app to empty.
+Imported data is written under `~/.breadcrumbz/local-data/`, outside the project tree. In `single_user` mode (the default) it is a single `statement-imports.json`; in `multi_user` mode each user gets their own `users/<userId>/statement-imports.json` so accounts never mix. Set `BREADCRUMBZ_LOCAL_DATA_DIR` to move the root. Deleting the file(s) resets the app to empty.
 
 ## Periods
 
@@ -148,7 +182,7 @@ Optional. Set `ANTHROPIC_API_KEY` in `.env` and restart the API; `GET /health` r
 
 That constraint is visible in the product: each reply names what it read ("Read from your spending totals, your transactions"). An assistant that states a number without showing where it came from is asking to be trusted, and `D-002` is the position that it shouldn't have to be.
 
-Model and effort are set in `packages/server/src/agent/config.ts`. Override the model with `BREADCRUMBS_AGENT_MODEL`.
+Model and effort are set in `packages/server/src/agent/config.ts`. Override the model with `BREADCRUMBZ_AGENT_MODEL`.
 
 ## The API
 
@@ -193,7 +227,7 @@ pnpm test && pnpm build
 
 **The API base URL is baked in at build time.** Vite inlines it. Changing where the API lives means rebuilding the web image, not restarting it.
 
-**Use `localhost`, not `api`.** The browser resolves `VITE_BREADCRUMBS_API_BASE_URL`, and the browser is on your machine, not inside the compose network. `http://api:8787` resolves only between containers.
+**Use `localhost`, not `api`.** The browser resolves `VITE_BREADCRUMBZ_API_BASE_URL`, and the browser is on your machine, not inside the compose network. `http://api:8787` resolves only between containers.
 
 **The container binds `0.0.0.0`.** The server defaults to `127.0.0.1`, which inside a container means the container's own loopback and is unreachable from the host. Compose overrides `HOST`.
 

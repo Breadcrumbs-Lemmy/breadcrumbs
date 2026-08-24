@@ -89,7 +89,7 @@ export class FileBudgetStore implements BudgetStore {
       // set and let the next save overwrite the user's real budgets — fail loud.
       if (!this.cipher) {
         throw new Error(
-          "Budget store is encrypted but no encryption key is configured (BREADCRUMBS_ENCRYPTION_KEY).",
+          "Budget store is encrypted but no encryption key is configured (BREADCRUMBZ_ENCRYPTION_KEY).",
         );
       }
       const plaintext = this.cipher.decrypt((raw as EncryptedStateEnvelope).$enc, BUDGET_STATE_AAD);
@@ -123,8 +123,8 @@ export class FileBudgetStore implements BudgetStore {
 }
 
 export function defaultBudgetStorePath(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = env.BREADCRUMBS_LOCAL_DATA_DIR?.trim();
-  const dataDir = configured && configured.length > 0 ? configured : join(homedir(), ".breadcrumbs", "local-data");
+  const configured = env.BREADCRUMBZ_LOCAL_DATA_DIR?.trim();
+  const dataDir = configured && configured.length > 0 ? configured : join(homedir(), ".breadcrumbz", "local-data");
   return join(dataDir, "budgets.json");
 }
 

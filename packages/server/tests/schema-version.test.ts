@@ -27,7 +27,7 @@ afterEach(async () => {
 });
 
 async function writeMetaFile(version: number, updatedAt = "2026-01-01T00:00:00.000Z"): Promise<void> {
-  await writeFile(join(dataDir, "meta.json"), JSON.stringify({ app: "breadcrumbs", schemaVersion: version, updatedAt }), "utf8");
+  await writeFile(join(dataDir, "meta.json"), JSON.stringify({ app: "breadcrumbz", schemaVersion: version, updatedAt }), "utf8");
 }
 
 describe("migrateDataDir", () => {

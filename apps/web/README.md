@@ -15,7 +15,7 @@ pnpm run dev:web
 Run the API and web commands in separate terminals.
 
 The API defaults to `http://127.0.0.1:8787`. The web app reads the public API
-base URL from `VITE_BREADCRUMBS_API_BASE_URL`; copy `apps/web/.env.example` to
+base URL from `VITE_BREADCRUMBZ_API_BASE_URL`; copy `apps/web/.env.example` to
 `apps/web/.env.local` only when you need a non-default API URL. Values prefixed
 with `VITE_` are browser-visible and must never contain secrets.
 
@@ -55,6 +55,6 @@ Design source of truth: `docs/ui-design-system.md`, `docs/ui-copy-map.md`, `docs
 ## Separate Deployment
 
 Deploy `apps/web` as a static Vite frontend and set
-`VITE_BREADCRUMBS_API_BASE_URL` to the public URL of the separately deployed
+`VITE_BREADCRUMBZ_API_BASE_URL` to the public URL of the separately deployed
 Fastify API. Deploy `packages/server` as the single backend API service. On the
-API host, set `BREADCRUMBS_CORS_ORIGINS` to the deployed web origin.
+API host, set `BREADCRUMBZ_CORS_ORIGINS` to the deployed web origin.
