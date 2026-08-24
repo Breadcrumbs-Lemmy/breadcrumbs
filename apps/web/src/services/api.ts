@@ -592,6 +592,9 @@ export type PlaidConnection = {
   institutionName: string;
   createdAt: string;
   lastSyncedAt?: string;
+  /** Set by the server when Plaid reported the bank login is broken and needs
+   *  Link re-run to repair it. The token is intact; only the login lapsed. */
+  reauthRequired?: boolean;
 };
 
 /** `GET /api/plaid/connections` — list all Plaid bank connections. */
@@ -599,12 +602,25 @@ export function fetchPlaidConnections(): Promise<ApiOutcome<{ connections: Plaid
   return request("/api/plaid/connections");
 }
 
-/** `POST /api/plaid/connections/:id/sync` — pull latest transactions from Plaid. */
-export function syncPlaidConnection(
-  connectionId: string,
-  params?: { startDate?: string; endDate?: string },
-): Promise<ApiOutcome<{ synced: number; message?: string }>> {
-  return post(`/api/plaid/connections/${connectionId}/sync`, params ?? {});
+/** The `POST /api/plaid/connections/:id/sync` response. Cursor-based: the first
+ *  sync pulls full history, later syncs only the delta. `synced` is the headline
+ *  count (rows added or changed) the UI shows. */
+export type PlaidSyncResponse = {
+  connectionId: string;
+  syncedAt: string;
+  accountsSynced: number;
+  synced: number;
+  transactionsAdded: number;
+  transactionsModified: number;
+  transactionsRemoved: number;
+  transactionsDuplicate: number;
+  message?: string;
+};
+
+/** `POST /api/plaid/connections/:id/sync` — pull the latest transaction delta
+ *  from Plaid. Takes no window: the server resumes from the stored cursor. */
+export function syncPlaidConnection(connectionId: string): Promise<ApiOutcome<PlaidSyncResponse>> {
+  return post(`/api/plaid/connections/${connectionId}/sync`, {});
 }
 
 /** `DELETE /api/plaid/connections/:id` — remove a Plaid connection. */

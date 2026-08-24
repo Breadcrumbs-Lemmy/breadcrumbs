@@ -92,6 +92,79 @@ describe("FilePlaidTokenStore", () => {
     expect(loaded?.lastSyncedAt).toBe(syncedAt);
   });
 
+  it("persists the /transactions/sync cursor so the next sync resumes from it", async () => {
+    const store = new FilePlaidTokenStore(filePath);
+    const saved = await store.save({ userId: "usr_alice", itemId: "item-a", accessToken: "tok-a" });
+    expect(saved.transactionsCursor).toBeUndefined();
+
+    await store.markSynced(saved.connectionId, "2026-08-08T12:00:00.000Z", { cursor: "cursor-page-1" });
+
+    const afterRestart = new FilePlaidTokenStore(filePath);
+    const loaded = await afterRestart.get(saved.connectionId);
+    expect(loaded?.transactionsCursor).toBe("cursor-page-1");
+
+    // A later markSynced with no cursor argument leaves the stored cursor intact.
+    await afterRestart.markSynced(saved.connectionId, "2026-08-09T12:00:00.000Z");
+    const again = await new FilePlaidTokenStore(filePath).get(saved.connectionId);
+    expect(again?.transactionsCursor).toBe("cursor-page-1");
+    expect(again?.lastSyncedAt).toBe("2026-08-09T12:00:00.000Z");
+  });
+
+  it("unions coverage bounds across syncs — start only widens, end only advances", async () => {
+    const store = new FilePlaidTokenStore(filePath);
+    const saved = await store.save({ userId: "usr_alice", itemId: "item-a", accessToken: "tok-a" });
+
+    // First sync: full-history drain sets both bounds.
+    await store.markSynced(saved.connectionId, "2026-08-08T12:00:00.000Z", {
+      cursor: "c1",
+      coverage: { start: "2024-03-15", end: "2026-08-08" },
+    });
+    let loaded = await new FilePlaidTokenStore(filePath).get(saved.connectionId);
+    expect(loaded?.coverageStart).toBe("2024-03-15");
+    expect(loaded?.coverageEnd).toBe("2026-08-08");
+
+    // Later delta sync: a newer end advances it; a *later* start must NOT shrink coverage.
+    await store.markSynced(saved.connectionId, "2026-08-09T12:00:00.000Z", {
+      cursor: "c2",
+      coverage: { start: "2026-08-09", end: "2026-08-09" },
+    });
+    loaded = await new FilePlaidTokenStore(filePath).get(saved.connectionId);
+    expect(loaded?.coverageStart).toBe("2024-03-15"); // unchanged — only ever widens
+    expect(loaded?.coverageEnd).toBe("2026-08-09"); // advanced
+
+    // A sync with no coverage (e.g. an empty delta) leaves the bounds intact.
+    await store.markSynced(saved.connectionId, "2026-08-10T12:00:00.000Z", { cursor: "c3" });
+    loaded = await new FilePlaidTokenStore(filePath).get(saved.connectionId);
+    expect(loaded?.coverageStart).toBe("2024-03-15");
+    expect(loaded?.coverageEnd).toBe("2026-08-09");
+  });
+
+  it("looks a connection up by its Plaid item id (how a webhook finds it)", async () => {
+    const store = new FilePlaidTokenStore(filePath);
+    const saved = await store.save({ userId: "usr_alice", itemId: "item-xyz", accessToken: "tok-a" });
+    await store.save({ userId: "usr_bob", itemId: "item-other", accessToken: "tok-b" });
+
+    const reader = new FilePlaidTokenStore(filePath);
+    const byItem = await reader.listByItemId("item-xyz");
+    expect(byItem.map((c) => c.connectionId)).toEqual([saved.connectionId]);
+    expect(byItem[0]?.accessToken).toBe("tok-a");
+    expect(await reader.listByItemId("item-missing")).toEqual([]);
+  });
+
+  it("flags re-auth durably and clears it on the next successful sync", async () => {
+    const store = new FilePlaidTokenStore(filePath);
+    const saved = await store.save({ userId: "usr_alice", itemId: "item-a", accessToken: "tok-a" });
+
+    await store.setReauthRequired(saved.connectionId, true);
+    expect((await new FilePlaidTokenStore(filePath).get(saved.connectionId))?.reauthRequired).toBe(true);
+
+    // A sync that succeeds is proof the login works again, so it retires the flag.
+    await store.markSynced(saved.connectionId, "2026-08-09T00:00:00.000Z", { cursor: "cursor-1" });
+    const after = await new FilePlaidTokenStore(filePath).get(saved.connectionId);
+    expect(after?.reauthRequired).toBeUndefined();
+    expect(after?.transactionsCursor).toBe("cursor-1");
+  });
+
   it("deletes a connection durably", async () => {
     const store = new FilePlaidTokenStore(filePath);
     const saved = await store.save({ userId: "usr_alice", itemId: "item-a", accessToken: "tok-a" });

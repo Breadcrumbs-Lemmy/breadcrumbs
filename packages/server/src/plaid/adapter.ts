@@ -9,10 +9,12 @@ import type {
   LinkTokenCreateResponse,
   Transaction as PlaidTransaction,
   TransactionsGetResponse,
+  TransactionsSyncResponse,
+  WebhookVerificationKeyGetResponse,
 } from "plaid";
 import type { PlaidConfig } from "./config";
 import { toPlaidAdapterError } from "./errors";
-import { mapPlaidAccounts, mapPlaidDataToSnapshot, mapPlaidTransactions } from "./mapper";
+import { mapPlaidAccounts, mapPlaidDataToSnapshot, mapPlaidTransactions, plaidTransactionEntityId } from "./mapper";
 import type { PlaidSnapshotMappingOptions } from "./mapper";
 import type { PlaidTokenStore } from "./token-store";
 
@@ -32,6 +34,20 @@ export type PlaidClientLike = {
     end_date: string;
     options: { count: number; offset: number; include_original_description: boolean };
   }): Promise<{ data: TransactionsGetResponse }>;
+  /** Cursor-based incremental sync. Omit `cursor` for the first call (Plaid then
+   *  returns the full history); pass the stored `next_cursor` thereafter. */
+  transactionsSync(request: {
+    access_token: string;
+    cursor?: string;
+    count?: number;
+    options?: { include_original_description?: boolean };
+  }): Promise<{ data: TransactionsSyncResponse }>;
+  /** Optional: fetch the public key that signed a webhook, by its `kid`. Only the
+   *  webhook receiver needs it, and route-only test clients omit it, so it is
+   *  feature-detected at the one call site. */
+  webhookVerificationKeyGet?(request: {
+    key_id: string;
+  }): Promise<{ data: WebhookVerificationKeyGetResponse }>;
 };
 
 export type PlaidLinkTokenResult = {
@@ -65,6 +81,24 @@ export type PlaidSnapshotResult = {
   requestIds: string[];
 };
 
+/**
+ * The delta from one `/transactions/sync` run, mapped to internal shapes.
+ * `added`/`modified` are canonical transactions (pending rows already excluded,
+ * matching the rest of the pipeline); `removedIds` are internal transaction ids
+ * ready to hand to the store's delete path. `nextCursor` must be persisted so
+ * the following sync resumes from exactly here.
+ */
+export type PlaidSyncResult = {
+  added: Transaction[];
+  modified: Transaction[];
+  removedIds: string[];
+  nextCursor: string;
+  rawAddedCount: number;
+  rawModifiedCount: number;
+  pendingExcludedCount: number;
+  requestIds: string[];
+};
+
 const TRANSACTION_PAGE_SIZE = 500;
 
 export async function createLinkToken(
@@ -79,7 +113,7 @@ export async function createLinkToken(
       country_codes: [CountryCode.Us],
       products: [Products.Transactions],
       user: {
-        client_user_id: input.clientUserId ?? "sandbox-local-user",
+        client_user_id: input.clientUserId ?? "breadcrumbs-user",
       },
       redirect_uri: config.redirectUri,
       webhook: config.webhook,
@@ -227,6 +261,66 @@ async function fetchAllTransactionsRaw(
   }
 
   return { transactions, requestIds };
+}
+
+/**
+ * Drain `/transactions/sync` from the stored cursor to the present, accumulating
+ * every page's added/modified/removed. The loop is bounded by Plaid's own
+ * `has_more`: each page returns a fresh `next_cursor`, and we stop the first time
+ * a page reports no more. Passing no cursor pulls the account's full history
+ * (the first sync); passing the stored cursor pulls only what changed since.
+ *
+ * Pending rows are excluded on the way through (as everywhere else in the Plaid
+ * pipeline), so `added`/`modified` counts can be lower than the raw counts — the
+ * difference is reported for observability, not dropped silently.
+ */
+export async function syncTransactions(
+  client: PlaidClientLike,
+  accessToken: string,
+  input: { cursor?: string; syncedAt?: Date } = {},
+): Promise<PlaidSyncResult> {
+  try {
+    const syncedAt = input.syncedAt ?? new Date();
+    const rawAdded: PlaidTransaction[] = [];
+    const rawModified: PlaidTransaction[] = [];
+    const removedIds: string[] = [];
+    const requestIds: string[] = [];
+    let cursor = input.cursor;
+
+    for (;;) {
+      const response = await client.transactionsSync({
+        access_token: accessToken,
+        cursor,
+        count: TRANSACTION_PAGE_SIZE,
+        options: { include_original_description: true },
+      });
+      const data = response.data;
+      requestIds.push(data.request_id);
+      rawAdded.push(...data.added);
+      rawModified.push(...data.modified);
+      for (const removed of data.removed) {
+        if (removed.transaction_id) removedIds.push(plaidTransactionEntityId(removed.transaction_id));
+      }
+      cursor = data.next_cursor;
+      if (!data.has_more) break;
+    }
+
+    const added = mapPlaidTransactions(rawAdded, syncedAt);
+    const modified = mapPlaidTransactions(rawModified, syncedAt);
+
+    return {
+      added,
+      modified,
+      removedIds,
+      nextCursor: cursor ?? "",
+      rawAddedCount: rawAdded.length,
+      rawModifiedCount: rawModified.length,
+      pendingExcludedCount: rawAdded.length - added.length + (rawModified.length - modified.length),
+      requestIds,
+    };
+  } catch (error) {
+    throw toPlaidAdapterError(error, "TRANSACTIONS_SYNC_FAILED");
+  }
 }
 
 export async function getCanonicalSnapshot(

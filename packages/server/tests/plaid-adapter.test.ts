@@ -8,9 +8,11 @@ import {
   getAccountsAndBalances,
   getCanonicalSnapshot,
   getTransactions,
+  syncTransactions,
 } from "../src/plaid/adapter";
 import type { PlaidClientLike } from "../src/plaid/adapter";
 import type { PlaidConfig } from "../src/plaid/config";
+import { toPlaidAdapterError } from "../src/plaid/errors";
 import { InMemoryPlaidTokenStore } from "../src/plaid/token-store";
 
 const config: PlaidConfig = {
@@ -21,7 +23,7 @@ const config: PlaidConfig = {
   countryCodes: ["US"],
 };
 
-describe("Plaid Sandbox adapter", () => {
+describe("Plaid adapter", () => {
   it("creates a Link token with the minimal read-only product set", async () => {
     const client = mockClient({
       linkTokenCreate: vi.fn().mockResolvedValue({
@@ -230,6 +232,12 @@ describe("Plaid Sandbox adapter", () => {
     });
     expect(result.rawCount).toBe(3);
     expect(result.pendingExcludedCount).toBe(1);
+    // Env-neutral provenance: the stamp must never say "Sandbox" (it rides into
+    // the UI and the assistant's context, and is wrong on a production sync).
+    for (const transaction of result.transactions) {
+      expect(transaction.uncertainty.confidenceReason).toMatch(/^Imported from Plaid\. /);
+      expect(transaction.uncertainty.confidenceReason).not.toMatch(/Sandbox/);
+    }
     expect(result.transactions).toMatchObject([
       {
         id: "plaid:transaction:tx-outflow",
@@ -313,6 +321,88 @@ describe("Plaid Sandbox adapter", () => {
     expect(result.rawCount).toBe(1);
   });
 
+  it("surfaces an environment-neutral error message (never mentions Sandbox)", () => {
+    const error = toPlaidAdapterError(
+      { response: { status: 400, data: { error_code: "INVALID_ACCESS_TOKEN", request_id: "req-err" } } },
+      "TRANSACTIONS_GET_FAILED",
+    );
+    expect(error.safe.message).toBe("Plaid request failed.");
+    expect(error.safe.message).not.toMatch(/Sandbox/);
+    expect(error.safe.code).toBe("INVALID_ACCESS_TOKEN");
+    expect(error.safe.statusCode).toBe(400);
+  });
+
+  it("drains /transactions/sync across pages, maps the delta, and returns the final cursor", async () => {
+    const transactionsSync = vi.fn();
+    transactionsSync
+      .mockResolvedValueOnce({
+        data: {
+          added: [
+            plaidTransaction({
+              transaction_id: "a1",
+              account_id: "checking-1",
+              amount: 5,
+              name: "COFFEE",
+              merchant_name: "Coffee Shop",
+              date: "2026-08-01",
+              pending: false,
+              personal_finance_category: { primary: "FOOD_AND_DRINK", detailed: "FOOD_AND_DRINK_COFFEE" },
+            }),
+          ],
+          modified: [],
+          removed: [],
+          next_cursor: "cursor-1",
+          has_more: true,
+          request_id: "req-s1",
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          added: [
+            plaidTransaction({ transaction_id: "a2-pending", account_id: "checking-1", amount: 3, date: "2026-08-02", pending: true }),
+          ],
+          modified: [
+            plaidTransaction({ transaction_id: "m1", account_id: "checking-1", amount: 9, name: "STORE", date: "2026-08-02", pending: false }),
+          ],
+          removed: [{ transaction_id: "r1" }],
+          next_cursor: "cursor-2",
+          has_more: false,
+          request_id: "req-s2",
+        },
+      });
+    const client = mockClient({ transactionsSync });
+
+    const result = await syncTransactions(client, "access-token-secret", { syncedAt: new Date("2026-08-04T12:00:00Z") });
+
+    // The first call omits the cursor (full history); the second resumes from
+    // page one's next_cursor.
+    expect((transactionsSync.mock.calls[0][0] as { cursor?: string }).cursor).toBeUndefined();
+    expect((transactionsSync.mock.calls[1][0] as { cursor?: string }).cursor).toBe("cursor-1");
+    expect(transactionsSync).toHaveBeenCalledTimes(2);
+    expect(result.nextCursor).toBe("cursor-2");
+    expect(result.added.map((t) => t.id)).toEqual(["plaid:transaction:a1"]);
+    expect(result.modified.map((t) => t.id)).toEqual(["plaid:transaction:m1"]);
+    expect(result.removedIds).toEqual(["plaid:transaction:r1"]);
+    // The pending added row is excluded from the mapped delta but still counted.
+    expect(result.rawAddedCount).toBe(2);
+    expect(result.pendingExcludedCount).toBe(1);
+    expect(result.requestIds).toEqual(["req-s1", "req-s2"]);
+  });
+
+  it("resumes /transactions/sync from the stored cursor on an incremental run", async () => {
+    const transactionsSync = vi.fn().mockResolvedValue({
+      data: { added: [], modified: [], removed: [], next_cursor: "cursor-next", has_more: false, request_id: "req" },
+    });
+    const client = mockClient({ transactionsSync });
+
+    const result = await syncTransactions(client, "access-token-secret", { cursor: "cursor-prev" });
+
+    expect((transactionsSync.mock.calls[0][0] as { cursor?: string }).cursor).toBe("cursor-prev");
+    expect(result.nextCursor).toBe("cursor-next");
+    expect(result.added).toEqual([]);
+    expect(result.removedIds).toEqual([]);
+  });
+
   it("maps a conservative canonical snapshot without declaring total coverage by default", async () => {
     const client = mockClient({
       accountsBalanceGet: vi.fn().mockResolvedValue({
@@ -371,6 +461,7 @@ function mockClient(overrides: Partial<PlaidClientLike>): PlaidClientLike {
     itemPublicTokenExchange: vi.fn(),
     accountsBalanceGet: vi.fn(),
     transactionsGet: vi.fn(),
+    transactionsSync: vi.fn(),
     ...overrides,
   } as PlaidClientLike;
 }

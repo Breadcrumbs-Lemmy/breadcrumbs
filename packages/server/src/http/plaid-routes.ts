@@ -25,16 +25,41 @@ import {
   getAccountsAndBalances,
   getCanonicalSnapshot,
   getTransactions,
+  syncTransactions,
 } from "../plaid/adapter";
 import type { PlaidClientLike } from "../plaid/adapter";
 import type { PlaidConfig } from "../plaid/config";
 import type { PlaidTokenStore, StoredPlaidConnection } from "../plaid/token-store";
+import { createCachingKeyFetcher, verifyPlaidWebhook } from "../plaid/webhook";
 import { OWNER_USER_ID } from "../auth/types";
 import { authErrors } from "../auth/errors";
 import type { StatementImportStore } from "../local/store";
 import type { StatementImportStoreProvider } from "../local/store-provider";
 import { principalOf } from "../auth/middleware";
 import { registerSafeErrorHandler } from "./errors";
+
+/** Plaid `TRANSACTIONS` webhook codes that mean "there is a delta to pull". Each
+ *  is handled the same way — run a cursor sync, which is idempotent — so a spare
+ *  or duplicate delivery is a cheap no-op. */
+const TRANSACTIONS_SYNC_CODES = new Set([
+  "SYNC_UPDATES_AVAILABLE",
+  "INITIAL_UPDATE",
+  "HISTORICAL_UPDATE",
+  "DEFAULT_UPDATE",
+]);
+
+/** The shape we read off a verified Plaid webhook body. Everything else Plaid
+ *  sends is ignored; these four fields drive the dispatch. */
+type PlaidWebhookBody = {
+  webhook_type?: string;
+  webhook_code?: string;
+  item_id?: string;
+  error?: { error_code?: string } | null;
+};
+
+/** Fastify hangs the raw request text here (see the webhook's content-type
+ *  parser) so the body hash can be checked against Plaid's signature. */
+type RawBodyRequest = { rawBody?: string };
 
 /**
  * How long a session's cleared TOTP challenge is honoured before Plaid Link
@@ -76,13 +101,6 @@ const SnapshotQuerySchema = DateRangeQuerySchema.extend({
   currency: z.string().length(3).default("USD"),
   balancesDeclaredComplete: QueryBooleanSchema.optional(),
   userConfirmedNoOtherRequiredObligations: QueryBooleanSchema.optional(),
-});
-
-/** Sync accepts an optional window; absent, it pulls the last 6 months, which is
- *  a sensible first look at spending without asking the user to pick dates. */
-const SyncBodySchema = z.object({
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export type RegisterPlaidRoutesOptions = {
@@ -168,6 +186,8 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
         lastSyncedAt: c.lastSyncedAt ?? null,
         coverageStart: c.coverageStart ?? null,
         coverageEnd: c.coverageEnd ?? null,
+        // Lets the UI prompt "reconnect this bank" without exposing why.
+        reauthRequired: c.reauthRequired ?? false,
       })),
     };
   });
@@ -226,47 +246,125 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
   });
 
   /**
-   * Pull accounts + transactions from the bank into the caller's statement
-   * store. This is what turns a fresh connection into visible spending. Idempotent
-   * by construction: the store dedupes on transaction id, so re-syncing an
-   * overlapping window imports only what is new.
+   * Pull the bank's latest accounts + transaction delta into the caller's
+   * statement store. This is what turns a fresh connection into visible spending
+   * and keeps it current. Cursor-based (`/transactions/sync`): the first sync
+   * pulls full history, every later sync resumes from the stored cursor and
+   * applies only what changed — new rows added, corrected rows upserted, dropped
+   * rows removed. Idempotent by construction, so a redundant sync is a cheap
+   * no-op that advances the cursor.
    */
   app.post("/api/plaid/connections/:connectionId/sync", async (request, reply) => {
     if (!options.stores) {
       return reply.code(501).send({ error: { code: "SYNC_STORE_UNAVAILABLE" } });
     }
     const { connectionId } = ConnectionParamsSchema.parse(request.params);
-    const body = SyncBodySchema.parse(request.body ?? {});
     const connection = await ownedConnection(request, reply, connectionId);
     if (!connection) return reply;
 
-    const { startDate, endDate } = defaultSyncWindow(body.startDate, body.endDate);
-    const [accountsResult, transactionsResult] = await Promise.all([
-      getAccountsAndBalances(options.client, connection.accessToken),
-      getTransactions(options.client, connection.accessToken, { startDate, endDate }),
-    ]);
-
     const store = await options.stores.forUser(callerId(request));
-    const summary = await syncIntoStore(store, {
-      connectionId,
-      accounts: accountsResult.accounts,
-      transactions: transactionsResult.transactions,
-    });
-
-    const syncedAt = new Date().toISOString();
-    await options.tokenStore.markSynced(connectionId, syncedAt, { startDate, endDate });
-    const updated = await options.tokenStore.get(connectionId);
+    const result = await runConnectionSync(options.client, options.tokenStore, store, connection);
 
     return {
       connectionId,
-      syncedAt,
-      window: { startDate, endDate },
-      coverage: { start: updated?.coverageStart ?? startDate, end: updated?.coverageEnd ?? endDate },
-      accountsSynced: accountsResult.accounts.length,
-      transactionsImported: summary.imported,
-      transactionsDuplicate: summary.duplicate,
+      syncedAt: result.syncedAt,
+      accountsSynced: result.accountsSynced,
+      // `synced` is the headline count the UI shows (rows new or changed).
+      synced: result.added + result.modified,
+      transactionsAdded: result.added,
+      transactionsModified: result.modified,
+      transactionsRemoved: result.removed,
+      transactionsDuplicate: result.duplicate,
+      // Coverage bounds after this sync, so the caller can refresh the rail
+      // without a second round-trip to /coverage.
+      coverage: { start: result.coverageStart, end: result.coverageEnd },
     };
   });
+
+  /**
+   * Inbound Plaid webhooks. Public and machine-to-machine: no session rides on
+   * it, so trust comes entirely from the signature check below (the path is on
+   * the auth allowlist for that reason). It lives in its own encapsulated scope
+   * because it needs the *raw* request body to verify Plaid's body hash — the
+   * content-type parser here keeps that raw text, and being encapsulated means it
+   * never changes how any other route parses JSON.
+   */
+  const fetchWebhookKey = createCachingKeyFetcher({
+    async webhookVerificationKeyGet(request) {
+      if (typeof options.client.webhookVerificationKeyGet !== "function") {
+        throw new Error("Plaid client cannot fetch webhook verification keys.");
+      }
+      return options.client.webhookVerificationKeyGet(request);
+    },
+  });
+
+  // Not awaited on purpose: awaiting boots the instance, which would freeze the
+  // error handler registered at the end of this function out (Fastify refuses
+  // `setErrorHandler` once ready). Fastify loads this encapsulated plugin at
+  // `ready()`/first-request time either way.
+  void app.register(async (webhookScope) => {
+    webhookScope.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
+      const raw = typeof body === "string" ? body : body.toString("utf8");
+      (request as unknown as RawBodyRequest).rawBody = raw;
+      try {
+        done(null, raw.length > 0 ? JSON.parse(raw) : {});
+      } catch (error) {
+        done(error as Error, undefined);
+      }
+    });
+
+    webhookScope.post("/api/plaid/webhook", async (request, reply) => {
+      const rawBody = (request as unknown as RawBodyRequest).rawBody ?? "";
+      const signedJwt = request.headers["plaid-verification"];
+      // One opaque 400 for every failure — a missing header, a bad signature, a
+      // tampered body — so a prober learns nothing about which check it tripped.
+      if (typeof signedJwt !== "string" || signedJwt.length === 0) {
+        return reply.code(400).send({ error: { code: "PLAID_WEBHOOK_UNVERIFIED" } });
+      }
+      try {
+        await verifyPlaidWebhook({ signedJwt, rawBody, fetchKey: fetchWebhookKey });
+      } catch {
+        return reply.code(400).send({ error: { code: "PLAID_WEBHOOK_UNVERIFIED" } });
+      }
+
+      await handlePlaidWebhook((request.body ?? {}) as PlaidWebhookBody);
+      // Plaid retries any non-2xx, so once verified we always ack — even a
+      // no-op code — to stop it re-delivering something already handled.
+      return { received: true };
+    });
+  });
+
+  /**
+   * Act on a verified webhook. A `TRANSACTIONS` delta triggers the same cursor
+   * sync the manual route runs (idempotent, so a redundant delivery is cheap); an
+   * `ITEM_LOGIN_REQUIRED`-class event flags the connection for re-auth, and a
+   * repair clears it. Everything else is acknowledged without action.
+   */
+  async function handlePlaidWebhook(body: PlaidWebhookBody): Promise<void> {
+    const itemId = body.item_id;
+    if (!itemId) return;
+    const connections = await options.tokenStore.listByItemId(itemId);
+    if (connections.length === 0) return;
+
+    if (body.webhook_type === "TRANSACTIONS" && body.webhook_code && TRANSACTIONS_SYNC_CODES.has(body.webhook_code)) {
+      // No store wired (isolated route tests) means nowhere to write the delta —
+      // ack without syncing rather than 500.
+      if (!options.stores) return;
+      for (const connection of connections) {
+        const store = await options.stores.forUser(connection.userId);
+        await runConnectionSync(options.client, options.tokenStore, store, connection);
+      }
+      return;
+    }
+
+    if (body.webhook_type === "ITEM") {
+      if (isReauthSignal(body)) {
+        await Promise.all(connections.map((c) => options.tokenStore.setReauthRequired(c.connectionId, true)));
+      } else if (body.webhook_code === "LOGIN_REPAIRED") {
+        await Promise.all(connections.map((c) => options.tokenStore.setReauthRequired(c.connectionId, false)));
+      }
+    }
+  }
 
   app.delete("/api/plaid/connections/:connectionId", async (request, reply) => {
     const { connectionId } = ConnectionParamsSchema.parse(request.params);
@@ -279,55 +377,155 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
   registerSafeErrorHandler(app);
 }
 
-/** Absent an explicit window, look back 6 months (183 days) from today. */
-function defaultSyncWindow(startDate?: string, endDate?: string): { startDate: string; endDate: string } {
-  const end = endDate ? new Date(`${endDate}T00:00:00Z`) : new Date();
-  const start = startDate ? new Date(`${startDate}T00:00:00Z`) : new Date(end.getTime() - 183 * 24 * 60 * 60 * 1000);
-  return { startDate: isoDate(start), endDate: isoDate(end) };
+/**
+ * Pull one connection's latest accounts + transaction delta and apply it. Shared
+ * by the manual sync route and the webhook receiver so both advance the cursor,
+ * write the same store, and clear a stale re-auth flag identically — there is one
+ * definition of "sync a connection", not two that can drift.
+ *
+ * The same pass also maintains the connection's coverage bounds, which drive the
+ * spending-calendar rail. `/transactions/sync` always drains to the present, so a
+ * successful sync means we hold every transaction through today — coverageEnd
+ * advances to the sync date. coverageStart takes the earliest posted date this
+ * sync applied (on the first sync that is the full-history floor); the store
+ * unions it, so it only ever widens.
+ */
+async function runConnectionSync(
+  client: PlaidClientLike,
+  tokenStore: PlaidTokenStore,
+  store: StatementImportStore,
+  connection: StoredPlaidConnection,
+): Promise<{
+  syncedAt: string;
+  accountsSynced: number;
+  added: number;
+  modified: number;
+  removed: number;
+  duplicate: number;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+}> {
+  const [accountsResult, syncResult] = await Promise.all([
+    getAccountsAndBalances(client, connection.accessToken),
+    syncTransactions(client, connection.accessToken, { cursor: connection.transactionsCursor }),
+  ]);
+
+  const summary = await syncIntoStore(store, {
+    connectionId: connection.connectionId,
+    accounts: accountsResult.accounts,
+    added: syncResult.added,
+    modified: syncResult.modified,
+    removedIds: syncResult.removedIds,
+  });
+
+  const syncedAt = new Date().toISOString();
+  // Earliest posted date across everything this sync applied. On the first sync
+  // (full history) that is the true floor of available data; on a later delta it
+  // is just the new/changed rows, or nothing when the delta was empty.
+  const observedStart = earliestPostedDate([...syncResult.added, ...syncResult.modified]);
+  // Cursor sync drains to the present, so we are complete through today — advance
+  // coverageEnd to the sync date even when the delta added nothing.
+  const coverage = { start: observedStart, end: isoDate(new Date(syncedAt)) };
+  // Persist the advanced cursor together with the sync time and coverage, so the
+  // next sync resumes exactly here and the calendar rail stays accurate. markSynced
+  // also clears any re-auth flag — a sync that succeeded is proof the login works.
+  await tokenStore.markSynced(connection.connectionId, syncedAt, { cursor: syncResult.nextCursor, coverage });
+  const updated = await tokenStore.get(connection.connectionId);
+
+  return {
+    syncedAt,
+    accountsSynced: accountsResult.accounts.length,
+    ...summary,
+    coverageStart: updated?.coverageStart ?? null,
+    coverageEnd: updated?.coverageEnd ?? null,
+  };
 }
 
+/** The earliest `postedDate` (YYYY-MM-DD) among a set of transactions, or
+ *  `undefined` when the set is empty. Dates are ISO strings, so a lexical min is
+ *  a chronological min. */
+function earliestPostedDate(transactions: Transaction[]): string | undefined {
+  let earliest: string | undefined;
+  for (const t of transactions) {
+    if (t.postedDate && (earliest === undefined || t.postedDate < earliest)) earliest = t.postedDate;
+  }
+  return earliest;
+}
+
+/** Format a Date as a `YYYY-MM-DD` UTC day stamp. */
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** True when an `ITEM` webhook means the bank login is broken and needs Link to
+ *  repair it — either the dedicated `PENDING_EXPIRATION` code, or an `ERROR`
+ *  carrying `ITEM_LOGIN_REQUIRED`. */
+function isReauthSignal(body: PlaidWebhookBody): boolean {
+  if (body.webhook_code === "PENDING_EXPIRATION") return true;
+  return body.webhook_code === "ERROR" && body.error?.error_code === "ITEM_LOGIN_REQUIRED";
+}
+
 /**
- * Write one connection's fetched data into the store, one account at a time
- * (`saveImport` upserts a single account and its rows). Accounts with no
- * transactions in the window are still written so their balances appear.
+ * Write one connection's sync delta into the store, one account at a time
+ * (`saveImport` upserts a single account and applies its rows). Every balance
+ * account is written even with no transactions, so its balance still appears.
+ *
+ * `added` and `modified` carry an account id, so they are grouped per account.
+ * A `/transactions/sync` `removed` entry carries only a transaction id (Plaid
+ * does not say which account), and the store deletes globally by id — so the
+ * removals ride on the first account's write. Every live connection has at least
+ * one balance account here, so removals are never dropped.
  */
 async function syncIntoStore(
   store: StatementImportStore,
-  input: { connectionId: string; accounts: Account[]; transactions: Transaction[] },
-): Promise<{ imported: number; duplicate: number }> {
-  const byAccount = new Map<string, Transaction[]>();
-  for (const transaction of input.transactions) {
-    const list = byAccount.get(transaction.accountId) ?? [];
-    list.push(transaction);
-    byAccount.set(transaction.accountId, list);
-  }
+  input: { connectionId: string; accounts: Account[]; added: Transaction[]; modified: Transaction[]; removedIds: string[] },
+): Promise<{ added: number; modified: number; removed: number; duplicate: number }> {
+  const addedByAccount = groupByAccount(input.added);
+  const modifiedByAccount = groupByAccount(input.modified);
 
   const createdAt = new Date().toISOString();
-  let imported = 0;
+  let added = 0;
+  let modified = 0;
+  let removed = 0;
   let duplicate = 0;
 
+  let firstAccount = true;
   for (const account of input.accounts) {
-    const transactions = byAccount.get(account.id) ?? [];
+    const accountAdded = addedByAccount.get(account.id) ?? [];
+    const accountModified = modifiedByAccount.get(account.id) ?? [];
     const result = await store.saveImport({
       account,
-      transactions,
+      transactions: accountAdded,
+      modifiedTransactions: accountModified,
+      // Removals are id-keyed and global; attach them once, to the first write.
+      removedTransactionIds: firstAccount ? input.removedIds : [],
       batch: {
         id: `plaid_${input.connectionId}_${account.id}_${createdAt}`,
         accountId: account.id,
         sourceFormat: "plaid",
         createdAt,
-        rowCount: transactions.length,
+        rowCount: accountAdded.length + accountModified.length,
         invalidRowCount: 0,
         rawCsvStored: false,
       },
     });
-    imported += result.importedTransactions.length;
+    added += result.importedTransactions.length;
     duplicate += result.duplicateTransactions.length;
+    modified += result.modifiedTransactions.length;
+    removed += result.removedTransactionIds.length;
+    firstAccount = false;
   }
 
-  return { imported, duplicate };
+  return { added, modified, removed, duplicate };
+}
+
+/** Group transactions by their account id, preserving order within each group. */
+function groupByAccount(transactions: Transaction[]): Map<string, Transaction[]> {
+  const byAccount = new Map<string, Transaction[]>();
+  for (const transaction of transactions) {
+    const list = byAccount.get(transaction.accountId) ?? [];
+    list.push(transaction);
+    byAccount.set(transaction.accountId, list);
+  }
+  return byAccount;
 }

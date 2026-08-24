@@ -27,6 +27,9 @@ const PUBLIC_PATHS = new Set<string>([
   "/api/v1/auth/login",
   "/api/v1/auth/register",
   "/api/v1/auth/context",
+  // Plaid posts here machine-to-machine with no session; the route authenticates
+  // the delivery itself by verifying Plaid's signature over the body.
+  "/api/plaid/webhook",
 ]);
 
 function isPublic(pathname: string): boolean {
