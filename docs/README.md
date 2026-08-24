@@ -15,7 +15,7 @@ This folder is the product source of truth for AI Finance Operating System. It s
 | [UI Copy Map](ui-copy-map.md) | Living | `[UI: Claude]` Maps backend reason, freshness, and boundary codes to non-judgmental user-facing copy. Source of every user-visible string. |
 | [MVP 0 Screen Specs](ui-mvp0-screens.md) | Living | `[UI: Claude]` Annotated screens and states for the affordability flow, with field-level tracing to the backend contract. |
 | [Spending Home Spec](ui-spending-home.md) | Living | `[UI: Claude]` The product's primary screen: destinations, hero, categories, transfers, states, and field-level contract tracing. |
-| [Running Breadcrumbs](running-breadcrumbs.md) | Living | Docker setup, Plaid credentials needed, the full endpoint list, and known gaps. |
+| [Running Breadcrumbz](running-breadcrumbz.md) | Living | Docker setup, Plaid credentials needed, the full endpoint list, and known gaps. |
 | [UI API Contract](ui-api-contract.md) | Proposal | `[UI: Claude]` Example payloads for every endpoint the designed screens need. Backend is built from this. |
 | [Money Flow Taxonomy](money-flow-taxonomy.md) | Living | `[UI: Claude]` How spending, income, transfers, refunds, and fees are classified across multiple accounts and institutions. Prevents double-counting. |
 | [Pattern Detection Spec](pattern-detection-spec.md) | Living | Deterministic MVP 0 rules, thresholds, confidence, safeguards, and fixtures for backend pattern detection. |

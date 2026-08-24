@@ -1,5 +1,5 @@
 /**
- * The single HTTP boundary between the browser and the Breadcrumbs API.
+ * The single HTTP boundary between the browser and the Breadcrumbz API.
  *
  * Per `CD-011` no browser code calls backend calculation functions. Everything
  * goes through here. This module owns transport and nothing else — it does not
@@ -86,7 +86,7 @@ function getBearerToken(): string | null {
 
 export function apiBaseUrl(): string {
   const env = (import.meta as ImportMeta & { readonly env?: ImportMetaEnv }).env;
-  const configured = env?.VITE_BREADCRUMBS_API_BASE_URL?.trim();
+  const configured = env?.VITE_BREADCRUMBZ_API_BASE_URL?.trim();
   if (configured) return configured.replace(/\/+$/, "");
   // Unconfigured: in development point at the local API; in a production build
   // fall back to the page's own origin so a same-origin / reverse-proxied

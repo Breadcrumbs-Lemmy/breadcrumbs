@@ -71,19 +71,19 @@ describe("loadFieldCipher", () => {
   });
 
   it("accepts a base64 32-byte key and yields a working cipher", () => {
-    const cipher = loadFieldCipher({ BREADCRUMBS_ENCRYPTION_KEY: KEY.toString("base64") });
+    const cipher = loadFieldCipher({ BREADCRUMBZ_ENCRYPTION_KEY: KEY.toString("base64") });
     expect(cipher).toBeInstanceOf(FieldCipher);
     expect(cipher!.decrypt(cipher!.encrypt("x"))).toBe("x");
   });
 
   it("accepts a hex 32-byte key", () => {
-    const cipher = loadFieldCipher({ BREADCRUMBS_ENCRYPTION_KEY: KEY.toString("hex") });
+    const cipher = loadFieldCipher({ BREADCRUMBZ_ENCRYPTION_KEY: KEY.toString("hex") });
     expect(cipher).toBeInstanceOf(FieldCipher);
   });
 
   it("throws a length error (never echoing the key) on a malformed key", () => {
     try {
-      loadFieldCipher({ BREADCRUMBS_ENCRYPTION_KEY: "too-short" });
+      loadFieldCipher({ BREADCRUMBZ_ENCRYPTION_KEY: "too-short" });
       throw new Error("expected a throw");
     } catch (error) {
       expect(error).toBeInstanceOf(FieldCipherKeyError);

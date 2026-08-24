@@ -3,7 +3,7 @@
  *
  * One place decides in-memory vs. file-backed identity, so `createServer` and
  * any test can ask for a service without repeating the store wiring. `file`
- * puts users and sessions under the same `~/.breadcrumbs` data dir the
+ * puts users and sessions under the same `~/.breadcrumbz` data dir the
  * statement store already uses; `memory` keeps everything per-process for tests.
  */
 import { join } from "node:path";

@@ -16,7 +16,7 @@ set -e
 # when the vars are exported from a shell — but the asymmetry is worth closing.)
 MODEL="$(printf '%s' "${OLLAMA_MODEL:-llama3.1:8b}" | tr -d '[:space:]')"
 # Optional second model, pulled only when the deployment splits chat and
-# statement extraction across two models (BREADCRUMBS_LOCAL_EXTRACTION_MODEL).
+# statement extraction across two models (BREADCRUMBZ_LOCAL_EXTRACTION_MODEL).
 # Empty, or equal to MODEL, means the single-model setup — nothing extra pulled.
 EXTRACTION_MODEL="$(printf '%s' "${OLLAMA_EXTRACTION_MODEL:-}" | tr -d '[:space:]')"
 

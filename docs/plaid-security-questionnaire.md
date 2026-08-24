@@ -14,7 +14,7 @@ Companion to: [Information Security Policy](information-security-policy.md), [Ri
 > - **Planned** — a committed gap, not yet in place. Answer these truthfully; do
 >   not claim a control you have not built.
 >
-> **Context Plaid should know up front.** Breadcrumbs is a **read-only** personal
+> **Context Plaid should know up front.** Breadcrumbz is a **read-only** personal
 > finance app (no payments, transfers, or money movement) that can run **hosted**
 > or **self-hosted** by the end user. Where a control depends on the deployment
 > environment, that is called out as **Operator** and covered by the
@@ -35,7 +35,7 @@ don't use. **Status: Implemented.** Source: `plaid/token-store.ts`,
 **Q. Do you encrypt Plaid data at rest?**
 Yes. Both the Plaid **access tokens** and the persisted **account/transaction
 store** are encrypted at rest with **AES-256-GCM** (256-bit key from
-`BREADCRUMBS_ENCRYPTION_KEY`, random 96-bit IV per record, GCM auth tag,
+`BREADCRUMBZ_ENCRYPTION_KEY`, random 96-bit IV per record, GCM auth tag,
 domain-separating additional-authenticated-data), decrypted only in memory at
 use time. The key lives in the environment, never in the datastore. **Status:
 Implemented.** Source: `crypto/field-cipher.ts`, `plaid/token-store.ts`,
@@ -77,7 +77,7 @@ blanket-trusted in production. TLS termination in front of the API is an
 **Operator** responsibility for self-hosted deployments (and the Company's
 responsibility for any hosted instance). **Status: Operator (TLS) / Implemented
 (CORS + production origin hardening).** Source: policy §4.3, §11;
-`http/server.ts`; `docs/running-breadcrumbs.md`.
+`http/server.ts`; `docs/running-breadcrumbz.md`.
 
 **Q. Do you use TLS for connections to Plaid and other third parties?**
 Yes — the Plaid SDK/API and Anthropic API are reached over HTTPS/TLS by default.
@@ -281,6 +281,6 @@ high/critical, per-push + weekly); and the formal **data-retention schedule**,
 
 ---
 
-*Answer sheet tailored to the Breadcrumbs codebase as of the date above. Verify
+*Answer sheet tailored to the Breadcrumbz codebase as of the date above. Verify
 each status against the current code before submitting, and have the accountable
 security owner review it. Not legal or compliance advice.*

@@ -3,18 +3,18 @@
 **Effective date: 9 August 2026**
 **Last updated: 9 August 2026**
 
-This Privacy Policy explains how **Breadcrumbs** ("Breadcrumbs", "we", "us")
+This Privacy Policy explains how **Breadcrumbz** ("Breadcrumbz", "we", "us")
 collects, uses, protects, shares, and deletes your information when you use the
-Breadcrumbs personal-finance application and related services (the "Service").
+Breadcrumbz personal-finance application and related services (the "Service").
 
-Breadcrumbs is a **read-only** personal-finance app: it helps you view and
+Breadcrumbz is a **read-only** personal-finance app: it helps you view and
 understand your own financial accounts. **It never moves money** — no payments,
 transfers, trades, or withdrawals.
 
 The Service is operated by **Lemuel Mutah** (the "Operator"). You can reach us
 about privacy at **lemuelmutah@gmail.com**.
 
-> **Self-hosted deployments.** Breadcrumbs can also be run ("self-hosted") by a
+> **Self-hosted deployments.** Breadcrumbz can also be run ("self-hosted") by a
 > third party on their own infrastructure. If you are using an instance operated
 > by someone other than us, **that operator** is the party responsible for your
 > data, and this Policy describes the software's behavior rather than that
@@ -51,7 +51,7 @@ If you use the optional AI assistant, we process the messages you send it and an
 facts, notes, or files you choose to give it, so it can answer your questions.
 
 **d. Technical information.**
-Breadcrumbs does **not** use third-party analytics, advertising, tracking, or
+Breadcrumbz does **not** use third-party analytics, advertising, tracking, or
 marketing tools. The server that runs the Service may keep basic operational logs
 (for example, error and request-status records) to keep the Service secure and
 working; these logs are designed to **exclude secrets** such as tokens and

@@ -11,7 +11,7 @@
  *   pnpm --filter @ai-fin-os/server backup list       # list snapshots, newest first
  *   pnpm --filter @ai-fin-os/server backup restore <name|path>
  *
- * Honors BREADCRUMBS_LOCAL_DATA_DIR and BREADCRUMBS_BACKUP_DIR.
+ * Honors BREADCRUMBZ_LOCAL_DATA_DIR and BREADCRUMBZ_BACKUP_DIR.
  */
 import "../load-env";
 

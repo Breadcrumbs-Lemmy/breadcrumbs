@@ -2,7 +2,7 @@
  * Snapshot and restore the whole local data directory.
  *
  * For a single-user, self-hosted install the JSON files under
- * `~/.breadcrumbs/local-data` ARE the database — so "back up the database" means
+ * `~/.breadcrumbz/local-data` ARE the database — so "back up the database" means
  * "copy that directory somewhere safe", and "restore" means "put a copy back".
  * This module is that, plus two safety properties a hand-rolled `cp` would miss:
  *
@@ -23,11 +23,11 @@ import { isMissingFile } from "./atomic-file";
 export type BackupResult = { path: string; name: string };
 export type BackupInfo = { name: string; path: string; createdAt: string };
 
-/** Where snapshots go: `BREADCRUMBS_BACKUP_DIR` if set, else a `backups/` folder
- *  beside the data dir (e.g. `~/.breadcrumbs/backups`). Deliberately a sibling of
+/** Where snapshots go: `BREADCRUMBZ_BACKUP_DIR` if set, else a `backups/` folder
+ *  beside the data dir (e.g. `~/.breadcrumbz/backups`). Deliberately a sibling of
  *  the data dir, never inside it. */
 export function defaultBackupRootDir(dataDir: string, env: NodeJS.ProcessEnv = process.env): string {
-  const configured = env.BREADCRUMBS_BACKUP_DIR?.trim();
+  const configured = env.BREADCRUMBZ_BACKUP_DIR?.trim();
   if (configured && configured.length > 0) return configured;
   return join(resolve(dataDir), "..", "backups");
 }
@@ -167,7 +167,7 @@ function assertBackupRootOutsideDataDir(dataDir: string, backupRoot: string): vo
   if (inside) {
     throw new Error(
       `Backup directory (${root}) must be outside the data directory (${data}). ` +
-        "Set BREADCRUMBS_BACKUP_DIR to a location outside your data dir.",
+        "Set BREADCRUMBZ_BACKUP_DIR to a location outside your data dir.",
     );
   }
 }

@@ -405,7 +405,7 @@
      (see makeCoins in Logo.tsx), freshly randomised on every hover — so no two
      spills fall the same way, and the count isn't capped at a hand-tuned six. */
 
-  /* Full-lockup spill: the overlay spans the whole "breadcrumbs" wordmark, not
+  /* Full-lockup spill: the overlay spans the whole "breadcrumbz" wordmark, not
      just the mark, so coins drop from all along the word. Coins are sized off
      the box HEIGHT (width:auto + square aspect-ratio) so they don't balloon in
      the wide box; the inline `left` spreads them across the full width. */

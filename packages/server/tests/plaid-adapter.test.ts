@@ -17,7 +17,7 @@ const config: PlaidConfig = {
   env: "sandbox",
   clientId: "sandbox-client",
   secret: "sandbox-secret",
-  clientName: "Breadcrumbs Sandbox",
+  clientName: "Breadcrumbz Sandbox",
   countryCodes: ["US"],
 };
 
@@ -41,7 +41,7 @@ describe("Plaid Sandbox adapter", () => {
       requestId: "req-link",
     });
     expect(client.linkTokenCreate).toHaveBeenCalledWith({
-      client_name: "Breadcrumbs Sandbox",
+      client_name: "Breadcrumbz Sandbox",
       language: "en",
       country_codes: [CountryCode.Us],
       products: [Products.Transactions],

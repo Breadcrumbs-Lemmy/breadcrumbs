@@ -1,6 +1,6 @@
 {
   "id": "where_is_my_money_going_multi_account",
-  "description": "Transaction-first fixture for the Breadcrumbs pivot. One user has accounts at Chase, Ally, and American Express. Money moves across checking, savings, and credit cards; internal transfers and credit-card payments are not consumer spending.",
+  "description": "Transaction-first fixture for the Breadcrumbz pivot. One user has accounts at Chase, Ally, and American Express. Money moves across checking, savings, and credit cards; internal transfers and credit-card payments are not consumer spending.",
   "input": {
     "requestId": "fixture_where_is_my_money_going_multi_account",
     "plannedPurchaseId": "purchase_kitchen_table",

@@ -14,7 +14,7 @@ describe("loadPlaidConfig", () => {
       env: "sandbox",
       clientId: "sandbox-client",
       secret: "sandbox-secret",
-      clientName: "Breadcrumbs",
+      clientName: "Breadcrumbz",
       countryCodes: ["US"],
     });
   });
@@ -25,13 +25,13 @@ describe("loadPlaidConfig", () => {
         PLAID_ENV: "production",
         PLAID_CLIENT_ID: "prod-client",
         PLAID_SECRET: "prod-secret",
-        PLAID_CLIENT_NAME: "Breadcrumbs",
+        PLAID_CLIENT_NAME: "Breadcrumbz",
         PLAID_WEBHOOK: "https://app.example.com/api/plaid/webhook",
       }),
     ).toMatchObject({
       env: "production",
       clientId: "prod-client",
-      clientName: "Breadcrumbs",
+      clientName: "Breadcrumbz",
       webhook: "https://app.example.com/api/plaid/webhook",
     });
   });

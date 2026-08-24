@@ -175,7 +175,7 @@ export function AppShell<T extends string>({
               its own random path (re-rolled per hover), collapsed rail included.
               `sparkle` also lets this always-visible mark catch a gold glint
               around its rim at random intervals. Clicking the lockup goes home. */}
-          <BrandButton onHome={onHome} label="breadcrumbs — go to spending">
+          <BrandButton onHome={onHome} label="breadcrumbz — go to spending">
             <Logo variant={collapsed ? "mark" : "full"} size={26} spill spillCount={8} sparkle />
           </BrandButton>
           <button
@@ -291,7 +291,7 @@ export function AppShell<T extends string>({
       <header className="sticky top-0 z-20 border-b border-line-subtle bg-surface-base/85 backdrop-blur-md lg:hidden">
         {/* Row 1 — brand · section tabs · utilities */}
         <div className="mx-auto flex max-w-[880px] items-center gap-2 px-4 py-2.5">
-          <BrandButton onHome={onHome} label="breadcrumbs — go to spending">
+          <BrandButton onHome={onHome} label="breadcrumbz — go to spending">
             <Logo variant="mark" size={26} />
           </BrandButton>
           <nav

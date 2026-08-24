@@ -101,7 +101,7 @@ export function assertLoopbackUrl(rawUrl: string): URL {
   if (!isLoopbackHost(url.hostname)) {
     throw new AgentConfigError(
       `Local agent URL must be a loopback address (127.0.0.1, ::1, or localhost) so it cannot reach the internet — got "${url.hostname}". ` +
-        `To run the model on another trusted host, set BREADCRUMBS_LOCAL_AGENT_ALLOW_NONLOOPBACK=true, which relaxes this guarantee.`,
+        `To run the model on another trusted host, set BREADCRUMBZ_LOCAL_AGENT_ALLOW_NONLOOPBACK=true, which relaxes this guarantee.`,
     );
   }
   return url;
@@ -122,7 +122,7 @@ const ANTHROPIC_SYSTEM_MAX_TOKENS = 8000;
 
 // We send a few near-future request features by default — `output_config.effort`
 // and the server-side `fallbacks` parameter — but they are per-model capabilities.
-// Operators can point the agent at any model (BREADCRUMBS_AGENT_MODEL /
+// Operators can point the agent at any model (BREADCRUMBZ_AGENT_MODEL /
 // _EXTRACTION_MODEL), including ones that reject a given feature with a 400 that
 // used to surface on the assistant page. Rather than maintain a model→capability
 // allowlist (which rots the moment a new model ships), we send the feature, and if
@@ -417,7 +417,7 @@ export class LocalChatProvider implements ChatProvider {
 
 export function createChatProvider(config: AgentConfig): ChatProvider {
   if (config.provider === "local") {
-    if (!config.localBaseUrl) throw new AgentConfigError("Local agent requires BREADCRUMBS_LOCAL_AGENT_BASE_URL.");
+    if (!config.localBaseUrl) throw new AgentConfigError("Local agent requires BREADCRUMBZ_LOCAL_AGENT_BASE_URL.");
     return new LocalChatProvider(config.model, config.localBaseUrl, {
       allowNonLoopback: config.allowNonLoopback,
     });

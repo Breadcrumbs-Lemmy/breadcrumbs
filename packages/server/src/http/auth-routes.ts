@@ -231,11 +231,11 @@ function sendSession(reply: FastifyReply, token: string, body: unknown) {
  * Whether to mark the session cookie `Secure` (browser only sends it over
  * HTTPS). On in production so the session token cannot leak over a plaintext
  * hop; off by default in development so it still works over http://localhost.
- * `BREADCRUMBS_FORCE_SECURE=true` forces it on when TLS terminates upstream and
+ * `BREADCRUMBZ_FORCE_SECURE=true` forces it on when TLS terminates upstream and
  * NODE_ENV is not literally "production".
  */
 function cookieIsSecure(): boolean {
-  return process.env.NODE_ENV === "production" || process.env.BREADCRUMBS_FORCE_SECURE === "true";
+  return process.env.NODE_ENV === "production" || process.env.BREADCRUMBZ_FORCE_SECURE === "true";
 }
 
 function sessionCookie(token: string): string {

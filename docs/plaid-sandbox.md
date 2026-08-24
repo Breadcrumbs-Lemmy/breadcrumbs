@@ -41,13 +41,13 @@ Expected Plaid variables:
 | `PLAID_ENV` | Yes for Plaid | Must be `sandbox`. Other values are rejected. |
 | `PLAID_CLIENT_ID` | Yes for Plaid | Plaid Sandbox client id. Never paste it into chat or commit it. |
 | `PLAID_SECRET` | Yes for Plaid | Plaid Sandbox secret. Never paste it into chat or commit it. |
-| `PLAID_CLIENT_NAME` | No | Defaults to `Breadcrumbs Sandbox`; Plaid displays it in Link. |
+| `PLAID_CLIENT_NAME` | No | Defaults to `Breadcrumbz Sandbox`; Plaid displays it in Link. |
 | `PLAID_COUNTRY_CODES` | No | Defaults to `US`; only `US` is accepted in this scaffold. |
 | `PLAID_REDIRECT_URI` | No | Optional OAuth redirect URI for local Link testing. |
 | `PLAID_WEBHOOK` | No | Optional webhook URL for local tunnel testing. |
 | `HOST` | No | Defaults to `127.0.0.1`. |
 | `PORT` | No | Defaults to `8787`. |
-| `BREADCRUMBS_LOCAL_DATA_DIR` | No | Local CSV import storage directory. Defaults to `~/.breadcrumbs/local-data`, outside the project tree. |
+| `BREADCRUMBZ_LOCAL_DATA_DIR` | No | Local CSV import storage directory. Defaults to `~/.breadcrumbz/local-data`, outside the project tree. |
 
 ## Local Run
 

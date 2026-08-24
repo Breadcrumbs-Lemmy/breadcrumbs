@@ -82,8 +82,8 @@ export class FileStatementImportStoreProvider implements StatementImportStorePro
 }
 
 export function defaultLocalDataDir(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = env.BREADCRUMBS_LOCAL_DATA_DIR?.trim();
-  return configured && configured.length > 0 ? configured : join(homedir(), ".breadcrumbs", "local-data");
+  const configured = env.BREADCRUMBZ_LOCAL_DATA_DIR?.trim();
+  return configured && configured.length > 0 ? configured : join(homedir(), ".breadcrumbz", "local-data");
 }
 
 /** userIds are `usr_<uuid>` / `usr_owner`, but a path is never built from
