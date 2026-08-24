@@ -78,7 +78,7 @@ const SnapshotQuerySchema = DateRangeQuerySchema.extend({
   userConfirmedNoOtherRequiredObligations: QueryBooleanSchema.optional(),
 });
 
-/** Sync accepts an optional window; absent, it pulls the last 90 days, which is
+/** Sync accepts an optional window; absent, it pulls the last 6 months, which is
  *  a sensible first look at spending without asking the user to pick dates. */
 const SyncBodySchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -166,6 +166,34 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
         institutionName: c.institutionName ?? null,
         createdAt: c.createdAt,
         lastSyncedAt: c.lastSyncedAt ?? null,
+        coverageStart: c.coverageStart ?? null,
+        coverageEnd: c.coverageEnd ?? null,
+      })),
+    };
+  });
+
+  app.get("/api/plaid/coverage", async (request) => {
+    const connections = await options.tokenStore.listForUser(callerId(request));
+    let earliest: string | null = null;
+    let latest: string | null = null;
+    for (const c of connections) {
+      if (c.coverageStart && (earliest === null || c.coverageStart < earliest)) earliest = c.coverageStart;
+      if (c.coverageEnd && (latest === null || c.coverageEnd > latest)) latest = c.coverageEnd;
+    }
+    const today = isoDate(new Date());
+    // Plaid transactionsGet reaches ~24 months back for most institutions.
+    const floor = isoDate(new Date(Date.now() - 730 * 24 * 60 * 60 * 1000));
+    return {
+      earliestSynced: earliest,
+      latestSynced: latest,
+      floor,
+      today,
+      connections: connections.map((c) => ({
+        connectionId: c.connectionId,
+        institutionName: c.institutionName ?? null,
+        coverageStart: c.coverageStart ?? null,
+        coverageEnd: c.coverageEnd ?? null,
+        lastSyncedAt: c.lastSyncedAt ?? null,
       })),
     };
   });
@@ -226,12 +254,14 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
     });
 
     const syncedAt = new Date().toISOString();
-    await options.tokenStore.markSynced(connectionId, syncedAt);
+    await options.tokenStore.markSynced(connectionId, syncedAt, { startDate, endDate });
+    const updated = await options.tokenStore.get(connectionId);
 
     return {
       connectionId,
       syncedAt,
       window: { startDate, endDate },
+      coverage: { start: updated?.coverageStart ?? startDate, end: updated?.coverageEnd ?? endDate },
       accountsSynced: accountsResult.accounts.length,
       transactionsImported: summary.imported,
       transactionsDuplicate: summary.duplicate,
@@ -249,10 +279,10 @@ export async function registerPlaidRoutes(app: FastifyInstance, options: Registe
   registerSafeErrorHandler(app);
 }
 
-/** Absent an explicit window, look back 90 days from today. */
+/** Absent an explicit window, look back 6 months (183 days) from today. */
 function defaultSyncWindow(startDate?: string, endDate?: string): { startDate: string; endDate: string } {
   const end = endDate ? new Date(`${endDate}T00:00:00Z`) : new Date();
-  const start = startDate ? new Date(`${startDate}T00:00:00Z`) : new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const start = startDate ? new Date(`${startDate}T00:00:00Z`) : new Date(end.getTime() - 183 * 24 * 60 * 60 * 1000);
   return { startDate: isoDate(start), endDate: isoDate(end) };
 }
 

@@ -15,13 +15,21 @@ export type StoredPlaidConnection = {
   institutionName?: string;
   createdAt: string;
   lastSyncedAt?: string;
+  /** Earliest posted-date (YYYY-MM-DD) that has been synced from Plaid for this
+   *  connection. Updated on every sync by merging the sync window: the UI reads
+   *  this to render a coverage rail (how far back real bank data extends) and to
+   *  decide whether a historical backfill is needed. */
+  coverageStart?: string;
+  /** Latest posted-date (YYYY-MM-DD) that has been synced from Plaid for this
+   *  connection. Paired with coverageStart for the UI coverage rail. */
+  coverageEnd?: string;
 };
 
 export interface PlaidTokenStore {
   save(input: { userId?: string; itemId: string; accessToken: string; institutionName?: string }): Promise<StoredPlaidConnection>;
   get(connectionId: string): Promise<StoredPlaidConnection | undefined>;
   listForUser(userId: string): Promise<StoredPlaidConnection[]>;
-  markSynced(connectionId: string, at: string): Promise<void>;
+  markSynced(connectionId: string, at: string, window?: { startDate: string; endDate: string }): Promise<void>;
   delete(connectionId: string): Promise<void>;
   /** Remove every connection (and its stored access token) belonging to a user.
    *  Used when an account is deleted, so no orphaned bank credential survives. */
@@ -58,9 +66,18 @@ export class InMemoryPlaidTokenStore implements PlaidTokenStore {
     return [...this.connections.values()].filter((c) => c.userId === userId).map((c) => ({ ...c }));
   }
 
-  async markSynced(connectionId: string, at: string): Promise<void> {
+  async markSynced(connectionId: string, at: string, window?: { startDate: string; endDate: string }): Promise<void> {
     const found = this.connections.get(connectionId);
-    if (found) found.lastSyncedAt = at;
+    if (!found) return;
+    found.lastSyncedAt = at;
+    if (window) {
+      found.coverageStart = found.coverageStart
+        ? (window.startDate < found.coverageStart ? window.startDate : found.coverageStart)
+        : window.startDate;
+      found.coverageEnd = found.coverageEnd
+        ? (window.endDate > found.coverageEnd ? window.endDate : found.coverageEnd)
+        : window.endDate;
+    }
   }
 
   async delete(connectionId: string): Promise<void> {
@@ -131,13 +148,21 @@ export class FilePlaidTokenStore implements PlaidTokenStore {
     return (await this.store.all()).filter((c) => c.userId === userId).map((c) => this.decode(c));
   }
 
-  async markSynced(connectionId: string, at: string): Promise<void> {
+  async markSynced(connectionId: string, at: string, window?: { startDate: string; endDate: string }): Promise<void> {
     const found = await this.store.get(connectionId);
     if (!found) return;
     // Round-trip through decode/encode so a legacy plaintext record is migrated
     // to ciphertext on this write, and the token is never left in plaintext.
     const connection = this.decode(found);
     connection.lastSyncedAt = at;
+    if (window) {
+      connection.coverageStart = connection.coverageStart
+        ? (window.startDate < connection.coverageStart ? window.startDate : connection.coverageStart)
+        : window.startDate;
+      connection.coverageEnd = connection.coverageEnd
+        ? (window.endDate > connection.coverageEnd ? window.endDate : connection.coverageEnd)
+        : window.endDate;
+    }
     await this.store.put(connectionId, this.encode(connection));
   }
 

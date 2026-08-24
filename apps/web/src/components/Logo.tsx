@@ -54,6 +54,47 @@ type LogoProps = {
 const MAX_SPILL = 14;
 
 /**
+ * Hover state for the coin spill, as a small state machine so the stop is
+ * graceful. The coins loop (CSS `infinite`); rather than cut them dead — which
+ * makes whatever is mid-air vanish — leaving moves to a `stopping` phase where
+ * each coin retires itself at its next loop boundary (bottom of the fall, already
+ * invisible) and no new fall begins. When the last coin has drained, `onDrained`
+ * returns to idle and unmounts the overlay.
+ *
+ *   idle ──enter──▶ spilling ──leave──▶ stopping ──drained──▶ idle
+ *                      ▲                    │
+ *                      └──────enter─────────┘   (re-entering resumes the loop)
+ *
+ * `spilling` mounts the overlay; `stopping` tells it to drain. Re-entering during
+ * the drain resumes the infinite loop. Reduced motion skips the drain (there are
+ * no iteration boundaries to hook) and goes straight to idle. Returns undefined
+ * handlers when disabled so the wrapper adds no listeners at all.
+ */
+function useSpillHover(enabled: boolean) {
+  const [phase, setPhase] = useState<"idle" | "spilling" | "stopping">("idle");
+  if (!enabled) {
+    return {
+      spilling: false,
+      stopping: false,
+      onMouseEnter: undefined,
+      onMouseLeave: undefined,
+      onDrained: () => {},
+    };
+  }
+  const reduced =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  return {
+    spilling: phase !== "idle",
+    stopping: phase === "stopping",
+    onMouseEnter: () => setPhase("spilling"),
+    onMouseLeave: () =>
+      setPhase((p) => (p !== "spilling" ? p : reduced ? "idle" : "stopping")),
+    onDrained: () => setPhase("idle"),
+  };
+}
+
+/**
  * Sparkle points on the coin's rim (r=16 about 20,20), each with the delay at
  * which it twinkles — ordered clockwise from the top so they light in sequence
  * just behind the sweeping comet head, reading as a glitter trail on the edge.
@@ -117,19 +158,59 @@ function makeCoins(count: number, spread: "mark" | "wide"): CSSProperties[] {
  * new random set is generated on every hover (there's no coin DOM at rest, and
  * the fall never repeats). Pointer-transparent; collapses to nothing under
  * reduced motion via the global rule in tokens.css.
+ *
+ * When `stopping` (the pointer has left), each coin retires itself on its next
+ * `animationiteration` — the instant it reaches the bottom of a fall and would
+ * loop back to the top. That lets every coin currently on screen finish its drop
+ * while starting no new one, so the shower tails off cleanly instead of vanishing
+ * mid-air. Once the last coin is gone, `onDrained` lets the parent unmount.
  */
-function CoinSpill({ count, spread }: { count: number; spread: "mark" | "wide" }) {
+function CoinSpill({
+  count,
+  spread,
+  stopping,
+  onDrained,
+}: {
+  count: number;
+  spread: "mark" | "wide";
+  stopping: boolean;
+  onDrained: () => void;
+}) {
   // One roll per mount. The parent gates mounting on hover, so each hover =
   // a fresh mount = a fresh random spill.
   const [coins] = useState(() => makeCoins(count, spread));
+  // Indices of coins that have finished draining (removed from the DOM). Reset if
+  // the pointer returns and the loop resumes, so a re-hover shows the full set.
+  const [drained, setDrained] = useState<number[]>([]);
+  const remaining = coins.length - drained.length;
+
+  // Resuming the loop (pointer returned): forget any drained coins.
+  useEffect(() => {
+    if (!stopping && drained.length) setDrained([]);
+  }, [stopping, drained.length]);
+
+  // The last coin has finished its final fall — tell the parent to unmount.
+  useEffect(() => {
+    if (stopping && remaining === 0) onDrained();
+  }, [stopping, remaining, onDrained]);
+
   return (
     <span
       className={`logo-coindrop${spread === "wide" ? " logo-coindrop--wide" : ""}`}
       aria-hidden="true"
     >
-      {coins.map((style, i) => (
-        <i key={i} className="logo-drop" style={style} />
-      ))}
+      {coins.map((style, i) =>
+        drained.includes(i) ? null : (
+          <i
+            key={i}
+            className="logo-drop"
+            style={style}
+            onAnimationIteration={
+              stopping ? () => setDrained((d) => (d.includes(i) ? d : [...d, i])) : undefined
+            }
+          />
+        ),
+      )}
     </span>
   );
 }
@@ -143,9 +224,10 @@ export function LogoMark({
   sparkle = beacon,
 }: Pick<LogoProps, "size" | "animated" | "beacon" | "spill" | "spillCount" | "sparkle">) {
   const coins = Math.max(0, Math.min(MAX_SPILL, Math.round(spillCount)));
-  // Mount the spill only while hovered so each hover re-rolls a fresh random set.
-  const [hovered, setHovered] = useState(false);
   const spilling = spill && coins > 0;
+  // Mount the spill only while active so each hover re-rolls a fresh random set;
+  // on leave the coins drain one loop-boundary at a time (see useSpillHover).
+  const hover = useSpillHover(spilling);
 
   // Ambient gold glitter. At random intervals (7–20s) a light sweeps once around
   // the coin's rim; the group is mounted only for that burst so each one runs
@@ -168,9 +250,9 @@ export function LogoMark({
   }, [shimmer]);
   return (
     <span
-      className="logo-holder"
-      onMouseEnter={spilling ? () => setHovered(true) : undefined}
-      onMouseLeave={spilling ? () => setHovered(false) : undefined}
+      className={`logo-holder${hover.spilling ? " logo-spilling" : ""}`}
+      onMouseEnter={hover.onMouseEnter}
+      onMouseLeave={hover.onMouseLeave}
     >
       <svg
         width={size}
@@ -269,7 +351,14 @@ export function LogoMark({
       {/* Coins spill from the "b" coin on hover, each on its own random path,
           then fade — gated on `spill` (which follows `beacon` unless set on its
           own). Mounted only while hovered so every hover falls differently. */}
-      {spilling && hovered && <CoinSpill count={coins} spread="mark" />}
+      {spilling && hover.spilling && (
+        <CoinSpill
+          count={coins}
+          spread="mark"
+          stopping={hover.stopping}
+          onDrained={hover.onDrained}
+        />
+      )}
     </span>
   );
 }
@@ -289,7 +378,8 @@ export function Logo({
   // mark-variant early return) to keep hook order stable; the mark variant lets
   // its inner LogoMark own the spill instead.
   const coins = Math.max(0, Math.min(MAX_SPILL, Math.round(spillCount)));
-  const [hovered, setHovered] = useState(false);
+  const spilling = spill && coins > 0;
+  const hover = useSpillHover(spilling);
 
   if (variant === "mark") {
     // No wordmark to spill across, so the coins stay on the mark (the "b").
@@ -309,13 +399,15 @@ export function Logo({
 
   // Full lockup: the mark keeps its beacon crumb, but the hover coin-spill lifts
   // up to the lockup so coins drop from all along "breadcrumbs", not just the
-  // "b". Mounted only while hovered so every hover falls in a fresh pattern.
-  const spilling = spill && coins > 0;
+  // "b". Mounted only while active so every hover falls in a fresh pattern; on
+  // leave the coins drain one loop-boundary at a time (see useSpillHover).
   return (
     <span
-      className={`logo-lockup inline-flex items-center gap-2 ${className}`}
-      onMouseEnter={spilling ? () => setHovered(true) : undefined}
-      onMouseLeave={spilling ? () => setHovered(false) : undefined}
+      className={`logo-lockup inline-flex items-center gap-2${
+        hover.spilling ? " logo-spilling" : ""
+      } ${className}`}
+      onMouseEnter={hover.onMouseEnter}
+      onMouseLeave={hover.onMouseLeave}
     >
       <LogoMark
         size={size}
@@ -326,7 +418,14 @@ export function Logo({
         sparkle={sparkle}
       />
       <Wordmark className={wordmarkClassName} />
-      {spilling && hovered && <CoinSpill count={coins} spread="wide" />}
+      {spilling && hover.spilling && (
+        <CoinSpill
+          count={coins}
+          spread="wide"
+          stopping={hover.stopping}
+          onDrained={hover.onDrained}
+        />
+      )}
     </span>
   );
 }

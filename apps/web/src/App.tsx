@@ -79,6 +79,24 @@ type Route =
   | "admin"
   | "settings";
 
+/** Every valid route, used to validate the URL hash on load. */
+const ROUTES: Route[] = [
+  "spending", "budgets", "goals", "cashflow", "report", "transactions",
+  "insights", "accounts", "networth", "assistant", "import", "check",
+  "result", "admin", "settings",
+];
+
+/** The default landing route — the first tab, Spending. */
+const DEFAULT_ROUTE: Route = "spending";
+
+/** Read the current route from the URL hash (`#/spending`). Falls back to the
+ *  default when the hash is empty or not a known route, so a manual/garbage
+ *  hash can't strand the app on a blank screen. */
+function routeFromHash(): Route {
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  return (ROUTES as string[]).includes(raw) ? (raw as Route) : DEFAULT_ROUTE;
+}
+
 // ---- top-level wrapper (supplies session context) --------------------------
 
 export default function App() {
@@ -131,12 +149,14 @@ function AppContent() {
   const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
   const [snapshotNotes, setSnapshotNotes] = useState<SnapshotNotes | null>(null);
   const [draft, setDraft] = useState<PurchaseDraft>(() => emptyDraft(todayIso()));
-  // Land on Accounts — the same destination the Breadcrumbs logo (onHome) goes
-  // to — so the first screen and the logo click are in sync.
-  const [route, setRoute] = useState<Route>("accounts");
+  // Land on Spending — the first tab and the product's primary question ("where
+  // is my money going?") — restoring from the URL hash on refresh so the route
+  // survives a reload. The Breadcrumbs logo (onHome) goes to the same place, so
+  // the first screen and the logo click stay in sync.
+  const [route, setRoute] = useState<Route>(() => routeFromHash());
   /** The screen the Import flow was opened from, so its back button returns
-   *  there rather than to a fixed page. Defaults to accounts. */
-  const [importOrigin, setImportOrigin] = useState<Route>("accounts");
+   *  there rather than to a fixed page. Defaults to spending. */
+  const [importOrigin, setImportOrigin] = useState<Route>("spending");
   /** When set, the Transactions screen is scoped to exactly one insight's
    *  transactions — the ones the user clicked through to verify — and carries
    *  that insight's backend total so the drill-down can show what they add up
@@ -185,6 +205,27 @@ function AppContent() {
   useEffect(() => {
     void loadSnapshot();
   }, [loadSnapshot]);
+
+  // Mirror the current route into the URL hash so a browser refresh restores
+  // the same page instead of snapping back to the default. `replaceState`
+  // updates the address without pushing a new history entry (so it doesn't turn
+  // every in-app navigation into a back-button stop) and without firing
+  // `hashchange` (so this never loops with the listener below).
+  useEffect(() => {
+    const target = `#/${route}`;
+    if (window.location.hash !== target) {
+      window.history.replaceState(null, "", target);
+    }
+  }, [route]);
+
+  // Follow external hash changes (a manually edited URL, or back/forward).
+  useEffect(() => {
+    function onHashChange() {
+      setRoute(routeFromHash());
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   const submit = useCallback(async () => {
     if (!snapshot) return;
@@ -303,7 +344,7 @@ function AppContent() {
           if (next === "transactions") setTxFocus(null);
           setRoute(next);
         }}
-        onHome={() => setRoute("accounts")}
+        onHome={() => setRoute("spending")}
         onOpenSettings={() => setRoute("settings")}
         settingsActive={route === "settings"}
         user={

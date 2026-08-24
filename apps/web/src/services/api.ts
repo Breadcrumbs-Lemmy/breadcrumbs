@@ -328,6 +328,11 @@ export function fetchSpendingSummary(params: {
   key?: string;
   accountId?: string;
   currency?: string;
+  /** Optional date-range span. When both are sent the summary is aggregated
+   *  over that contiguous window; `period.key` in the response will start with
+   *  "span:" and `comparison.comparable` will be false. */
+  from?: string;
+  to?: string;
 }): Promise<ApiOutcome<SpendingSummary>> {
   return request(`/api/v1/spending/summary${qs({ currency: "USD", ...params })}`);
 }
@@ -607,6 +612,41 @@ export function deletePlaidConnection(
   connectionId: string,
 ): Promise<ApiOutcome<null>> {
   return del(`/api/plaid/connections/${connectionId}`);
+}
+
+/** Shape returned by `GET /api/plaid/coverage`. Describes the overall data
+ *  coverage window across all Plaid connections.
+ *
+ *  `floor`/`today` are always present (Plaid's ~24-month lookback and the
+ *  server's current date). `earliestSynced`/`latestSynced` are null when no
+ *  data has been pulled yet. */
+export type PlaidCoverage = {
+  earliestSynced: string | null;
+  latestSynced: string | null;
+  floor: string;
+  today: string;
+  connections: Array<{
+    connectionId: string;
+    institutionName: string | null;
+    coverageStart: string | null;
+    coverageEnd: string | null;
+    lastSyncedAt: string | null;
+  }>;
+};
+
+/** `GET /api/plaid/coverage` — overall data-coverage window. */
+export function fetchSpendingCoverage(): Promise<ApiOutcome<PlaidCoverage>> {
+  return get("/api/plaid/coverage");
+}
+
+/** `POST /api/plaid/connections/:id/sync` — pull a historical window from the
+ *  bank and merge it into the store (idempotent, dedups). Pass `startDate` to
+ *  backfill older data; omitting `endDate` defaults to today. */
+export function syncConnection(
+  connectionId: string,
+  body: { startDate?: string; endDate?: string },
+): Promise<ApiOutcome<unknown>> {
+  return post(`/api/plaid/connections/${connectionId}/sync`, body);
 }
 
 // ---- Affordability --------------------------------------------------------

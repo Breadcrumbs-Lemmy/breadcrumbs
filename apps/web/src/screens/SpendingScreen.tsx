@@ -11,6 +11,15 @@
  * arithmetic operation is `totalInflowCents - totalOutflowCents` for "left
  * over", which composes two adjacent backend figures for display rather than
  * deriving anything financial.
+ *
+ * Coverage Calendar:
+ *   The Week/Month/Year toggle drives the default view — the latest period,
+ *   with its month-over-month comparison intact. Independent of that toggle, a
+ *   single collapsible SpendingCalendar button lets the user look back: opening
+ *   it reveals a day-grid range picker (one consistent calendar, not tied to the
+ *   grain) for selecting any contiguous range and pulling older Plaid history.
+ *   Applying a range overrides the default view via the span path; Clear returns
+ *   to the latest period. Statement periods keep their original Chip navigation.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SpendingSummary } from "@ai-fin-os/core";
@@ -20,16 +29,35 @@ import {
   type SpendingOutcome,
   type StatementAccount,
 } from "../services/spending";
+import {
+  fetchSpendingCoverage,
+  fetchSpendingSummary,
+  fetchSpendingSeries,
+  syncConnection,
+  type PlaidCoverage,
+} from "../services/api";
 import { PERIOD_LABELS, isPeriodSupported, type PeriodKind } from "../model/period";
+import { seriesKeyToStartDate } from "../model/calendar";
 import { useAssistantView } from "../services/assistant-scope";
 import { categoryColor } from "../model/category-color";
 import { formatMoney } from "../format/money";
 import { banksAndAccounts } from "../format/counts";
 import { Bar, Card, Chip, CountUpMoney, Delta, Segmented, SectionLabel } from "../components/ui";
+import { SpendingCalendar } from "../components/SpendingCalendar";
+import type { DateRange } from "../components/SpendingCalendar";
 import { LogoMark } from "../components/Logo";
 import { issuerLabel } from "../components/BankCard";
 
 const PERIODS: PeriodKind[] = ["week", "month", "year", "statement"];
+
+/** Series-point shape (matches what `fetchSpendingSeries` returns inside `points[]`). */
+type SeriesPoint = {
+  key: string;
+  label: string;
+  partial: boolean;
+  totalOutflowCents: number;
+  totalInflowCents: number;
+};
 
 export function SpendingScreen({
   onCheckPurchase,
@@ -46,29 +74,53 @@ export function SpendingScreen({
 }) {
   const [period, setPeriod] = useState<PeriodKind>("month");
   const [outcome, setOutcome] = useState<SpendingOutcome | null>(null);
+  // monthKey is only used for the statement period's Chip navigation.
   const [monthKey, setMonthKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [accountId, setAccountId] = useState<string | null>(null);
-  /** Cards that actually carry a closing day. Statement periods are offered
-   *  only when one exists — discovered from the API rather than declared in a
-   *  local flag, per `CD-013`. Without a cycle the endpoint silently falls back
-   *  to a calendar month, which is the confusion this view exists to prevent. */
+  /** Cards that actually carry a closing day — discovered from the API
+   *  per `CD-013`. Without a cycle, the endpoint silently falls back to a
+   *  calendar month, which is the confusion this view exists to prevent. */
   const [statementAccounts, setStatementAccounts] = useState<StatementAccount[] | null>(null);
-  /** True while a scoped re-fetch is in flight but the previous view is still on
-   *  screen. Switching the account filter re-scopes the same period, so the page
-   *  dims in place instead of blinking down to a skeleton — the "everything jumps"
-   *  the redesign removes. */
+  /** True while a scoped re-fetch is in flight but the previous view is still
+   *  on screen — dims in place rather than blinking to a skeleton. */
   const [refreshing, setRefreshing] = useState(false);
-  /** The full account roster + top-line total from the most recent *unscoped*
-   *  load. A filtered summary only carries the one account it was scoped to, so
-   *  without this the account picker would collapse to a single row the moment a
-   *  filter is applied — the "Savings sometimes shows, sometimes doesn't" bug. */
+  /** Snapshotted from the most recent unscoped load so the account picker
+   *  always lists every account even while a filter is applied. */
   const [roster, setRoster] = useState<{
     accounts: SpendingSummary["accountTotals"];
     totalOutflowCents: number;
     bankCount: number;
   } | null>(null);
 
+  // --- Coverage Calendar state -------------------------------------------
+  const [coverage, setCoverage] = useState<PlaidCoverage | null>(null);
+  /** The applied custom {from,to} range, or null when showing the latest
+   *  period for the current grain. */
+  const [customRange, setCustomRange] = useState<DateRange | null>(null);
+  /** True while a Plaid backfill POST is in flight. */
+  const [backfilling, setBackfilling] = useState(false);
+  /** Series points for the multi-bucket trend strip. */
+  const [trendPoints, setTrendPoints] = useState<SeriesPoint[] | null>(null);
+
+  // ---- Helpers ----------------------------------------------------------------
+
+  const isRailPeriod = period !== "statement";
+
+  const statementReady = (statementAccounts?.length ?? 0) > 0;
+  const supported = useCallback(
+    (kind: PeriodKind) => (kind === "statement" ? statementReady : isPeriodSupported(kind)),
+    [statementReady],
+  );
+
+  // Statement periods require an accountId; use the first statement-capable card.
+  const statementAccountId = accountId ?? statementAccounts?.[0]?.id;
+
+  const datasetRef = useRef<string | null>(null);
+
+  // ---- Effects ---------------------------------------------------------------
+
+  // 1. Load statement accounts (unchanged).
   useEffect(() => {
     let cancelled = false;
     void loadStatementAccounts().then((next) => !cancelled && setStatementAccounts(next));
@@ -77,28 +129,94 @@ export function SpendingScreen({
     };
   }, []);
 
-  const statementReady = (statementAccounts?.length ?? 0) > 0;
-  const supported = useCallback(
-    (kind: PeriodKind) => (kind === "statement" ? statementReady : isPeriodSupported(kind)),
-    [statementReady],
-  );
-
-  // A card whose statement is being viewed is chosen here, not by the account
-  // filter: the API requires an accountId for this period kind and rejects the
-  // request without one.
-  const statementAccountId = accountId ?? statementAccounts?.[0]?.id;
-
-  // The "dataset" currently on screen — the period plus the specific key, but
-  // *not* the account filter. Switching account re-scopes the same dataset, so
-  // it should refresh in place rather than blink the whole page down to a
-  // skeleton and back.
-  const datasetRef = useRef<string | null>(null);
-
+  // 2. Load Plaid coverage once on mount.
   useEffect(() => {
     let cancelled = false;
-    // An unsupported period is not a request worth making. Sending it anyway
-    // returns a 400, which the screen used to render as "Couldn't load your
-    // spending — start the API" over a perfectly healthy API.
+    void fetchSpendingCoverage().then((result) => {
+      if (cancelled) return;
+      if (result.kind === "ok") setCoverage(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 3. Load summary for rail periods (week / month / year).
+  //    • Default (no custom range) → the latest period via `loadSpending`, with
+  //      its month-over-month comparison intact.
+  //    • Custom range applied from the calendar → the span path, which
+  //      aggregates [from, to] with comparison disabled by design.
+  useEffect(() => {
+    if (!isRailPeriod) return;
+    if (!supported(period)) {
+      setOutcome(null);
+      datasetRef.current = null;
+      return;
+    }
+
+    const scopedAccount = accountId ?? undefined;
+    let cancelled = false;
+
+    if (customRange) {
+      const { from, to } = customRange;
+      if (!from || !to) return;
+
+      const datasetKey = `${period}|${from}|${to}|${scopedAccount ?? ""}`;
+      const sameDataset = datasetRef.current === datasetKey;
+      datasetRef.current = datasetKey;
+      if (sameDataset) setRefreshing(true);
+      else setOutcome(null);
+
+      void fetchSpendingSummary({ period, from, to, accountId: scopedAccount }).then((result) => {
+        if (cancelled) return;
+        setRefreshing(false);
+
+        if (result.kind === "error") {
+          setOutcome({ kind: "error", message: result.message });
+          return;
+        }
+        if (result.kind === "unauthenticated") {
+          setOutcome({ kind: "error", message: "Authentication required." });
+          return;
+        }
+        if (result.kind === "invalid" || result.kind === "rejected") {
+          setOutcome({ kind: "error", message: "That request was rejected." });
+          return;
+        }
+
+        const summary = result.data;
+        if (
+          summary.totalOutflowCents === 0 &&
+          summary.totalInflowCents === 0 &&
+          summary.accountTotals.length === 0
+        ) {
+          setOutcome({ kind: "empty" });
+          return;
+        }
+        setOutcome({ kind: "ready", summary, available: [] });
+      });
+    } else {
+      const datasetKey = `${period}|latest|${scopedAccount ?? ""}`;
+      const sameDataset = datasetRef.current === datasetKey;
+      datasetRef.current = datasetKey;
+      if (sameDataset) setRefreshing(true);
+      else setOutcome(null);
+
+      void loadSpending(period, undefined, scopedAccount).then((next) => {
+        if (cancelled) return;
+        setOutcome(next);
+        setRefreshing(false);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isRailPeriod, period, customRange, accountId, supported]);
+
+  // 4. Load summary for statement periods (original logic preserved).
+  useEffect(() => {
+    if (isRailPeriod) return;
     if (!supported(period)) {
       setOutcome(null);
       datasetRef.current = null;
@@ -107,11 +225,10 @@ export function SpendingScreen({
     const datasetKey = `${period}|${monthKey ?? ""}`;
     const sameDataset = datasetRef.current === datasetKey;
     datasetRef.current = datasetKey;
-    // A genuinely new period gets the skeleton; a same-period account switch
-    // keeps the current view and dims it while the scoped figures load.
     if (sameDataset) setRefreshing(true);
     else setOutcome(null);
     const scopedAccount = period === "statement" ? statementAccountId : accountId ?? undefined;
+    let cancelled = false;
     void loadSpending(period, monthKey ?? undefined, scopedAccount).then((next) => {
       if (cancelled) return;
       setOutcome(next);
@@ -120,12 +237,10 @@ export function SpendingScreen({
     return () => {
       cancelled = true;
     };
-  }, [period, monthKey, accountId, supported, statementAccountId]);
+  }, [isRailPeriod, period, monthKey, accountId, supported, statementAccountId]);
 
-  // Snapshot the account roster from every unscoped, all-accounts load, so a
-  // later filtered load still has the full list to render the picker from.
-  // Statement periods are always scoped to one card, so they never define the
-  // roster.
+  // 5. Snapshot the all-accounts roster from unscoped loads so the picker
+  //    never collapses when a filter is applied.
   useEffect(() => {
     if (outcome?.kind === "ready" && accountId === null && period !== "statement") {
       setRoster({
@@ -136,15 +251,69 @@ export function SpendingScreen({
     }
   }, [outcome, accountId, period]);
 
+  // 6. Load per-sub-period trend data when a custom range is applied — the
+  //    strip only reads as a trend across more than one sub-period.
+  useEffect(() => {
+    if (!isRailPeriod || !customRange) {
+      setTrendPoints(null);
+      return;
+    }
+
+    const { from, to } = customRange;
+    if (!from || !to) return;
+
+    let cancelled = false;
+    void fetchSpendingSeries({ period, count: 100 }).then((result) => {
+      if (cancelled || result.kind !== "ok") return;
+      const pts = (result.data as { points: SeriesPoint[] }).points;
+      // Filter to series points whose start date falls within [from, to].
+      const filtered = pts.filter((p) => {
+        const start = seriesKeyToStartDate(p.key);
+        return start !== null && start >= from && start <= to;
+      });
+      // Only a multi-bucket range reads as a trend.
+      setTrendPoints(filtered.length > 1 ? filtered : null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isRailPeriod, period, customRange]);
+
+  // ---- Backfill handler -------------------------------------------------------
+
+  const handleBackfill = useCallback(
+    async (targetStartDate: string) => {
+      if (!coverage || coverage.connections.length === 0) return;
+      setBackfilling(true);
+      try {
+        await Promise.all(
+          coverage.connections.map((c) =>
+            syncConnection(c.connectionId, { startDate: targetStartDate }),
+          ),
+        );
+        // Re-fetch coverage so the rail reflects newly synced buckets.
+        const updated = await fetchSpendingCoverage();
+        if (updated.kind === "ok") {
+          setCoverage(updated.data);
+          // Force summary re-fetch by invalidating the dataset key.
+          datasetRef.current = null;
+        }
+      } finally {
+        setBackfilling(false);
+      }
+    },
+    [coverage],
+  );
+
+  // ---- Derived values --------------------------------------------------------
+
   const summary = outcome?.kind === "ready" ? outcome.summary : undefined;
-  const available = useMemo(
+  const statementAvailable = useMemo(
     () => (outcome?.kind === "ready" ? outcome.available : []),
     [outcome],
   );
 
-  // Prefer the snapshotted all-accounts roster; before the first unscoped load
-  // has landed (e.g. arriving straight into a statement period) fall back to
-  // whatever the current summary carries so the picker still has something.
   const rosterData =
     roster ??
     (summary
@@ -157,11 +326,6 @@ export function SpendingScreen({
   const selectedAccount =
     accountId && rosterData ? rosterData.accounts.find((a) => a.id === accountId) : undefined;
 
-  // Tell the assistant exactly what's on screen: the resolved period (the
-  // backend-echoed key/label, so "Week of 19 May" scopes the answer to that
-  // week, not the current month) and the account filter. For a statement period
-  // the viewed card *is* the filter even when the picker reads "All accounts",
-  // so fall back to the statement card so the scope names the right account.
   const scopedAccount = selectedAccount
     ? { id: selectedAccount.id, label: selectedAccount.displayName }
     : period === "statement" && statementAccountId
@@ -170,6 +334,7 @@ export function SpendingScreen({
           label: statementAccounts?.find((a) => a.id === statementAccountId)?.displayName,
         }
       : undefined;
+
   useAssistantView(
     summary
       ? {
@@ -183,54 +348,74 @@ export function SpendingScreen({
       : null,
   );
 
+  // Whether the trend strip has multi-bucket data to show.
+  const isMultiBucket = (trendPoints?.length ?? 0) > 1;
+
   return (
     <>
-      {/* Controls sit above the grid so they govern the whole page, not one
-          column. Period on the left, period navigation on the right — the
-          desktop convention, and it keeps both reachable without scrolling. */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="w-full sm:max-w-[360px]">
-          <Segmented
-            ariaLabel="Time period"
-            value={period}
-            onChange={(next) => {
-              setPeriod(next);
-              // Period keys are kind-specific: "2026-06" means nothing to the
-              // week endpoint, which would quietly fall back to the current
-              // week rather than reporting the mismatch.
-              setMonthKey(null);
-              setExpanded(false);
-              // A new period has its own account roster and figures; drop the
-              // filter so the picker re-snapshots against the period on screen.
-              setAccountId(null);
-            }}
-            options={PERIODS.map((p) => ({
-              value: p,
-              label: PERIOD_LABELS[p],
-              muted: !supported(p),
-            }))}
-          />
+      {/* Controls sit above the grid so they govern the whole page. */}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="w-full sm:max-w-[360px]">
+            <Segmented
+              ariaLabel="Time period"
+              value={period}
+              onChange={(next) => {
+                setPeriod(next);
+                setMonthKey(null);
+                setExpanded(false);
+                setAccountId(null);
+                // Switching grain returns to that grain's latest period.
+                setCustomRange(null);
+              }}
+              options={PERIODS.map((p) => ({
+                value: p,
+                label: PERIOD_LABELS[p],
+                muted: !supported(p),
+              }))}
+            />
+          </div>
+
+          {/* Statement period: keep the original Chip navigation. */}
+          {period === "statement" && summary && statementAvailable.length > 1 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+              {statementAvailable.map((p) => (
+                <Chip
+                  key={p.key}
+                  active={p.key === summary.period.key}
+                  onClick={() => {
+                    setMonthKey(p.key);
+                    setExpanded(false);
+                    setAccountId(null);
+                  }}
+                >
+                  {p.label}
+                </Chip>
+              ))}
+            </div>
+          )}
         </div>
 
-        {summary && available.length > 1 && (
-          /* overflow-x-auto handles any number of periods. The -slice(-6) cap
-             is deliberately removed so users can scroll back as far as their
-             data reaches — the headline complaint was "only a couple of days". */
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            {available.map((p) => (
-              <Chip
-                key={p.key}
-                active={p.key === summary.period.key}
-                onClick={() => {
-                  setMonthKey(p.key);
-                  setExpanded(false);
-                  setAccountId(null);
-                }}
-              >
-                {p.label}
-              </Chip>
-            ))}
-          </div>
+        {/* One calendar object — a collapsible day-range picker, independent of
+            the grain. Applying a range overrides the latest-period default.
+            Statement keeps its own Chip navigation above. */}
+        {isRailPeriod && (
+          <SpendingCalendar
+            coverage={coverage}
+            value={customRange}
+            onApply={(range) => {
+              setCustomRange(range);
+              setAccountId(null);
+              setExpanded(false);
+            }}
+            onClear={() => {
+              setCustomRange(null);
+              setAccountId(null);
+              setExpanded(false);
+            }}
+            onBackfill={handleBackfill}
+            backfilling={backfilling}
+          />
         )}
       </div>
 
@@ -269,9 +454,6 @@ export function SpendingScreen({
 
       {summary && (
         <div
-          // Keyed on the period only: switching account re-scopes the same grid
-          // in place, so it must not remount (a remount would replay the fade
-          // and read as the page "jumping").
           key={summary.period.key}
           className={`fade-in mt-6 grid grid-cols-1 gap-5 transition-opacity duration-200 lg:grid-cols-12 ${
             refreshing ? "opacity-60" : "opacity-100"
@@ -282,6 +464,11 @@ export function SpendingScreen({
           <div className="space-y-5 lg:col-span-7 xl:col-span-8">
             <Figures summary={summary} accountId={accountId} />
 
+            {/* Trend strip: mini per-sub-period bars across a multi-unit span. */}
+            {isMultiBucket && trendPoints && trendPoints.length > 0 && (
+              <TrendStrip points={trendPoints} />
+            )}
+
             <div>
               <div className="mb-3 flex items-baseline justify-between gap-4">
                 <SectionLabel>Where it went</SectionLabel>
@@ -291,11 +478,6 @@ export function SpendingScreen({
                   </span>
                 )}
               </div>
-              {/* The summary is already scoped to the selected account server-
-                  side, so its categoryTotals are that account's own breakdown —
-                  no need to hide it behind "clear the filter". Keeping the card
-                  present is also what stops the layout from collapsing when a
-                  filter is applied. */}
               <Categories
                 summary={summary}
                 expanded={expanded}
@@ -334,10 +516,6 @@ export function SpendingScreen({
               </span>
             </button>
 
-            {/* Budgets live on their own screen, reached from here rather than a
-                nav tab (the rail spells C·A·P·I·T·A·L). Caps aren't shown inline
-                because this screen is multi-period and a cap for one window shown
-                against another would mislead — see docs/budgets.md D-B10. */}
             {onOpenBudgets && (
               <button
                 type="button"
@@ -357,11 +535,6 @@ export function SpendingScreen({
               </button>
             )}
 
-            {/* The forward-looking companion to this backward-looking screen:
-                what's scheduled to hit before the next paycheck. Reached from
-                here as a button card, not a nav tab (the rail spells
-                C·A·P·I·T·A·L, so it stays off it — same rule as Settings) —
-                see docs/cashflow.md D-C12. */}
             {onOpenCashflow && (
               <button
                 type="button"
@@ -381,11 +554,6 @@ export function SpendingScreen({
               </button>
             )}
 
-            {/* The monthly "where did my money go" report — a readable,
-                printable, exportable summary of a chosen month. Reached from
-                here as a button card, not a nav tab (the rail spells
-                C·A·P·I·T·A·L, so it stays off it — same rule as Settings) —
-                see docs/report.md. */}
             {onOpenReport && (
               <button
                 type="button"
@@ -412,12 +580,51 @@ export function SpendingScreen({
 }
 
 // ---------------------------------------------------------------------------
+// TrendStrip — per-bucket spending bars for a multi-bucket selection
+// ---------------------------------------------------------------------------
 
-/**
- * The figures block. Three stats across at desktop, stacked on phone.
- * "Went out" stays visually dominant everywhere — it is the question the screen
- * exists to answer.
- */
+function TrendStrip({ points }: { points: SeriesPoint[] }) {
+  const maxOut = Math.max(...points.map((p) => p.totalOutflowCents), 1);
+
+  return (
+    <Card padded={false} className="overflow-hidden px-4 py-3">
+      <p className="mb-3 text-label uppercase tracking-[0.06em] text-ink-tertiary">
+        Trend across selection
+      </p>
+      <div className="flex items-end gap-1.5 overflow-x-auto pb-1">
+        {points.map((p) => {
+          const pct = (p.totalOutflowCents / maxOut) * 100;
+          return (
+            <div
+              key={p.key}
+              title={`${p.label}: ${formatMoney(p.totalOutflowCents)}`}
+              className="flex flex-shrink-0 flex-col items-center gap-1.5"
+            >
+              <div className="flex h-[40px] w-[36px] items-end">
+                <div
+                  className="w-full rounded-sm"
+                  style={{
+                    height: `${Math.max(pct, 4)}%`,
+                    background: "var(--accent)",
+                    opacity: 0.75,
+                  }}
+                />
+              </div>
+              <span className="truncate text-meta text-ink-tertiary" style={{ maxWidth: 36 }}>
+                {p.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Figures
+// ---------------------------------------------------------------------------
+
 function Figures({
   summary,
   accountId,
@@ -428,20 +635,12 @@ function Figures({
   const account = accountId ? summary.accountTotals.find((a) => a.id === accountId) : undefined;
   const out = account ? account.totalOutflowCents : summary.totalOutflowCents;
   const inflow = account ? account.totalInflowCents : summary.totalInflowCents;
-  // netCents is backend-owned (H-022). The UI no longer subtracts.
   const net = account ? account.totalInflowCents - account.totalOutflowCents : summary.netCents;
   const share = inflow + out > 0 ? (inflow / (inflow + out)) * 100 : 50;
   const c = summary.comparison;
   const showDelta =
     !account && c && c.comparable && (c.direction === "up" || c.direction === "down");
 
-  // The hero size (2.75rem) needs ~23px per character, and a third of this card
-  // is 160px of content at a 1280px viewport — room for six characters. The
-  // screen was designed against small demo totals; against a real month
-  // ("$6,704.48" wants 207px) the figure ran under the divider and collided
-  // with "Came in". Stepping down one size is not the nicest resolution — a
-  // wider cell or a rounded headline would both keep the emphasis — but a
-  // figure that reads as two overlapping numbers is worse than a smaller one.
   const outText = formatMoney(out);
   const outSize = outText.length > 6 ? "text-figure" : "text-hero";
 
@@ -508,13 +707,8 @@ function Categories({
   onToggle: () => void;
 }) {
   const all = summary.categoryTotals;
-  // More rows fit comfortably at desktop, so the fold sits lower there.
   const shown = expanded ? all : all.slice(0, 8);
 
-  // A month with accounts but no spending (e.g. August in the seed) has an empty
-  // categoryTotals but still reaches this normal layout — the top-level "Nothing
-  // here yet" only fires when there's no data at all. Without a row the card
-  // rendered as a bare bordered box under "Where it went" (B7).
   const periodNoun = summary.period.kind === "statement" ? "statement period" : summary.period.kind;
 
   return (
@@ -526,11 +720,7 @@ function Categories({
       )}
       {shown.map((c, i) => {
         const delta = c.comparison;
-        // Negative comes from a refund with no matching spend this period.
-        // Intended (H-016). No bar: a share-of-period width has no meaning
-        // below zero.
         const negative = c.outflowCents < 0;
-        // shareBasisPoints is backend-supplied so the UI performs no division.
         const pct = negative ? 0 : c.shareBasisPoints / 100;
         const notable = delta && Math.abs(delta.outflowChangeCents) >= 3000;
 
@@ -545,9 +735,6 @@ function Categories({
                 />
                 <span className="truncate text-body text-ink">{c.displayName}</span>
                 {c.category === "unknown" && (
-                  // Honest explainer: "Unknown" is a backend classification
-                  // gap (unmapped bank category codes, tracked in H-036), not a
-                  // real spending place. The copy never invents a category.
                   <span className="group relative inline-flex shrink-0">
                     <button
                       type="button"
@@ -609,20 +796,6 @@ function Categories({
   );
 }
 
-/**
- * Accounts — now also the account filter.
- *
- * Previously the screen had two account surfaces: cryptic "Card / Market /
- * Saving" filter chips over "Where it went", and this read-only roster. They
- * said the same thing twice, and selecting a chip silently rescoped the whole
- * page. Folding the filter into the roster leaves one place for accounts:
- * each row shows the account and its outflow, and tapping it scopes every
- * figure and the category breakdown to that account. "All accounts" clears it.
- *
- * The roster is rendered from the last *unscoped* load (`accounts`), so it
- * always lists every account with its full-period outflow — it never collapses
- * to the single row a filtered summary carries.
- */
 function AccountsPanel({
   accounts,
   bankCount,
@@ -637,10 +810,6 @@ function AccountsPanel({
   onSelect: (id: string | null) => void;
 }) {
   const [showIdle, setShowIdle] = useState(false);
-  // Accounts with no movement this period are folded away by default: on a
-  // spending screen a row of "$0" accounts is noise, and the seed data carries
-  // several dormant ones. Nothing is summed or dropped — the selected account
-  // stays visible even when idle, and the count is stated on the toggle.
   const idleCount = accounts.filter(
     (a) => a.totalOutflowCents === 0 && a.id !== selected,
   ).length;
