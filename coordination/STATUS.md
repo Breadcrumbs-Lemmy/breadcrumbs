@@ -1,7 +1,26 @@
 # Coordination Status
 
 Status: Living  
-Last updated: 2026-08-23
+Last updated: 2026-09-05
+
+> **Workspace resumed 2026-09-05 (`[Backend: Codex]`).** Fetched `origin` and moved the
+> primary project folder to `codex/next-work`, based on latest `origin/main` `870aa57`.
+> `main` remains checked out in the existing Claude `spending-calendar` worktree.
+> Coordination rules, handoffs, and integration contracts reviewed; no feature work
+> claimed yet. Earlier in this session, this same commit passed `pnpm test`
+> (323 core + 449 server), `pnpm build`, and `pnpm --filter @ai-fin-os/web test`
+> (122 web tests) in the main worktree. For current calendar/Plaid behavior, use
+> the detailed H-098 and H-100 handoffs: both are merged; H-100 supersedes the
+> older hybrid-backfill description below with cursor sync of available history.
+
+> **Local Production OAuth path prepared 2026-09-05 (`[Backend: Codex]`).** Added an
+> opt-in mkcert-backed HTTPS Vite server (`pnpm run dev:web:https`) at
+> `https://localhost:5173`, with same-origin `/api` proxying to the local Fastify
+> API. `pnpm run dev:api:production-local` loads the ignored `.env.production.local`
+> profile, then supplies the Production Plaid environment, exact localhost redirect
+> URI, CORS allowlist, Secure-cookie setting, and separate local data directory for
+> one terminal session while leaving the Sandbox `.env` untouched. The Plaid
+> dashboard allowlist and Production credentials remain user-supplied.
 
 > **Spending Coverage Calendar built 2026-08-23 (`[UI: Claude]`, `H-098`, branch `worktree-spending-calendar` — not yet PR'd).**
 > Redesign of the Spending page around a **synchronized calendar + Plaid historical backfill**. Two

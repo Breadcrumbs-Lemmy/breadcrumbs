@@ -1,7 +1,7 @@
 # Running Breadcrumbz
 
 Status: Living  
-Last updated: 2026-08-06
+Last updated: 2026-09-05
 
 ## Quick start
 
@@ -85,13 +85,18 @@ PLAID_SECRET=<your Sandbox secret>
 | Sandbox `secret` | Same page | **One secret per environment.** Copy the Sandbox one. |
 | `PLAID_ENV` | You set it | `sandbox` for now |
 
-**Start in Sandbox, not Production.** Sandbox gives lifelike data with test credentials, so the whole flow can be exercised without touching a real bank. Log in with `user_good` / `pass_good`, and `1234` if a 2FA code is requested.
+**Start in Sandbox if you want a no-risk check.** Sandbox gives lifelike data with
+test credentials, so the whole flow can be exercised without touching a real bank.
+Log in with `user_good` / `pass_good`, and `1234` if a 2FA code is requested.
+For local Production OAuth, keep the Sandbox credentials in `.env` and follow
+the HTTPS setup in [`apps/web/README.md`](../apps/web/README.md#local-production-oauth).
+Copy `docs/plaid-production.local.example` to `.env.production.local` and put
+the Production client ID and secret there; Plaid's redirect allowlist must
+contain the exact `https://localhost:5173/` URI.
 
 ### Connecting your real accounts later
 
 Production access is a separate application in the Plaid dashboard, and Plaid reviews it. When you get there you will need a Production secret, and the app will need `PLAID_ENV=production`.
-
-**One blocker to know about now:** `packages/server/src/plaid/config.ts` currently pins `env` to the literal `"sandbox"` and will reject anything else. That was a deliberate safety choice while the scaffold was young. Widening it is a small change, but it should come with real token encryption first — see the security note below.
 
 ### What is safe to put where
 
@@ -221,7 +226,12 @@ Set a closing day on a credit card and `GET /api/v1/accounts` returns `statement
 pnpm test && pnpm build
 ```
 
-`pnpm test` runs 65 tests across `packages/core` and `packages/server`. `pnpm build` type-checks the API and builds the web bundle — and note that **the web build is the only one that type-checks `packages/core` under `noUnusedParameters`**, because the web app pulls core's sources in through its type imports. Core and server can both pass alone while `pnpm build:web` fails. Run the full `pnpm build` before believing the tree is clean.
+`pnpm test` runs the core and server unit/integration suites. `pnpm build`
+type-checks the API and builds the web bundle — and note that **the web build is
+the only one that type-checks `packages/core` under `noUnusedParameters`**,
+because the web app pulls core's sources in through its type imports. Core and
+server can both pass alone while `pnpm build:web` fails. Run the full `pnpm build`
+before believing the tree is clean.
 
 ## Notes that will bite otherwise
 
@@ -235,12 +245,12 @@ pnpm test && pnpm build
 
 ## Not yet built
 
-- Plaid Link in the browser. The server side exists; the button does not.
 - Docker images have never been built or run in this workspace. Expect to shake out image issues on the first `up`.
 - The category taxonomy is thin against real statements. Descriptors it doesn't recognise land in `unknown` and keep their raw text — honest, but a band labelled "Unknown" is not useful. Tracked as `L-008`.
 - Goal tracking. Nothing in a statement declares an intention, so goals stay empty until there's a way to set one.
 - Spending predictions.
-- No authentication. This is single-user and local. **Do not expose this to the internet as it stands.**
+- Mobile webview OAuth return handling still needs a dedicated flow; desktop web Link works with the registered redirect URI.
+- Shared deployment hardening remains separate work. The default local mode is single-user; set `BREADCRUMBZ_AUTH_MODE=multi_user` before exposing the API beyond this machine.
 
 ## What "Can I afford it?" needs from you
 
@@ -251,6 +261,9 @@ It builds its projection from your imported accounts and history — derived inc
 
 ## Security posture, stated plainly
 
-Local, single-user, read-only. Plaid access tokens are held in memory only and are lost on restart — deliberately, because persisting them properly needs encryption at rest that does not exist yet. Nothing in this stack writes to a financial account, and no route can move money.
+Local, single-user, read-only. Plaid connections and imported data persist under
+the local data directory. Set `BREADCRUMBZ_ENCRYPTION_KEY` to encrypt them at rest;
+without it, the server logs a warning and relies on file permissions. Nothing in
+this stack writes to a financial account, and no route can move money.
 
 Before this is exposed anywhere beyond your machine it needs authentication, encrypted token storage, and consent and deletion flows. That is a real body of work, not a configuration change.
