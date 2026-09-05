@@ -38,12 +38,22 @@ mkcert -key-file localhost-key.pem -cert-file localhost.pem localhost 127.0.0.1 
 cd ../..
 ```
 
-Use your Production Plaid client ID and secret in the root `.env`, then register
-the same URI under Plaid Dashboard → Developers → API → Allowed Redirect URIs:
+Keep the regular root `.env` as your Sandbox profile. Create the separate
+Production profile from the checked-in template, then fill in your Production
+Plaid client ID and secret:
+
+```bash
+cp docs/plaid-production.local.example .env.production.local
+```
+
+The copied file is ignored by Git. Register the same URI under Plaid Dashboard →
+Developers → API → Allowed Redirect URIs:
 
 ```env
-PLAID_ENV=production
-PLAID_REDIRECT_URI=https://localhost:5173/
+# .env.production.local
+PLAID_CLIENT_ID=<Production client ID>
+PLAID_SECRET=<Production secret>
+BREADCRUMBZ_LOCAL_DATA_DIR=~/.breadcrumbz/production-local
 ```
 
 Start the API with the production-local helper, then start the HTTPS web server:
@@ -56,9 +66,12 @@ pnpm run dev:web:https
 Open `https://localhost:5173/`. The certificate files are ignored by Git and
 are for local testing only. Keep `PLAID_WEBHOOK` blank in this setup because a
 Plaid webhook must be reachable from the public internet. The helper overrides
-the Plaid environment, redirect URI, local CORS allowlist, and Secure-cookie
-setting for this terminal session; it does not change the Sandbox defaults in
-`.env`.
+the Plaid environment, redirect URI, local CORS allowlist, Secure-cookie setting,
+and Production data directory for this terminal session; it does not change the
+Sandbox defaults in `.env`. Stop the regular `dev:api` process before starting
+the Production helper on port 8787.
+
+To switch back to Sandbox, stop the Production helper and run `pnpm run dev:api`.
 
 For real bank connections, also set `BREADCRUMBZ_ENCRYPTION_KEY` in `.env`
 (generate one with `openssl rand -base64 32`) before linking an account.

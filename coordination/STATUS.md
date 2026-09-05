@@ -16,10 +16,11 @@ Last updated: 2026-09-05
 > **Local Production OAuth path prepared 2026-09-05 (`[Backend: Codex]`).** Added an
 > opt-in mkcert-backed HTTPS Vite server (`pnpm run dev:web:https`) at
 > `https://localhost:5173`, with same-origin `/api` proxying to the local Fastify
-> API. `pnpm run dev:api:production-local` supplies the Production Plaid environment,
-> exact localhost redirect URI, CORS allowlist, and Secure-cookie setting for one
-> terminal session while leaving the checked-in Sandbox defaults untouched. The
-> Plaid dashboard allowlist and Production credentials remain user-supplied.
+> API. `pnpm run dev:api:production-local` loads the ignored `.env.production.local`
+> profile, then supplies the Production Plaid environment, exact localhost redirect
+> URI, CORS allowlist, Secure-cookie setting, and separate local data directory for
+> one terminal session while leaving the Sandbox `.env` untouched. The Plaid
+> dashboard allowlist and Production credentials remain user-supplied.
 
 > **Spending Coverage Calendar built 2026-08-23 (`[UI: Claude]`, `H-098`, branch `worktree-spending-calendar` — not yet PR'd).**
 > Redesign of the Spending page around a **synchronized calendar + Plaid historical backfill**. Two

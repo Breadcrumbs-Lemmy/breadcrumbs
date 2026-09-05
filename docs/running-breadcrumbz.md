@@ -88,10 +88,11 @@ PLAID_SECRET=<your Sandbox secret>
 **Start in Sandbox if you want a no-risk check.** Sandbox gives lifelike data with
 test credentials, so the whole flow can be exercised without touching a real bank.
 Log in with `user_good` / `pass_good`, and `1234` if a 2FA code is requested.
-For local Production OAuth, use the HTTPS setup in
-[`apps/web/README.md`](../apps/web/README.md#local-production-oauth): Plaid's
-redirect allowlist must contain the exact `https://localhost:5173/` URI, and the
-API must use a Production client secret.
+For local Production OAuth, keep the Sandbox credentials in `.env` and follow
+the HTTPS setup in [`apps/web/README.md`](../apps/web/README.md#local-production-oauth).
+Copy `docs/plaid-production.local.example` to `.env.production.local` and put
+the Production client ID and secret there; Plaid's redirect allowlist must
+contain the exact `https://localhost:5173/` URI.
 
 ### Connecting your real accounts later
 

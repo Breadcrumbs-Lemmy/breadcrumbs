@@ -1,0 +1,11 @@
+# Copy this file to .env.production.local at the repository root.
+# The copied file is git-ignored and is loaded only by
+# `pnpm run dev:api:production-local`.
+
+# Use the Production values from Plaid Dashboard → Developers → Keys.
+PLAID_CLIENT_ID=
+PLAID_SECRET=
+
+# Keep Production data separate from the regular Sandbox data directory.
+# The local helper expands a leading `~/` to your home directory.
+BREADCRUMBZ_LOCAL_DATA_DIR=~/.breadcrumbz/production-local
