@@ -13,6 +13,14 @@ Last updated: 2026-09-05
 > the detailed H-098 and H-100 handoffs: both are merged; H-100 supersedes the
 > older hybrid-backfill description below with cursor sync of available history.
 
+> **Local Production OAuth path prepared 2026-09-05 (`[Backend: Codex]`).** Added an
+> opt-in mkcert-backed HTTPS Vite server (`pnpm run dev:web:https`) at
+> `https://localhost:5173`, with same-origin `/api` proxying to the local Fastify
+> API. `pnpm run dev:api:production-local` supplies the Production Plaid environment,
+> exact localhost redirect URI, CORS allowlist, and Secure-cookie setting for one
+> terminal session while leaving the checked-in Sandbox defaults untouched. The
+> Plaid dashboard allowlist and Production credentials remain user-supplied.
+
 > **Spending Coverage Calendar built 2026-08-23 (`[UI: Claude]`, `H-098`, branch `worktree-spending-calendar` — not yet PR'd).**
 > Redesign of the Spending page around a **synchronized calendar + Plaid historical backfill**. Two
 > orthogonal controls: the Week/Month/Year grain toggle (bucketing) and a new **CoverageRail** —

@@ -49,10 +49,16 @@ All secrets live in `.env` (git-ignored — never commit it). See
 
 | Variable | Purpose |
 | --- | --- |
-| `PLAID_ENV` / `PLAID_CLIENT_ID` / `PLAID_SECRET` | Plaid credentials & environment (`sandbox` \| `development` \| `production`). |
+| `PLAID_ENV` / `PLAID_CLIENT_ID` / `PLAID_SECRET` | Plaid credentials & environment (`sandbox` \| `production`). |
 | `ANTHROPIC_API_KEY` / `BREADCRUMBZ_AGENT_MODEL` | AI assistant provider + model. |
 | `BREADCRUMBZ_AUTH_MODE` | `single_user` (default, no login) or `multi_user` (real accounts). **Set explicitly for any shared deployment.** |
 | `BREADCRUMBZ_CORS_ORIGINS` | Comma-separated allowed browser origins. |
+
+For local Plaid Production OAuth, generate a `mkcert` certificate and run
+`pnpm run dev:api:production-local` with your Production credentials, then
+`pnpm run dev:web:https`. The exact redirect URI is
+`https://localhost:5173/`; the complete setup is in
+[`apps/web/README.md`](apps/web/README.md#local-production-oauth).
 
 ## Deploy
 

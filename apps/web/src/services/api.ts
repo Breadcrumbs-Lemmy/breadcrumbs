@@ -87,6 +87,13 @@ function getBearerToken(): string | null {
 export function apiBaseUrl(): string {
   const env = (import.meta as ImportMeta & { readonly env?: ImportMetaEnv }).env;
   const configured = env?.VITE_BREADCRUMBZ_API_BASE_URL?.trim();
+  // The opt-in HTTPS dev server proxies `/api` to the local Fastify process.
+  // Prefer that same-origin path even when an older `.env.local` still points
+  // at the HTTP API; otherwise the browser would block requests as mixed
+  // content before the proxy can do its job.
+  if (env?.DEV && typeof window !== "undefined" && window.location.protocol === "https:") {
+    return window.location.origin;
+  }
   if (configured) return configured.replace(/\/+$/, "");
   // Unconfigured: in development point at the local API; in a production build
   // fall back to the page's own origin so a same-origin / reverse-proxied

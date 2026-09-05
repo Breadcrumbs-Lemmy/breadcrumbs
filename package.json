@@ -11,7 +11,9 @@
   },
   "scripts": {
     "dev:api": "pnpm --filter @ai-fin-os/server dev",
+    "dev:api:production-local": "PLAID_ENV=production PLAID_REDIRECT_URI=https://localhost:5173/ BREADCRUMBZ_CORS_ORIGINS=https://localhost:5173 BREADCRUMBZ_FORCE_SECURE=true pnpm --filter @ai-fin-os/server dev",
     "dev:web": "pnpm --filter @ai-fin-os/web dev",
+    "dev:web:https": "pnpm --filter @ai-fin-os/web dev:https",
     "build": "pnpm run build:api && pnpm run build:web",
     "build:api": "pnpm --filter @ai-fin-os/core build && pnpm --filter @ai-fin-os/server build",
     "build:web": "pnpm --filter @ai-fin-os/web build",
